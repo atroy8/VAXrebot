@@ -1,0 +1,263 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VAX! Reboot: Immunity Grid</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="app.js" defer></script>
+</head>
+
+<body>
+    <!-- Title Screen -->
+    <div class="screen" id="title-screen">
+        <div class="title-content container">
+            <h1 class="game-title">🌐 VAX! Reboot: Immunity Grid</h1>
+            <p class="game-subtitle">A strategy game about networks, outbreaks, and the power of public health</p>
+            <div class="scenario-selection">
+                <h2>Choose Your Scenario</h2>
+                <div class="scenario-grid">
+                    <div class="scenario-card card" data-scenario="0">
+                        <div class="scenario-icon">🏙️</div>
+                        <h3>Urban Neighborhood</h3>
+                        <p>Low-income urban area with limited healthcare access</p>
+                        <div class="scenario-stats">
+                            <span>Population: 150</span>
+                            <span>Disease: COVID-19</span>
+                            <span>Network: Scale-free</span>
+                        </div>
+                    </div>
+                    <div class="scenario-card card" data-scenario="1">
+                        <div class="scenario-icon">🧑‍🏫</div>
+                        <h3>School Reopening</h3>
+                        <p>Elementary school during flu season</p>
+                        <div class="scenario-stats">
+                            <span>Population: 200</span>
+                            <span>Disease: Seasonal Flu</span>
+                            <span>Network: Small-world</span>
+                        </div>
+                    </div>
+                    <div class="scenario-card card" data-scenario="2">
+                        <div class="scenario-icon">🎉</div>
+                        <h3>Music Festival</h3>
+                        <p>Large outdoor music festival with mixing crowds</p>
+                        <div class="scenario-stats">
+                            <span>Population: 300</span>
+                            <span>Disease: COVID-19</span>
+                            <span>Network: Random</span>
+                        </div>
+                    </div>
+                    <div class="scenario-card card" data-scenario="3">
+                        <div class="scenario-icon">🧓</div>
+                        <h3>Care Facility</h3>
+                        <p>Nursing home with elderly residents</p>
+                        <div class="scenario-stats">
+                            <span>Population: 80</span>
+                            <span>Disease: COVID-19</span>
+                            <span>Network: Small-world</span>
+                        </div>
+                    </div>
+                    <div class="scenario-card card" data-scenario="4">
+                        <div class="scenario-icon">🌍</div>
+                        <h3>Global Network</h3>
+                        <p>International travel routes during pandemic</p>
+                        <div class="scenario-stats">
+                            <span>Population: 500</span>
+                            <span>Disease: Pandemic Flu</span>
+                            <span>Network: Scale-free</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="settings-panel mt-8">
+                <button class="btn btn--secondary" id="toggle-high-contrast">Toggle High Contrast</button>
+                <button class="btn btn--secondary" id="toggle-language">Toggle Language (EN/ES)</button>
+                <input type="range" min="0.5" max="2" step="0.1" value="1" id="simulation-speed" class="form-control">
+                <label for="simulation-speed" class="form-label">Simulation Speed</label>
+            </div>
+        </div>
+    </div>
+
+    <!-- Game Screen -->
+    <div class="screen hidden" id="game-screen">
+        <div class="top-panel container">
+            <div class="scenario-info">
+                <h2 id="current-scenario">Urban Neighborhood</h2>
+                <p id="scenario-description">Low-income urban area with limited healthcare access</p>
+                <p id="scenario-objective">Objective: Keep infections under 15%</p>
+            </div>
+            <div class="simulation-controls">
+                <div class="day-counter">Day: <span id="current-day">1</span></div>
+                <div class="control-buttons">
+                    <button class="btn btn--primary" id="play-btn">▶️ Play</button>
+                    <button class="btn btn--primary" id="pause-btn">⏸️ Pause</button>
+                    <button class="btn btn--primary" id="fast-btn">⏩ Fast</button>
+                </div>
+            </div>
+            <div class="statistics">
+                <div class="stat-group">
+                    <div class="stat-item">
+                        <span class="stat-label">Susceptible</span>
+                        <span class="stat-value" id="stat-susceptible">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Exposed</span>
+                        <span class="stat-value" id="stat-exposed">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Infectious</span>
+                        <span class="stat-value" id="stat-infectious">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Recovered</span>
+                        <span class="stat-value" id="stat-recovered">0</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="game-area container">
+            <div class="canvas-container">
+                <div id="node-tooltip" class="node-tooltip hidden">
+                    <div class="tooltip-content">
+                        <div class="tooltip-status" id="tooltip-status">Healthy</div>
+                        <div class="tooltip-info" id="tooltip-info">Age: 30, Risk: Low, Connections: 5</div>
+                        <div class="tooltip-exposure">Exposure History: None</div>
+                    </div>
+                </div>
+                <canvas id="network-canvas" width="750" height="550"></canvas>
+                <canvas id="particle-canvas" width="750" height="550" style="position: absolute; top: 0; left: 0;"></canvas>
+            </div>
+            <div class="tools-panel">
+                <button class="btn btn--secondary toggle-tools">Toggle Tools</button>
+                <h3>Tools Available</h3>
+                <div class="tool-item" data-tool="vaccinate" id="vaccinate-tool">
+                    <span class="tool-icon">💉</span>
+                    <div class="tool-info">
+                        <div class="tool-name">Vaccinate</div>
+                        <div class="tool-count" id="vaccinate-count">15</div>
+                    </div>
+                </div>
+                <div class="tool-item" data-tool="quarantine" id="quarantine-tool">
+                    <span class="tool-icon">🚫</span>
+                    <div class="tool-info">
+                        <div class="tool-name">Quarantine</div>
+                        <div class="tool-count" id="quarantine-count">10</div>
+                    </div>
+                </div>
+                <div class="tool-item" data-tool="test" id="test-tool">
+                    <span class="tool-icon">🧪</span>
+                    <div class="tool-info">
+                        <div class="tool-name">Test</div>
+                        <div class="tool-count" id="test-count">25</div>
+                    </div>
+                </div>
+                <div class="tool-item" data-tool="contact_trace" id="contact-trace-tool">
+                    <span class="tool-icon">📞</span>
+                    <div class="tool-info">
+                        <div class="tool-name">Contact Trace</div>
+                        <div class="tool-count" id="contact-trace-count">5</div>
+                    </div>
+                </div>
+                <div class="tool-item" data-tool="sever_link" id="sever-link-tool">
+                    <span class="tool-icon">🔗</span>
+                    <div class="tool-info">
+                        <div class="tool-name">Sever Link</div>
+                        <div class="tool-count" id="sever-link-count">8</div>
+                    </div>
+                </div>
+                <div class="tool-help">
+                    <h4>Instructions</h4>
+                    <p>Click or drag a tool to a node to use it. Sever Link requires selecting two nodes.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="bottom-panel container">
+            <div class="outbreak-graph">
+                <h3>Outbreak Progression</h3>
+                <canvas id="progress-chart" width="300" height="150"></canvas>
+            </div>
+            <div class="r-effective">
+                <h3>R-Effective</h3>
+                <div class="r-value" id="r-effective-value">1.0</div>
+                <div class="r-status" id="r-status">Controlled</div>
+            </div>
+            <div class="action-log">
+                <h3>Action Log</h3>
+                <div class="log-content" id="log-content">
+                    <div class="log-entry">Game started - Click tools to begin interventions</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Report Screen -->
+    <div class="screen hidden" id="report-screen">
+        <div class="report-content container">
+            <h1>📈 Post-Game Report</h1>
+            <div class="report-grid">
+                <div class="report-card">
+                    <h3>Final Statistics</h3>
+                    <div class="final-stats" id="final-stats"></div>
+                </div>
+                <div class="report-card">
+                    <h3>Public Health Score</h3>
+                    <div class="health-score" id="health-score"></div>
+                </div>
+                <div class="report-card">
+                    <h3>Intervention Effectiveness</h3>
+                    <div class="intervention-list" id="intervention-effectiveness"></div>
+                </div>
+                <div class="report-card">
+                    <h3>Key Insights</h3>
+                    <div class="insights-list" id="key-insights"></div>
+                </div>
+            </div>
+            <div class="report-actions">
+                <button class="btn btn--primary" id="replay-btn">🔄 Play Again</button>
+                <button class="btn btn--primary" id="new-scenario-btn">🎯 New Scenario</button>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
