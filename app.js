@@ -753,6 +753,29 @@ function startScenario(scenarioIndex) {
     gameState.selectedScenario = scenarioIndex;
     gameState.scenario = gameData.scenarios[scenarioIndex];
     gameState.reset();
+    
+    gameState.tools = { ...gameState.scenario.tools };
+    
+    const networkType = gameState.scenario.network_type;
+    const population = gameState.scenario.population;
+    
+    if (networkType === 'scale-free') {
+        gameState.network = NetworkGenerator.generateScaleFree(population);
+    } else if (networkType === 'small-world') {
+        gameState.network = NetworkGenerator.generateSmallWorld(population);
+    } else if (networkType === 'random') {
+        gameState.network = NetworkGenerator.generateRandom(population);
+    }
+
+    const diseaseParams = gameData.epidemiological_parameters[gameState.scenario.disease];
+    for (let i = 0; i < gameState.scenario.initial_cases; i++) {
+        const randomNode = gameState.network.nodes[Math.floor(Math.random() * population)];
+
+
+function startScenario(scenarioIndex) {
+    gameState.selectedScenario = scenarioIndex;
+    gameState.scenario = gameData.scenarios[scenarioIndex];
+    gameState.reset();
 
     gameState.tools = { ...gameState.scenario.tools };
 
