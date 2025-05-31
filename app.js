@@ -753,12 +753,12 @@ function startScenario(scenarioIndex) {
     gameState.selectedScenario = scenarioIndex;
     gameState.scenario = gameData.scenarios[scenarioIndex];
     gameState.reset();
-    
+
     gameState.tools = { ...gameState.scenario.tools };
-    
+
     const networkType = gameState.scenario.network_type;
     const population = gameState.scenario.population;
-    
+
     if (networkType === 'scale-free') {
         gameState.network = NetworkGenerator.generateScaleFree(population);
     } else if (networkType === 'small-world') {
@@ -772,7 +772,12 @@ function startScenario(scenarioIndex) {
         const randomNode = gameState.network.nodes[Math.floor(Math.random() * population)];
         if (randomNode.state === 'susceptible') {
             randomNode.setState('exposed');
-            gameState.exposureHistory.set(randomNode.id, gameState.currentDay);
+        }
+    }
+
+    showScreen('game');
+    updateUI();
+    renderer.render(gameState.network);
         }
     }
 
