@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Epidemic Control Simulator</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#menu-screen">Skip to scenarios</a>
+
+  <div class="app-container">
+    <!-- Home / Landing Screen -->
+    <section id="home-screen" class="screen active" aria-label="Welcome">
+      <div class="home-hero" role="img" aria-label="Animated background showing abstract network links representing disease transmission.">
+        <div class="home-video-wrap">
+          <video id="intro-video" class="home-video" playsinline muted preload="metadata" poster="assets/poster.jpg">
+            <source src="assets/intro.mp4" type="video/mp4" />
+          </video>
+          <div class="home-overlay"></div>
+        </div>
+
+        <div class="home-content container">
+          <h1 class="home-title">🦠 Epidemic Control Simulator</h1>
+          <p class="home-tagline">Make decisive, evidence‑based moves to protect your community.</p>
+
+          <div class="home-cta">
+            <button id="enter-app" class="btn btn--primary btn--lg">Start</button>
+            <button id="skip-intro" class="btn btn--outline btn--lg" aria-describedby="skip-desc">Skip Intro</button>
+            <span id="skip-desc" class="sr-only">Skips video and goes to the scenario menu.</span>
+          </div>
+
+          <div class="home-hints" aria-live="polite">
+            <span>Tip: Press <kbd>Enter</kbd> to start, <kbd>S</kbd> to skip.</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Menu Screen -->
+    <div id="menu-screen" class="screen" tabindex="-1">
+      <div class="container">
+        <div class="menu-header">
+          <h1>🦠 Epidemic Control Simulator</h1>
+          <p class="menu-subtitle">Protect communities through strategic intervention</p>
+          <div class="menu-actions">
+            <button id="replay-intro" class="btn btn--ghost" aria-describedby="replay-desc">Replay intro</button>
+            <span id="replay-desc" class="sr-only">Shows the welcome screen with video again.</span>
+            <button id="open-audio" class="btn btn--outline">Audio</button>
+          </div>
+        </div>
+
+        <div class="scenario-grid">
+          <div class="scenario-card" tabindex="0" data-scenario="urban" data-tip="Balance testing, masking, and isolation to blunt neighborhood spread.">
+            <div class="scenario-icon">🏘️</div>
+            <h3>Urban Neighborhood</h3>
+            <p>Control outbreak in tight-knit community</p>
+            <div class="scenario-stats"><span>14 days</span> • <span>High transmission</span></div>
+          </div>
+          <div class="scenario-card" tabindex="0" data-scenario="school" data-tip="Layer protections for students/staff during reopening.">
+            <div class="scenario-icon">🏫</div>
+            <h3>School Reopening</h3>
+            <p>Protect students and staff</p>
+            <div class="scenario-stats"><span>21 days</span> • <span>Medium transmission</span></div>
+          </div>
+          <div class="scenario-card" tabindex="0" data-scenario="festival" data-tip="Design crowd‑safe protocols to prevent a superspreader.">
+            <div class="scenario-icon">🎵</div>
+            <h3>Music Festival</h3>
+            <p>Prevent superspreader event</p>
+            <div class="scenario-stats"><span>10 days</span> • <span>Very high transmission</span></div>
+          </div>
+          <div class="scenario-card" tabindex="0" data-scenario="care" data-tip="Shield high‑risk residents with targeted measures.">
+            <div class="scenario-icon">🏥</div>
+            <h3>Care Facility</h3>
+            <p>Protect vulnerable residents</p>
+            <div class="scenario-stats"><span>18 days</span> • <span>High transmission</span></div>
+          </div>
+          <div class="scenario-card" tabindex="0" data-scenario="global" data-tip="Control importation risk at a major travel hub.">
+            <div class="scenario-icon">✈️</div>
+            <h3>Airport Hub</h3>
+            <p>First line against pandemic</p>
+            <div class="scenario-stats"><span>21 days</span> • <span>Medium transmission</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="tooltip" role="tooltip" class="tooltip" hidden></div>
+
+  <!-- Audio Panel -->
+  <aside id="audio-panel" class="audio-panel" aria-labelledby="audio-title" hidden>
+    <div class="audio-panel__header">
+      <h2 id="audio-title">Audio Settings</h2>
+      <button id="close-audio" class="btn btn--ghost" aria-label="Close audio settings">✕</button>
+    </div>
+    <div class="audio-panel__content">
+      <div class="audio-row">
+        <label class="audio-label">Master</label>
+        <input id="vol-master" type="range" min="0" max="1" step="0.01" value="0.7" />
+        <button id="mute-master" class="btn btn--tiny">Mute</button>
+      </div>
+      <div class="audio-row">
+        <label class="audio-label">Music</label>
+        <input id="vol-music" type="range" min="0" max="1" step="0.01" value="0.6" />
+        <button id="play-music" class="btn btn--tiny">Play/Pause</button>
+      </div>
+      <div class="audio-row">
+        <label class="audio-label">SFX</label>
+        <input id="vol-sfx" type="range" min="0" max="1" step="0.01" value="0.8" />
+      </div>
+
+      <hr />
+      <div class="audio-upload">
+        <h3 class="audio-subtitle">Load your own audio</h3>
+        <div class="audio-uploader">
+          <label class="btn btn--primary">
+            <input id="file-music" type="file" accept="audio/*" hidden />
+            Add Music File
+          </label>
+          <label class="btn btn--outline">
+            <input id="file-sfx" type="file" accept="audio/*" hidden />
+            Add SFX File
+          </label>
+        </div>
+        <div class="audio-url">
+          <input id="url-audio" type="url" placeholder="https://example.com/assets/track.mp3" aria-label="Audio URL" />
+          <button id="add-url" class="btn btn--outline">Add from URL</button>
+        </div>
+        <p class="audio-note">Runtime‑added files don’t persist after reload. To make them permanent, place files in <code>assets/</code> and add via URL.</p>
+      </div>
+
+      <div class="audio-list">
+        <h3 class="audio-subtitle">Music Queue</h3>
+        <ul id="music-list" class="media-list" aria-live="polite"></ul>
+        <h3 class="audio-subtitle">SFX</h3>
+        <ul id="sfx-list" class="media-list" aria-live="polite"></ul>
+      </div>
+    </div>
+  </aside>
+
+  <script src="app.js"></script>
+</body>
+</html>
