@@ -1,0 +1,1478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Epidemic Control Simulator</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        :root {
+            /* Colors */
+            --color-background: #f8f9fa;
+            --color-surface: #ffffff;
+            --color-text: #212529;
+            --color-text-secondary: #6c757d;
+            --color-primary: #0d6efd;
+            --color-primary-hover: #0b5ed7;
+            --color-primary-active: #0a58ca;
+            --color-secondary: #e9ecef;
+            --color-secondary-hover: #dee2e6;
+            --color-secondary-active: #d3d9df;
+            --color-border: #dee2e6;
+            --color-btn-primary-text: #ffffff;
+            --color-card-border: #dee2e6;
+            --color-error: #dc3545;
+            --color-success: #198754;
+            --color-warning: #ffc107;
+            --color-info: #0dcaf0;
+            --color-focus-ring: rgba(13, 110, 253, 0.25);
+
+            /* Game-specific colors */
+            --color-healthy: #28a745;
+            --color-infected: #dc3545;
+            --color-recovered: #0dcaf0;
+            --color-vaccinated: #6f42c1;
+            --color-quarantined: #fd7e14;
+            --color-dead: #343a40;
+
+            /* Difficulty colors */
+            --color-easy: #28a745;
+            --color-medium: #ffc107;
+            --color-hard: #dc3545;
+
+            /* Typography */
+            --font-family-base: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                "Helvetica Neue", Arial, sans-serif;
+            --font-size-base: 16px;
+            --font-weight-normal: 400;
+            --font-weight-bold: 700;
+
+            /* Spacing */
+            --space-4: 0.25rem;
+            --space-8: 0.5rem;
+            --space-12: 0.75rem;
+            --space-16: 1rem;
+            --space-24: 1.5rem;
+            --space-32: 2rem;
+
+            /* Border Radius */
+            --radius-base: 0.375rem;
+            --radius-lg: 0.5rem;
+            --radius-full: 9999px;
+
+            /* Shadows */
+            --shadow-sm: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+            --shadow-md: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+            --shadow-lg: 0 1rem 3rem rgba(0, 0, 0, 0.175);
+
+            /* Animation */
+            --duration-fast: 150ms;
+            --duration-normal: 300ms;
+            --ease-out: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --color-background: #121212;
+                --color-surface: #1e1e1e;
+                --color-text: #e0e0e0;
+                --color-text-secondary: #a0a0a0;
+                --color-primary: #4dabf7;
+                --color-primary-hover: #74c0fc;
+                --color-primary-active: #a5d8ff;
+                --color-secondary: #333;
+                --color-secondary-hover: #444;
+                --color-secondary-active: #555;
+                --color-border: #444;
+                --color-btn-primary-text: #121212;
+                --color-card-border: #333;
+                --color-error: #ff8a80;
+                --color-success: #b9f6ca;
+                --color-warning: #ffe57f;
+                --color-info: #80deea;
+                --color-focus-ring: rgba(77, 171, 247, 0.25);
+                --color-dead: #adb5bd;
+            }
+        }
+
+        html {
+            font-size: var(--font-size-base);
+            font-family: var(--font-family-base);
+            line-height: 1.5;
+            color: var(--color-text);
+            background-color: var(--color-background);
+            -webkit-font-smoothing: antialiased;
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            font-family: var(--font-family-base), 'Noto Color Emoji'; /* Fallback for icons - Added for icon fix */
+        }
+
+        *,
+        *::before,
+        *::after {
+            box-sizing: inherit;
+        }
+
+        h1, h2, h3, h4 {
+            margin: 0;
+            font-weight: var(--font-weight-bold);
+            line-height: 1.2;
+        }
+        h1 { font-size: 2.5rem; }
+        h2 { font-size: 2rem; }
+        h3 { font-size: 1.75rem; }
+        h4 { font-size: 1.25rem; }
+
+        p { margin: 0 0 var(--space-16) 0; }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: var(--space-12) var(--space-24);
+            min-width: 44px; /* Min size for touch targets - UI/UX: Responsiveness */
+            min-height: 44px;
+            border-radius: var(--radius-base);
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all var(--duration-normal) var(--ease-out);
+            border: 1px solid transparent;
+            text-decoration: none;
+            position: relative;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .btn:focus-visible {
+            outline: none;
+            box-shadow: 0 0 0 4px var(--color-focus-ring);
+        }
+
+        .btn--primary {
+            background-color: var(--color-primary);
+            color: var(--color-btn-primary-text);
+            border-color: var(--color-primary);
+        }
+        .btn--primary:hover { background-color: var(--color-primary-hover); transform: translateY(-2px); box-shadow: var(--shadow-md); }
+        .btn--primary:active { background-color: var(--color-primary-active); transform: translateY(0); }
+
+        .btn--secondary {
+            background-color: var(--color-secondary);
+            color: var(--color-text);
+            border-color: var(--color-border);
+        }
+        .btn--secondary:hover { background-color: var(--color-secondary-hover); transform: translateY(-2px); box-shadow: var(--shadow-md); }
+        .btn--secondary:active { background-color: var(--color-secondary-active); transform: translateY(0); }
+        
+        .btn--lg {
+            padding: var(--space-16) var(--space-32);
+            font-size: 1.25rem;
+        }
+
+        .btn--sm {
+            padding: var(--space-8) var(--space-16);
+            min-width: 44px; /* Min size for touch targets - UI/UX: Responsiveness */
+            min-height: 44px;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 var(--space-24);
+        }
+
+        .app-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: var(--space-24);
+            opacity: 0;
+            visibility: hidden;
+            transform: scale(1.05);
+            transition: opacity var(--duration-normal) var(--ease-out), transform var(--duration-normal) var(--ease-out), visibility 0s var(--duration-normal);
+        }
+
+        .screen.active {
+            opacity: 1;
+            visibility: visible;
+            transform: scale(1);
+            transition-delay: 0s, 0s, 0s;
+        }
+        
+        /* Welcome Screen */
+        #welcome-screen .container {
+            text-align: center;
+        }
+        .video-container {
+            width: 100%;
+            max-width: 640px;
+            aspect-ratio: 16 / 9;
+            background-color: var(--color-secondary);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-lg);
+            margin: var(--space-32) auto;
+            overflow: hidden; /* Ensures the iframe corners are rounded */
+        }
+        .video-container iframe {
+            width: 100%;
+            height: 100%;
+            border: 0;
+        }
+        /* Menu Screen */
+        .menu-header {
+            text-align: center;
+            margin-bottom: var(--space-32);
+            animation: fadeInDown 0.8s var(--ease-out) both;
+        }
+        .menu-header h1 {
+            background: linear-gradient(45deg, var(--color-primary), var(--color-info));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: var(--space-8);
+        }
+        .menu-subtitle { color: var(--color-text-secondary); font-size: 1.25rem; }
+
+        .scenario-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: var(--space-24);
+        }
+
+        .scenario-card {
+            background: var(--color-surface);
+            border: 1px solid var(--color-card-border);
+            border-radius: var(--radius-lg);
+            padding: var(--space-24);
+            cursor: pointer;
+            transition: all var(--duration-normal) var(--ease-out);
+            text-align: center;
+            box-shadow: var(--shadow-sm);
+            animation: fadeInUp 0.5s var(--ease-out) both;
+        }
+        .scenario-card:nth-child(1) { animation-delay: 0.1s; }
+        .scenario-card:nth-child(2) { animation-delay: 0.2s; }
+        .scenario-card:nth-child(3) { animation-delay: 0.3s; }
+        .scenario-card:nth-child(4) { animation-delay: 0.4s; }
+        .scenario-card:nth-child(5) { animation-delay: 0.5s; }
+
+        .scenario-card:hover {
+            border-color: var(--color-primary);
+            box-shadow: var(--shadow-lg);
+            transform: translateY(-5px) scale(1.02);
+        }
+        .scenario-icon { font-size: 3rem; margin-bottom: var(--space-16); display: block; }
+        .scenario-card h3 { margin-bottom: var(--space-8); }
+        .scenario-card p { color: var(--color-text-secondary); margin-bottom: var(--space-16); }
+        .scenario-stats { font-size: 0.875rem; color: var(--color-text-secondary); }
+
+        /* Briefing Screen */
+        .briefing-content {
+            width: 100%;
+            max-width: 900px;
+            background: var(--color-surface);
+            padding: var(--space-32);
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--color-card-border);
+            box-shadow: var(--shadow-lg);
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        .briefing-content > div { margin-bottom: var(--space-24); }
+        .briefing-actions { display: flex; gap: var(--space-16); justify-content: flex-end; margin-top: var(--space-32); }
+
+        .difficulty-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: var(--space-16);
+        }
+        .difficulty-card {
+            border: 2px solid var(--color-border);
+            border-radius: var(--radius-lg);
+            padding: var(--space-16);
+            cursor: pointer;
+            transition: all var(--duration-normal) var(--ease-out);
+            text-align: center;
+        }
+        .difficulty-card:hover { border-color: var(--color-primary); transform: translateY(-3px); }
+        .difficulty-card.selected {
+            border-color: var(--color-primary);
+            background: var(--color-secondary);
+            box-shadow: 0 0 0 4px var(--color-focus-ring);
+        }
+        .difficulty-icon { font-size: 2rem; margin-bottom: var(--space-8); }
+        .difficulty-card h4 { margin-bottom: var(--space-8); }
+        .difficulty-card p { color: var(--color-text-secondary); font-size: 0.875rem; margin: 0; }
+        .difficulty-card .r0-value { font-size: 0.8rem; font-weight: bold; margin-top: var(--space-8); display: block; }
+        
+        .disease-dynamics {
+            background: var(--color-secondary);
+            padding: var(--space-16);
+            border-radius: var(--radius-base);
+        }
+        .dynamics-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: var(--space-8) var(--space-16);
+            margin-top: var(--space-8);
+        }
+        .dynamics-grid span {
+            font-weight: normal;
+            color: var(--color-text-secondary);
+        }
+
+        /* Game Screen */
+        .game-layout {
+            display: grid;
+            grid-template-rows: auto 1fr auto;
+            grid-template-columns: 280px 1fr 280px;
+            grid-template-areas:
+                "header header header"
+                "tools network log"
+                "footer footer footer";
+            height: 100vh;
+            width: 100vw;
+            gap: var(--space-16);
+            padding: var(--space-16);
+        }
+
+        .game-header {
+            grid-area: header;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: var(--space-16);
+            background: var(--color-surface);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-sm);
+            border: 1px solid var(--color-border);
+        }
+        .game-stats { display: flex; gap: var(--space-24); align-items: center; }
+        .stat { text-align: center; }
+        .stat-label { font-size: 0.875rem; color: var(--color-text-secondary); }
+        .stat-value { font-size: 1.5rem; font-weight: var(--font-weight-bold); }
+        .stat-value.infected { color: var(--color-infected); }
+        .stat-value.protected { color: var(--color-success); }
+        .game-controls { display: flex; gap: var(--space-12); align-items: center; }
+        
+        .panel {
+            background: var(--color-surface);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-lg);
+            padding: var(--space-16);
+            box-shadow: var(--shadow-sm);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .tools-panel { grid-area: tools; }
+        .action-log { grid-area: log; }
+        .network-container { 
+            grid-area: network; 
+            position: relative;
+            overflow: hidden;
+            background-color: var(--color-secondary);
+            padding: 0;
+        }
+        
+        .tools-list { display: flex; flex-direction: column; gap: var(--space-12); }
+        .tool-item {
+            padding: var(--space-12);
+            border: 2px solid var(--color-border);
+            border-radius: var(--radius-base);
+            cursor: pointer;
+            transition: all var(--duration-normal) var(--ease-out);
+        }
+        .tool-item:hover { transform: translateX(5px); border-color: var(--color-primary); }
+        .tool-item.selected { border-color: var(--color-primary); background: var(--color-secondary); }
+        .tool-item.disabled { opacity: 0.5; cursor: not-allowed; pointer-events: none; }
+        .tool-header { display: flex; justify-content: space-between; align-items: center; }
+        .tool-name { font-weight: 600; }
+        .tool-description { font-size: 0.875rem; color: var(--color-text-secondary); margin: var(--space-4) 0; }
+        .tool-availability { font-size: 0.75rem; color: var(--color-info); }
+        
+        #network-svg {
+            width: 100%;
+            height: 100%;
+            display: block;
+            cursor: grab;
+            touch-action: pinch-zoom; /* Enable pinch-to-zoom on mobile - UI/UX: Responsiveness */
+        }
+        #network-svg:active {
+            cursor: grabbing;
+        }
+        .log-entries {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding-right: var(--space-8);
+        }
+        .log-entry {
+            padding: var(--space-8);
+            border-left: 3px solid var(--color-border);
+            font-size: 0.875rem;
+            margin-bottom: var(--space-8);
+            animation: slideInLeft 0.5s var(--ease-out) both;
+        }
+        .log-entry.important { border-left-color: var(--color-primary); background: var(--color-secondary); }
+        .log-time { font-weight: 600; color: var(--color-text-secondary); }
+        
+        .game-footer {
+            grid-area: footer;
+            background-color: var(--color-surface);
+            border-radius: var(--radius-lg);
+            padding: var(--space-8) var(--space-16);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: var(--shadow-sm);
+            border: 1px solid var(--color-border);
+        }
+        .volume-control {
+            display: flex;
+            align-items: center;
+            gap: var(--space-12);
+            width: 250px;
+        }
+        .volume-control span {
+            font-size: 1.25rem;
+        }
+        .volume-control input[type="range"] {
+            width: 100%;
+            cursor: pointer;
+        }
+
+        /* Game Over Screen */
+        .game-over-content {
+            max-width: 800px;
+            text-align: center;
+            background: var(--color-surface);
+            padding: var(--space-32);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-lg);
+        }
+        .final-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: var(--space-16);
+            margin: var(--space-24) 0;
+        }
+        .final-stat { padding: var(--space-16); background: var(--color-secondary); border-radius: var(--radius-base); }
+        .final-stat-label { font-size: 0.8rem; }
+        .game-over-actions { display: flex; flex-direction:column; gap: var(--space-16); justify-content: center; margin-top: var(--space-24); }
+
+        /* Network Nodes and Links Styling */
+        .node {
+            stroke: var(--color-text); /* High contrast - UI/UX: Accessibility */
+            stroke-width: 1.5;
+            cursor: pointer;
+            transition: all var(--duration-fast) var(--ease-out);
+        }
+        .node:hover {
+            stroke-width: 4;
+            stroke: var(--color-primary);
+            filter: brightness(1.2); /* Subtle hover feedback - UI/UX: Visual Feedback */
+        }
+        .node:focus-visible {
+            outline: 2px solid var(--color-primary);
+            outline-offset: 2px;
+        }
+        .node.healthy { fill: var(--color-healthy); }
+        .node.infected { fill: var(--color-infected); animation: pulse-infected 1.5s infinite; }
+        .node.recovered { fill: var(--color-recovered); }
+        .node.vaccinated { fill: var(--color-vaccinated); }
+        .node.quarantined { fill: var(--color-quarantined); }
+        .node.dead { fill: var(--color-dead); }
+
+        .link {
+            stroke: var(--color-text-secondary);
+            stroke-width: 1.5;
+            stroke-opacity: 0.4;
+            transition: all var(--duration-fast) var(--ease-out);
+        }
+        .link:hover { stroke: var(--color-primary); stroke-width: 3; stroke-opacity: 1; filter: brightness(1.2); /* UI/UX: Visual Feedback */ }
+        
+        .virus-particle {
+            fill: var(--color-infected);
+            stroke: white;
+            stroke-width: 1px;
+        }
+
+        /* Notifications */
+        #notification-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 2000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .notification {
+            padding: 15px 20px;
+            border-radius: var(--radius-base);
+            color: white;
+            font-weight: 600;
+            box-shadow: var(--shadow-md);
+            animation: slideInRight 0.5s var(--ease-out) both;
+            animation-duration: 5s; /* Extended duration - UI/UX: Visual Feedback */
+            position: relative; /* For dismiss button */
+            padding-right: 40px; /* Space for dismiss button */
+        }
+        .notification.error { background-color: var(--color-error); }
+        .notification.success { background-color: var(--color-success); }
+        .dismiss-btn {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background: transparent;
+            border: none;
+            color: white;
+            font-size: 1.2rem;
+            cursor: pointer;
+        }
+
+        /* Animations */
+        @keyframes fadeInDown {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes slideInLeft {
+            from { opacity: 0; transform: translateX(-20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+        @keyframes slideInRight {
+            from { opacity: 0; transform: translateX(20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+        @keyframes pulse-infected {
+            0% { r: 7; }
+            50% { r: 10; filter: brightness(1.5); }
+            100% { r: 7; }
+        }
+        
+        /* Responsive */
+        @media (max-width: 1024px) {
+            .game-layout {
+                grid-template-columns: 250px 1fr;
+                grid-template-rows: auto 1fr auto auto;
+                grid-template-areas:
+                    "header header"
+                    "network network"
+                    "tools log"
+                    "footer footer";
+            }
+            .panel { height: 250px; }
+            .log-entries { max-height: 180px; }
+        }
+
+        @media (max-width: 768px) {
+            .game-layout {
+                grid-template-columns: 1fr;
+                grid-template-rows: auto auto 1fr auto auto;
+                grid-template-areas:
+                    "header"
+                    "tools"
+                    "network"
+                    "log"
+                    "footer";
+                padding: var(--space-8);
+                gap: var(--space-8);
+            }
+            .panel { height: auto; max-height: 200px; }
+            .game-header { flex-direction: column; gap: var(--space-16); padding: var(--space-12); }
+            .game-stats { gap: var(--space-16); }
+            .stat-value { font-size: 1.25rem; }
+            .difficulty-grid { grid-template-columns: 1fr; }
+            .final-stats { grid-template-columns: 1fr 1fr; }
+            .btn {
+                padding: var(--space-16) var(--space-32); /* Increased for touch - UI/UX: Responsiveness */
+                min-width: 44px;
+                min-height: 44px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .final-stats {
+                grid-template-columns: 1fr;
+            }
+        }
+
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Notification Container -->
+        <div id="notification-container"></div>
+
+        <!-- Welcome Screen -->
+        <div id="welcome-screen" class="screen active">
+            <div class="container">
+                <div class="menu-header">
+                    <h1>Welcome to the Simulator</h1>
+                    <p class="menu-subtitle">An interactive simulation of epidemic control.</p>
+                </div>
+                <div class="video-container">
+                    <iframe 
+                        src="https://www.youtube.com/embed/huFsASh7ykE" 
+                        title="YouTube video player" 
+                        frameborder="0" 
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                        allowfullscreen>
+                    </iframe>
+                </div>
+                <button class="btn btn--primary btn--lg" id="start-game-btn">Start Game</button>
+            </div>
+        </div>
+
+        <!-- Main Menu Screen -->
+        <div id="menu-screen" class="screen">
+            <div class="container">
+                <div class="menu-header">
+                    <h1>Epidemic Control Simulator</h1>
+                    <p class="menu-subtitle">Your strategic decisions can save a community. Choose a scenario to begin.</p>
+                </div>
+                <div class="scenario-grid">
+                    <!-- Scenario cards will be dynamically generated here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Briefing Screen -->
+        <div id="briefing-screen" class="screen">
+            <div class="briefing-content">
+                <h2 id="briefing-title"></h2>
+                <div class="briefing-description">
+                    <strong>Situation Briefing:</strong>
+                    <p id="briefing-description-text"></p>
+                </div>
+                 <div class="disease-dynamics">
+                    <strong>Disease Profile:</strong>
+                    <div class="dynamics-grid">
+                        <div><strong>Disease:</strong> <span id="briefing-disease"></span></div>
+                        <div><strong>Agent:</strong> <span id="briefing-agent"></span></div>
+                        <div><strong>Vector:</strong> <span id="briefing-vector"></span></div>
+                        <div><strong>Est. R₀:</strong> <span id="briefing-r0"></span></div>
+                    </div>
+                </div>
+                <div class="difficulty-selection">
+                    <strong>Select Difficulty:</strong>
+                    <div class="difficulty-grid">
+                        <!-- Difficulty cards will be dynamically generated here -->
+                    </div>
+                </div>
+                <div class="briefing-actions">
+                    <button class="btn btn--secondary" id="back-to-menu">Back to Scenarios</button>
+                    <button class="btn btn--primary" id="start-simulation">Begin Containment</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Game Screen -->
+        <div id="game-screen" class="screen">
+            <div class="game-layout">
+                <div class="game-header">
+                    <div class="game-info">
+                        <h4 id="game-scenario-name"></h4>
+                        <span id="current-difficulty-badge"></span>
+                    </div>
+                    <div class="game-stats">
+                        <div class="stat">
+                            <span class="stat-label">Day</span>
+                            <span class="stat-value" id="current-day">1</span>
+                        </div>
+                        <div class="stat">
+                            <span class="stat-label">Infected</span>
+                            <span class="stat-value infected" id="infected-count">0</span>
+                        </div>
+                        <div class="stat">
+                            <span class="stat-label">Protected</span>
+                            <span class="stat-value protected" id="protected-count">0</span>
+                        </div>
+                        <div class="stat">
+                            <span class="stat-label">Population</span>
+                            <span class="stat-value" id="population-count">0</span>
+                        </div>
+                    </div>
+                    <div class="game-controls">
+                        <button class="btn btn--secondary btn--sm" id="pause-game">⏸️ Pause</button>
+                        <button class="btn btn--primary" id="next-day" aria-label="Advance to next day in simulation">Next Day ⏭️</button> <!-- ARIA label - UI/UX: Accessibility -->
+                    </div>
+                </div>
+
+                <div class="panel tools-panel">
+                    <h4>Intervention Tools</h4>
+                    <div class="tools-list" id="tools-list">
+                        <!-- Tools will be generated here -->
+                    </div>
+                </div>
+
+                <div class="panel network-container">
+                    <svg id="network-svg"></svg>
+                </div>
+
+                <div class="panel action-log">
+                    <h4>Action Log</h4>
+                    <div class="log-entries" id="log-entries"></div>
+                </div>
+                
+                <div class="game-footer">
+                    <div class="volume-control">
+                        <span>🔇</span>
+                        <input type="range" id="master-volume" min="0" max="1" step="0.05" value="0.3">
+                        <span>🔊</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Game Over Screen -->
+        <div id="game-over-screen" class="screen">
+             <div class="game-over-content">
+                    <h2 id="game-over-title"></h2>
+                    <div id="final-difficulty-badge"></div>
+                    <div class="final-stats">
+                        <div class="final-stat">
+                            <span class="final-stat-label">Total Infected</span>
+                            <span class="stat-value infected" id="final-total-infected">0</span>
+                        </div>
+                        <div class="final-stat">
+                            <span class="final-stat-label">Total Deaths</span>
+                            <span class="stat-value" id="final-total-dead">0</span>
+                        </div>
+                        <div class="final-stat">
+                            <span class="final-stat-label">Total Recovered</span>
+                            <span class="stat-value" id="final-total-recovered">0</span>
+                        </div>
+                         <div class="final-stat">
+                            <span class="final-stat-label">Attack Rate</span>
+                            <span class="stat-value" id="final-attack-rate">0%</span>
+                        </div>
+                        <div class="final-stat">
+                            <span class="final-stat-label">Case Fatality Rate</span>
+                            <span class="stat-value" id="final-case-fatality">0%</span>
+                        </div>
+                         <div class="final-stat">
+                            <span class="final-stat-label">People Protected</span>
+                            <span class="stat-value protected" id="people-protected">0</span>
+                        </div>
+                    </div>
+                    <p id="game-over-message" class="game-over-message"></p>
+                    <div class="game-over-actions">
+                        <button class="btn btn--secondary" id="play-again">Play Same Scenario</button>
+                        <button class="btn btn--primary" id="try-different-scenario">Choose New Scenario</button>
+                    </div>
+                </div>
+        </div>
+    </div>
+    <script>
+        class EpidemicSimulator {
+            constructor() {
+                this.currentScreen = 'welcome';
+                this.currentScenario = null;
+                this.selectedDifficulty = 'medium';
+                this.gameState = null;
+                this.network = { nodes: [], links: [] };
+                this.simulation = null;
+                this.selectedTool = null;
+                this.audioContext = null;
+                this.masterGain = null;
+                this.themeMusicTimeout = null;
+                this.themeMusicSequence = [];
+
+                this.resourceBudget = 100; // Starting budget - Gameplay: Balance Difficulty
+                this.complianceLevel = 1.0; // Starts at 100% - Gameplay: Add Depth
+                this.escapeRisk = 0.05; // 5% chance in hard mode - Gameplay: Add Depth
+
+                this.scenarios = {
+                    urban: { id: "urban", name: "Urban Neighborhood", description: "A mysterious respiratory illness has emerged in a tight-knit community with low vaccination rates.", networkType: "scale-free", duration: 14, initialInfected: 2, baseTransmissionRate: 0.15, icon: "🏘️", diseaseName: "Acinetobacter baumannii", agent: "Bacterium", vector: "Direct contact, surfaces" },
+                    school: { id: "school", name: "School Reopening", description: "Students are falling ill with flu-like symptoms. You must balance keeping the school open with protecting students and staff.", networkType: "small-world", duration: 21, initialInfected: 1, baseTransmissionRate: 0.12, icon: "🏫", diseaseName: "Influenza A (H1N1)", agent: "Virus", vector: "Respiratory droplets" },
+                    festival: { id: "festival", name: "Music Festival", description: "Reports of a 'festival flu' are surfacing among attendees. Prevent a multi-state outbreak.", networkType: "random", duration: 10, initialInfected: 3, baseTransmissionRate: 0.2, icon: "🎵", diseaseName: "Norovirus", agent: "Virus", vector: "Fecal-oral, contaminated food" },
+                    care: { id: "care", name: "Care Facility", description: "A nursing home reports several residents with respiratory symptoms. Protect this vulnerable population.", networkType: "small-world", duration: 18, initialInfected: 1, baseTransmissionRate: 0.18, icon: "🏥", diseaseName: "Streptococcus pneumoniae", agent: "Bacterium", vector: "Respiratory droplets" },
+                    global: { id: "global", name: "Airport Hub", description: "International airports report cases among travelers. You're the first line of defense against a potential pandemic.", networkType: "scale-free", duration: 21, initialInfected: 2, baseTransmissionRate: 0.14, icon: "✈️", diseaseName: "Novel Coronavirus (MERS-CoV)", agent: "Virus", vector: "Close contact, droplets" }
+                };
+
+                this.difficulties = {
+                    easy: { name: "Easy", description: "Low fatality, slow spread", transmissionMultiplier: 0.7, toolLimitMultiplier: 1.5, recoveryTime: 5, icon: "🟢", R0: "1.5 - 2.0", fatalityRate: 0.01 },
+                    medium: { name: "Medium", description: "Moderate fatality, standard spread", transmissionMultiplier: 1.0, toolLimitMultiplier: 1.0, recoveryTime: 7, icon: "🟡", R0: "2.5 - 3.5", fatalityRate: 0.03 },
+                    hard: { name: "Hard", description: "High fatality, rapid spread", transmissionMultiplier: 1.4, toolLimitMultiplier: 0.7, recoveryTime: 9, icon: "🔴", R0: "4.0 - 5.0", fatalityRate: 0.08 }
+                };
+
+                this.tools = {
+                    vaccinate: { name: "&#x1F489; Vaccinate", description: "Protect susceptible individuals", availableDay: 2, oncePerPerson: true, baseDailyLimit: 5, validTargets: ["healthy"] }, // Unicode for reliability - Icon Fix
+                    quarantine: { name: "&#x1F6AB; Quarantine", description: "Isolate any individual", availableDay: 3, oncePerPerson: true, baseDailyLimit: 3, validTargets: ["healthy", "infected", "recovered"] },
+                    severLink: { name: "&#x1F517; Sever Link", description: "Break a connection", availableDay: 1, oncePerPerson: false, baseDailyLimit: 3, validTargets: ["any"] }
+                };
+
+                this.init();
+            }
+
+            init() {
+                this.initAudio();
+                this.populateMenu();
+                this.bindEvents();
+                this.showScreen('welcome');
+            }
+            
+            initAudio() {
+                try {
+                    this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    this.masterGain = this.audioContext.createGain();
+                    this.masterGain.gain.value = 0.3; // Default volume
+                    this.masterGain.connect(this.audioContext.destination);
+                    this.setupThemeMusic();
+                } catch(e) {
+                    console.error("Web Audio API is not supported in this browser");
+                }
+            }
+
+            setupThemeMusic() {
+                // Notes for a "spy theme" riff
+                const note = (freq, dur) => ({ freq, dur });
+                const rest = (dur) => ({ freq: 0, dur });
+                const E3 = 164.81, F3 = 174.61, Fs3 = 185.00, G3 = 196.00;
+                const eighth = 150;
+
+                this.themeMusicSequence = [
+                    note(E3, eighth), note(F3, eighth), rest(eighth/2),
+                    note(Fs3, eighth), note(G3, eighth*2), rest(eighth/2),
+                    note(E3, eighth), note(F3, eighth), rest(eighth/2),
+                    note(Fs3, eighth), note(G3, eighth*2), rest(eighth*4)
+                ];
+            }
+
+            playThemeMusic(noteIndex = 0) {
+                if (this.currentScreen !== 'menu') return; // Stop if not on menu
+
+                const { freq, dur } = this.themeMusicSequence[noteIndex];
+                if (freq > 0) {
+                    this.playSound(freq, dur / 1000, 'triangle');
+                }
+
+                const nextNoteIndex = (noteIndex + 1) % this.themeMusicSequence.length;
+                this.themeMusicTimeout = setTimeout(() => this.playThemeMusic(nextNoteIndex), dur);
+            }
+
+            startThemeMusic() {
+                if (this.themeMusicTimeout) clearTimeout(this.themeMusicTimeout);
+                if(this.audioContext && this.audioContext.state === 'suspended') {
+                    this.audioContext.resume();
+                }
+                this.playThemeMusic();
+            }
+
+            stopThemeMusic() {
+                if (this.themeMusicTimeout) {
+                    clearTimeout(this.themeMusicTimeout);
+                    this.themeMusicTimeout = null;
+                }
+            }
+            
+            playSound(frequency, duration, type = 'sine') {
+                if (!this.audioContext || this.masterGain.gain.value === 0) return;
+                const oscillator = this.audioContext.createOscillator();
+                const gainNode = this.audioContext.createGain();
+                oscillator.connect(gainNode);
+                gainNode.connect(this.masterGain);
+                
+                oscillator.type = type;
+                oscillator.frequency.setValueAtTime(frequency, this.audioContext.currentTime);
+                gainNode.gain.setValueAtTime(0.1, this.audioContext.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.001, this.audioContext.currentTime + duration);
+                
+                oscillator.start(this.audioContext.currentTime);
+                oscillator.stop(this.audioContext.currentTime + duration);
+            }
+            
+            populateMenu() {
+                const scenarioGrid = document.querySelector('.scenario-grid');
+                scenarioGrid.innerHTML = Object.values(this.scenarios).map(s => `
+                    <div class="scenario-card" data-scenario="${s.id}">
+                        <div class="scenario-icon">${s.icon}</div>
+                        <h3>${s.name}</h3>
+                        <p>${s.description}</p>
+                        <div class="scenario-stats">
+                            <span>${s.duration} days</span> • <span>${s.networkType} network</span>
+                        </div>
+                    </div>
+                `).join('');
+
+                const difficultyGrid = document.querySelector('.difficulty-grid');
+                difficultyGrid.innerHTML = Object.entries(this.difficulties).map(([key, d]) => `
+                     <div class="difficulty-card" data-difficulty="${key}">
+                        <div class="difficulty-icon">${d.icon}</div>
+                        <h4>${d.name}</h4>
+                        <p>${d.description}</p>
+                        <div class="r0-value">R₀: ${d.R0}</div>
+                    </div>
+                `).join('');
+            }
+            
+            bindEvents() {
+                document.getElementById('start-game-btn').addEventListener('click', () => this.showScreen('menu'));
+
+                document.querySelector('.scenario-grid').addEventListener('click', (e) => {
+                    const card = e.target.closest('.scenario-card');
+                    if (card) this.selectScenario(card.dataset.scenario);
+                });
+                
+                document.querySelector('.difficulty-grid').addEventListener('click', (e) => {
+                    const card = e.target.closest('.difficulty-card');
+                    if(card) this.selectDifficulty(card.dataset.difficulty);
+                });
+
+                document.getElementById('back-to-menu').addEventListener('click', () => this.showScreen('menu'));
+                document.getElementById('start-simulation').addEventListener('click', () => this.startGame());
+                document.getElementById('next-day').addEventListener('click', () => this.nextDay());
+                document.getElementById('pause-game').addEventListener('click', () => this.togglePause());
+                document.getElementById('tools-list').addEventListener('click', (e) => {
+                    const toolItem = e.target.closest('.tool-item');
+                    if (toolItem && !toolItem.classList.contains('disabled')) {
+                        this.selectTool(toolItem.dataset.tool);
+                    }
+                });
+                document.getElementById('play-again').addEventListener('click', () => this.startGame());
+                document.getElementById('try-different-scenario').addEventListener('click', () => this.showScreen('menu'));
+
+                // Keyboard navigation for tools - UI/UX: Accessibility
+                document.addEventListener('keydown', (e) => {
+                    if (e.key === 'Tab') {
+                        const tools = document.querySelectorAll('.tool-item:not(.disabled)');
+                        if (tools.length > 0) tools[0].focus();
+                    }
+                });
+
+                // Volume control
+                document.getElementById('master-volume').addEventListener('input', (e) => {
+                    if (this.masterGain) {
+                        this.masterGain.gain.value = e.target.value;
+                    }
+                });
+            }
+
+            showScreen(screenName) {
+                document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+                document.getElementById(`${screenName}-screen`).classList.add('active');
+                this.currentScreen = screenName;
+
+                if (screenName === 'menu') {
+                    this.startThemeMusic();
+                } else {
+                    this.stopThemeMusic();
+                }
+            }
+
+            selectScenario(scenarioId) {
+                this.currentScenario = this.scenarios[scenarioId];
+                document.getElementById('briefing-title').textContent = this.currentScenario.name;
+                document.getElementById('briefing-description-text').textContent = this.currentScenario.description;
+                document.getElementById('briefing-disease').textContent = this.currentScenario.diseaseName;
+                document.getElementById('briefing-agent').textContent = this.currentScenario.agent;
+                document.getElementById('briefing-vector').textContent = this.currentScenario.vector;
+                this.selectDifficulty('medium'); // Default to medium
+                this.showScreen('briefing');
+            }
+
+            selectDifficulty(difficultyId) {
+                this.selectedDifficulty = difficultyId;
+                document.querySelectorAll('.difficulty-card').forEach(c => c.classList.remove('selected'));
+                document.querySelector(`.difficulty-card[data-difficulty="${difficultyId}"]`).classList.add('selected');
+                document.getElementById('briefing-r0').textContent = this.difficulties[difficultyId].R0;
+            }
+
+            startGame() {
+                this.initGameState();
+                this.createNetwork();
+                this.setupVisualization();
+                this.updateUI();
+                this.showScreen('game');
+                this.addLogEntry(`Simulation started for ${this.currentScenario.name}.`, true);
+            }
+
+            initGameState() {
+                const difficulty = this.difficulties[this.selectedDifficulty];
+                this.gameState = {
+                    day: 1,
+                    paused: false,
+                    gameOver: false,
+                    stats: { totalInfected: 0, totalProtected: 0, linksSevered: 0, initialPopulation: 100, totalDead: 0, totalRecovered: 0 },
+                    dailyUsage: Object.keys(this.tools).reduce((acc, tool) => ({ ...acc, [tool]: 0 }), {}),
+                    usedOnPeople: new Set(),
+                    log: [],
+                    resourceBudget: 100, // Gameplay: Balance Difficulty
+                    complianceLevel: 1.0, // Gameplay: Add Depth
+                };
+            }
+            
+            createNetwork() {
+                const n = this.gameState.stats.initialPopulation;
+                let nodes = Array.from({ length: n }, (_, i) => ({ id: i, state: 'healthy', daysInfected: 0, removed: false }));
+                let links;
+                switch (this.currentScenario.networkType) {
+                    case 'scale-free': ({ links } = this.generateScaleFreeNetwork(n, 4)); break;
+                    case 'small-world': ({ links } = this.generateSmallWorldNetwork(n, 8, 0.15)); break;
+                    default: ({ links } = this.generateRandomNetwork(n, 0.08));
+                }
+                
+                // Infect initial nodes
+                for (let i = 0; i < this.currentScenario.initialInfected; i++) {
+                    let node;
+                    do {
+                        node = nodes[Math.floor(Math.random() * n)];
+                    } while (node.state === 'infected');
+                    node.state = 'infected';
+                    this.gameState.stats.totalInfected++;
+                }
+
+                this.network = { nodes, links };
+            }
+
+            generateScaleFreeNetwork(n, m) { const links = []; for(let i=m; i<n; i++) for(let j=0; j<m; j++) links.push({source: i, target: Math.floor(Math.random()*i)}); return { links }; }
+            generateSmallWorldNetwork(n, k, p) { const links = []; for(let i=0; i<n; i++) for(let j=1; j<=k/2; j++) { let target = (i+j)%n; if(Math.random()<p) target=Math.floor(Math.random()*n); links.push({source:i, target}); } return { links }; }
+            generateRandomNetwork(n, p) {
+                const links = [];
+                for (let i = 0; i < n; i++) {
+                    for (let j = i + 1; j < n; j++) {
+                        if (Math.random() < p) links.push({ source: i, target: j });
+                    }
+                }
+                return { links };
+            }
+            
+            setupVisualization() {
+                const container = document.querySelector('.network-container');
+                const svg = d3.select('#network-svg');
+                svg.selectAll('*').remove();
+                
+                const width = container.clientWidth;
+                const height = container.clientHeight;
+                
+                this.visGroup = svg.append('g');
+                this.linkGroup = this.visGroup.append('g').attr("class", "links");
+                this.nodeGroup = this.visGroup.append('g').attr("class", "nodes");
+                this.particleGroup = this.visGroup.append('g').attr("class", "particles");
+
+                const zoom = d3.zoom().scaleExtent([0.3, 7]).on('zoom', (event) => this.visGroup.attr('transform', event.transform));
+                svg.call(zoom).on("dblclick.zoom", null); // Disable double-click zoom for touch - UI/UX: Responsiveness
+
+                // For keyboard navigation - UI/UX: Accessibility
+                svg.attr('tabindex', 0).on('keydown', (event) => {
+                    if (event.key === 'ArrowRight') {
+                        this.focusNextNode();
+                    }
+                });
+
+                this.simulation = d3.forceSimulation()
+                    .force('link', d3.forceLink().id(d => d.id).distance(50).strength(0.5))
+                    .force('charge', d3.forceManyBody().strength(-100))
+                    .force('center', d3.forceCenter(width / 2, height / 2))
+                    .force('collision', d3.forceCollide().radius(12));
+
+                this.simulation.on('tick', () => {
+                    this.nodeGroup.selectAll('circle').attr('cx', d => d.x).attr('cy', d => d.y);
+                    this.linkGroup.selectAll('line').attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+                        .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+                });
+
+                this.updateNetworkVisualization(true);
+            }
+
+            // New method for keyboard navigation - UI/UX: Accessibility
+            focusNextNode() {
+                const nodes = this.nodeGroup.selectAll('circle');
+                const currentFocus = document.activeElement;
+                let nextIndex = 0;
+                nodes.each((d, i, els) => {
+                    if (els[i] === currentFocus) nextIndex = i + 1;
+                });
+                if (nextIndex < nodes.size()) {
+                    nodes.nodes()[nextIndex].focus();
+                }
+            }
+
+            updateNetworkVisualization(isInitial = false) {
+                const drag = d3.drag()
+                    .on('start', (event, d) => { if (!event.active) this.simulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+                    .on('drag', (event, d) => { d.fx = event.x; d.fy = event.y; })
+                    .on('end', (event, d) => { if (!event.active) this.simulation.alphaTarget(0); d.fx = null; d.fy = null; });
+
+                // Update nodes
+                const node = this.nodeGroup.selectAll('circle').data(this.network.nodes, d => d.id);
+                
+                node.exit()
+                    .transition().duration(500)
+                    .attr('r', 0)
+                    .remove();
+
+                node.enter().append('circle')
+                    .attr('class', d => `node ${d.state}`)
+                    .attr('r', 0)
+                    .attr('aria-label', d => `Person ${d.id}, status: ${d.state}`) // ARIA for accessibility - UI/UX: Accessibility
+                    .attr('title', d => `Person ${d.id}: ${d.state.charAt(0).toUpperCase() + d.state.slice(1)}. ${d.state === 'infected' ? `Infected for ${d.daysInfected} days—monitor for high-degree connections.` : 'Healthy—consider vaccination to build herd immunity.'}`) // Educational tooltip - UI/UX: Visual Feedback
+                    .on('click', (event, d) => this.handleNodeClick(event, d))
+                    .on('mouseover', function() { d3.select(this).transition().duration(150).attr('r', 12); })
+                    .on('mouseout', function() { d3.select(this).transition().duration(150).attr('r', 7); })
+                    .call(drag)
+                    .merge(node)
+                    .attr('cx', d => d.x).attr('cy', d => d.y)
+                    .transition().duration(isInitial ? 500 : 250).delay((d,i) => isInitial ? i * 10 : 0)
+                    .attr('r', 7)
+                    .attr('class', d => `node ${d.state}`);
+
+                // Update links
+                const link = this.linkGroup.selectAll('line').data(this.network.links, d => `${d.source.id}-${d.target.id}`);
+                
+                link.exit()
+                    .transition().duration(300)
+                    .style('stroke-opacity', 0)
+                    .remove();
+                
+                link.enter().append('line')
+                    .attr('class', 'link')
+                    .attr('title', d => `Connection between ${d.source.id} and ${d.target.id}: Potential transmission path—sever to simulate social distancing.`) // Tooltip for links - UI/UX: Visual Feedback
+                    .on('click', (event, d) => this.handleLinkClick(event, d));
+                
+                // Update simulation
+                this.simulation.nodes(this.network.nodes);
+                this.simulation.force('link').links(this.network.links);
+                if(!isInitial) this.simulation.alpha(0.3).restart();
+            }
+            
+            handleNodeClick(event, node) {
+                if (this.selectedTool === 'severLink') return; // Sever tool only works on links
+                if (!this.selectedTool || node.removed) return;
+                
+                const toolConfig = this.tools[this.selectedTool];
+                const { allowed, reason } = this.canUseTool(this.selectedTool, node);
+                if (!allowed) {
+                    this.showNotification(reason, 'error');
+                    return;
+                }
+
+                if (toolConfig.validTargets.includes(node.state) || toolConfig.validTargets.includes('any')) {
+                    this.applyToolToNode(this.selectedTool, node);
+                } else {
+                    this.showNotification(`Cannot use ${toolConfig.name} on a ${node.state} person.`, 'error');
+                }
+            }
+            
+            handleLinkClick(event, link) {
+                if (this.selectedTool !== 'severLink') return;
+                const { allowed, reason } = this.canUseTool('severLink');
+                if (!allowed) {
+                    this.showNotification(reason, 'error');
+                    return;
+                }
+                this.applyToolToLink(link);
+            }
+
+            canUseTool(toolId, target = null) {
+                const tool = this.tools[toolId];
+                const difficulty = this.difficulties[this.selectedDifficulty];
+                const limit = Math.floor(tool.baseDailyLimit * difficulty.toolLimitMultiplier);
+
+                if (this.gameState.day < tool.availableDay) return { allowed: false, reason: `${tool.name} available on Day ${tool.availableDay}.` };
+                if (this.gameState.dailyUsage[toolId] >= limit) return { allowed: false, reason: `Daily limit for ${tool.name} reached.` };
+                
+                if(target && target.id !== undefined) { // It's a node
+                    if (tool.oncePerPerson && this.gameState.usedOnPeople.has(`${toolId}-${target.id}`)) return { allowed: false, reason: `${tool.name} already used on this person.` };
+                    if (target.state === 'vaccinated' || target.state === 'quarantined') return { allowed: false, reason: `Person is already protected.` };
+                    if (toolId === 'vaccinate' && target.state !== 'healthy') return { allowed: false, reason: 'Vaccine only works on healthy individuals.' };
+                }
+
+                return { allowed: true };
+            }
+
+            applyToolToNode(toolId, node) {
+                const toolCosts = { vaccinate: 20, quarantine: 15 }; // Resource costs - Gameplay: Balance Difficulty
+                if (this.gameState.resourceBudget < toolCosts[toolId]) {
+                    this.showNotification(`Insufficient resources for ${toolId}.`, 'error');
+                    return;
+                }
+                this.gameState.resourceBudget -= toolCosts[toolId];
+                this.gameState.dailyUsage[toolId]++;
+                if (this.tools[toolId].oncePerPerson) this.gameState.usedOnPeople.add(`${toolId}-${node.id}`);
+
+                let logMessage = '';
+                if (toolId === 'vaccinate') {
+                    node.state = 'vaccinated';
+                    this.gameState.stats.totalProtected++;
+                    logMessage = `Person ${node.id} has been vaccinated.`;
+                } else if (toolId === 'quarantine') {
+                    node.state = 'quarantined';
+                    this.gameState.stats.totalProtected++;
+                    logMessage = `Person ${node.id} has been quarantined.`;
+                    if (this.selectedDifficulty === 'hard' && Math.random() < this.escapeRisk) { // Gameplay: Add Depth
+                        node.state = 'infected'; // Escape event
+                        this.showNotification(`Quarantine escape! Person ${node.id} is now infected.`, 'error');
+                        this.addLogEntry(`Quarantine failed for Person ${node.id} due to escape.`);
+                    }
+                }
+                
+                node.removed = true;
+                this.playSound(800, 0.2, 'sine');
+                
+                this.network.nodes = this.network.nodes.filter(n => !n.removed);
+                this.network.links = this.network.links.filter(l => !l.source.removed && !l.target.removed);
+                
+                this.showNotification(logMessage, 'success');
+                this.addLogEntry(logMessage);
+                this.updateUI();
+                this.updateNetworkVisualization();
+            }
+
+            applyToolToLink(linkToRemove) {
+                this.gameState.dailyUsage.severLink++;
+                this.gameState.stats.linksSevered++;
+                
+                this.network.links = this.network.links.filter(l => l !== linkToRemove);
+
+                const logMessage = `Connection between ${linkToRemove.source.id} and ${linkToRemove.target.id} severed.`;
+                this.showNotification(logMessage, 'success');
+                this.addLogEntry(logMessage);
+                this.gameState.complianceLevel -= 0.05; // Social cost - Gameplay: Add Depth
+                this.addLogEntry(`Social cost: Compliance reduced to ${(this.gameState.complianceLevel * 100).toFixed(0)}%.`);
+                this.playSound(400, 0.15, 'sawtooth');
+                this.updateUI();
+                this.updateNetworkVisualization();
+            }
+
+            nextDay() {
+                if (this.gameState.gameOver) return;
+                this.gameState.day++;
+                Object.keys(this.gameState.dailyUsage).forEach(tool => this.gameState.dailyUsage[tool] = 0);
+                
+                this.simulateSpread();
+                this.updateOutcomes();
+                this.checkGameOver();
+                
+                this.playSound(600, 0.1, 'sine');
+                this.addLogEntry(`Day ${this.gameState.day} begins.`, true);
+                this.updateUI();
+                this.updateNetworkVisualization();
+                this.showPostDaySummary(); // Gameplay: Improve Feedback
+            }
+
+            simulateSpread() {
+                const transmissionRate = this.scaleTransmissionRate() * this.gameState.complianceLevel; // Scaled and compliance-affected - Gameplay: Balance & Depth
+                let newInfections = 0;
+
+                this.network.nodes.filter(n => n.state === 'infected').forEach(infected => {
+                    this.network.links
+                        .filter(l => !l.severed && (l.source.id === infected.id || l.target.id === infected.id))
+                        .forEach(link => {
+                            const targetNode = link.source.id === infected.id ? link.target : link.source;
+                            if (targetNode.state === 'healthy' && Math.random() < transmissionRate) {
+                                targetNode.state = 'infected';
+                                this.gameState.stats.totalInfected++;
+                                newInfections++;
+                                this.animateVirus(infected, targetNode);
+                                this.playSound(150, 0.2, 'triangle');
+                            }
+                        });
+                });
+                if (newInfections > 0) this.addLogEntry(`${newInfections} new infections reported.`, true);
+                this.network.nodes.filter(n => n.state === 'infected').forEach(n => n.daysInfected++);
+            }
+            
+            animateVirus(source, target) {
+                const particle = this.particleGroup.append("circle")
+                    .attr("class", "virus-particle")
+                    .attr("r", 4)
+                    .attr("cx", source.x)
+                    .attr("cy", source.y);
+
+                particle.transition()
+                    .duration(1000)
+                    .attr("cx", target.x)
+                    .attr("cy", target.y)
+                    .on("end", function() {
+                        d3.select(this).remove();
+                    });
+            }
+
+            scaleTransmissionRate() { // Gameplay: Balance Difficulty
+                if (this.selectedDifficulty === 'hard' && this.gameState.day > 5) {
+                    return this.currentScenario.baseTransmissionRate * this.difficulties[this.selectedDifficulty].transmissionMultiplier * (1 + (this.gameState.day - 5) * 0.05); // Increases 5% per day after day 5
+                }
+                return this.currentScenario.baseTransmissionRate * this.difficulties[this.selectedDifficulty].transmissionMultiplier;
+            }
+            
+            updateOutcomes() {
+                const recoveryTime = this.difficulties[this.selectedDifficulty].recoveryTime;
+                const fatalityRate = this.difficulties[this.selectedDifficulty].fatalityRate;
+                let needsUpdate = false;
+
+                const nodesToProcess = this.network.nodes.filter(n => n.state === 'infected' && n.daysInfected >= recoveryTime);
+
+                nodesToProcess.forEach(node => {
+                    if (Math.random() < fatalityRate) {
+                        // Outcome: Death
+                        node.state = 'dead';
+                        node.removed = true;
+                        this.gameState.stats.totalDead++;
+                        this.addLogEntry(`Person ${node.id} has died from the infection.`);
+                        needsUpdate = true;
+                    } else {
+                        // Outcome: Recovery
+                        node.state = 'recovered';
+                        this.gameState.stats.totalRecovered++;
+                        this.addLogEntry(`Person ${node.id} has recovered.`);
+                    }
+                });
+                
+                if (needsUpdate) {
+                    this.network.nodes = this.network.nodes.filter(n => !n.removed);
+                    this.network.links = this.network.links.filter(l => !l.source.removed && !l.target.removed);
+                    this.updateNetworkVisualization();
+                }
+            }
+
+            checkGameOver() {
+                const activeInfected = this.network.nodes.filter(n => n.state === 'infected').length;
+                if (activeInfected === 0 || this.gameState.day >= this.currentScenario.duration) {
+                    this.gameState.gameOver = true;
+                    this.playSound(261, 1.0, 'sine');
+                    setTimeout(() => this.showGameOver(), 1000);
+                }
+            }
+
+            showGameOver() {
+                const success = this.network.nodes.filter(n => n.state === 'infected').length === 0;
+                const stats = this.gameState.stats;
+
+                const attackRate = stats.initialPopulation > 0 ? (stats.totalInfected / stats.initialPopulation) * 100 : 0;
+                const caseFatalityRate = stats.totalInfected > 0 ? (stats.totalDead / stats.totalInfected) * 100 : 0;
+
+                document.getElementById('game-over-title').textContent = success ? 'Outbreak Contained!' : 'Simulation Over';
+                document.getElementById('final-total-infected').textContent = stats.totalInfected;
+                document.getElementById('final-total-dead').textContent = stats.totalDead;
+                document.getElementById('final-total-recovered').textContent = stats.totalRecovered;
+                document.getElementById('final-attack-rate').textContent = `${attackRate.toFixed(1)}%`;
+                document.getElementById('final-case-fatality').textContent = `${caseFatalityRate.toFixed(1)}%`;
+                document.getElementById('people-protected').textContent = stats.totalProtected;
+                
+                document.getElementById('game-over-message').textContent = success ?
+                    "Excellent work! Your strategic interventions stopped the spread." :
+                    "The simulation period has ended. Analyze the results and try a new strategy.";
+                
+                const badge = document.createElement('span');
+                badge.className = `difficulty-badge ${this.selectedDifficulty}`;
+                badge.textContent = this.selectedDifficulty;
+                document.getElementById('final-difficulty-badge').innerHTML = 'Completed on ';
+                document.getElementById('final-difficulty-badge').appendChild(badge);
+
+                this.showScreen('game-over');
+            }
+
+            selectTool(toolId) {
+                this.selectedTool = this.selectedTool === toolId ? null : toolId;
+                document.querySelectorAll('.tool-item').forEach(item => {
+                    item.classList.toggle('selected', item.dataset.tool === this.selectedTool);
+                });
+            }
+
+            updateUI() {
+                document.getElementById('game-scenario-name').textContent = this.currentScenario.name;
+                const difficulty = this.difficulties[this.selectedDifficulty];
+                const badge = `<span class="difficulty-badge ${this.selectedDifficulty}">${difficulty.name}</span>`;
+                document.getElementById('current-difficulty-badge').innerHTML = badge;
+
+                document.getElementById('current-day').textContent = this.gameState.day;
+                document.getElementById('infected-count').textContent = this.network.nodes.filter(n => n.state === 'infected').length;
+                document.getElementById('protected-count').textContent = this.gameState.stats.totalProtected;
+                document.getElementById('population-count').textContent = this.network.nodes.length;
+
+                const toolsList = document.getElementById('tools-list');
+                toolsList.innerHTML = Object.entries(this.tools).map(([id, tool]) => {
+                    const limit = Math.floor(tool.baseDailyLimit * difficulty.toolLimitMultiplier);
+                    const available = this.gameState.day >= tool.availableDay;
+                    const disabled = !available || this.gameState.dailyUsage[id] >= limit;
+                    return `
+                        <div class="tool-item ${disabled ? 'disabled' : ''}" data-tool="${id}">
+                            <div class="tool-header">
+                                <span class="tool-name">${tool.name}</span>
+                                <span class="tool-usage">${this.gameState.dailyUsage[id]}/${limit}</span>
+                            </div>
+                            <p class="tool-description">${tool.description}</p>
+                            ${!available ? `<div class="tool-availability">Available Day ${tool.availableDay}</div>` : ''}
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            addLogEntry(message, important = false) {
+                const logEntry = { day: this.gameState.day, message };
+                this.gameState.log.push(logEntry);
+                const logContainer = document.getElementById('log-entries');
+                const entry = document.createElement('div');
+                entry.className = `log-entry ${important ? 'important' : ''}`;
+                entry.innerHTML = `<span class="log-time">Day ${logEntry.day}</span> <span class="log-message">${message}</span>`;
+                logContainer.prepend(entry);
+                if (logContainer.children.length > 50) {
+                    logContainer.removeChild(logContainer.lastChild);
+                }
+            }
+            
+            showNotification(message, type = 'info') {
+                const container = document.getElementById('notification-container');
+                const notification = document.createElement('div');
+                notification.className = `notification ${type}`;
+                notification.textContent = message;
+                const dismissBtn = document.createElement('button');
+                dismissBtn.className = 'dismiss-btn';
+                dismissBtn.textContent = '×';
+                dismissBtn.onclick = () => notification.remove();
+                notification.appendChild(dismissBtn); // Dismiss button - UI/UX: Visual Feedback
+                container.appendChild(notification);
+                setTimeout(() => {
+                    notification.remove();
+                }, 5000); // Extended to 5 seconds - UI/UX: Visual Feedback
+            }
+
+            showPostDaySummary() { // Gameplay: Improve Feedback
+                const infected = this.network.nodes.filter(n => n.state === 'infected').length;
+                const hint = infected > 5 ? 'Hint: Vaccinate high-degree nodes early to build herd immunity.' : 'Good progress! Consider severing links in clusters.';
+                this.showNotification(`Day ${this.gameState.day} Summary: ${infected} infected. ${hint}`, 'info');
+                // Tutorial overlay on first few days
+                if (this.gameState.day <= 3) {
+                    this.showNotification('Tutorial: Use tools on nodes/links to intervene. Monitor stats!', 'success');
+                }
+            }
+
+            togglePause() {
+                this.gameState.paused = !this.gameState.paused;
+                document.getElementById('pause-game').innerHTML = this.gameState.paused ? '▶️ Resume' : '⏸️ Pause';
+                if (this.gameState.paused) this.simulation.stop();
+                else this.simulation.alpha(0.3).restart();
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            window.game = new EpidemicSimulator();
+        });
+    </script>
+</body>
+</html>
