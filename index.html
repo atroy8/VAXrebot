@@ -35,6 +35,7 @@
             --color-quarantined: #fd7e14;
             --color-dead: #343a40;
 
+
             /* Difficulty colors */
             --color-easy: #28a745;
             --color-medium: #ffc107;
@@ -95,6 +96,7 @@
             }
         }
 
+
         html {
             font-size: var(--font-size-base);
             font-family: var(--font-family-base);
@@ -109,7 +111,6 @@
             margin: 0;
             padding: 0;
             overflow: hidden;
-            font-family: var(--font-family-base), 'Noto Color Emoji'; /* Fallback for icons - Added for icon fix */
         }
 
         *,
@@ -135,8 +136,6 @@
             align-items: center;
             justify-content: center;
             padding: var(--space-12) var(--space-24);
-            min-width: 44px; /* Min size for touch targets - UI/UX: Responsiveness */
-            min-height: 44px;
             border-radius: var(--radius-base);
             font-size: 1rem;
             font-weight: 600;
@@ -176,8 +175,7 @@
 
         .btn--sm {
             padding: var(--space-8) var(--space-16);
-            min-width: 44px; /* Min size for touch targets - UI/UX: Responsiveness */
-            min-height: 44px;
+            font-size: 0.875rem;
         }
 
         .container {
@@ -237,6 +235,8 @@
             height: 100%;
             border: 0;
         }
+
+
         /* Menu Screen */
         .menu-header {
             text-align: center;
@@ -339,6 +339,7 @@
             color: var(--color-text-secondary);
         }
 
+
         /* Game Screen */
         .game-layout {
             display: grid;
@@ -415,11 +416,12 @@
             height: 100%;
             display: block;
             cursor: grab;
-            touch-action: pinch-zoom; /* Enable pinch-to-zoom on mobile - UI/UX: Responsiveness */
         }
         #network-svg:active {
             cursor: grabbing;
         }
+
+
         .log-entries {
             flex-grow: 1;
             overflow-y: auto;
@@ -460,6 +462,7 @@
             cursor: pointer;
         }
 
+
         /* Game Over Screen */
         .game-over-content {
             max-width: 800px;
@@ -481,7 +484,7 @@
 
         /* Network Nodes and Links Styling */
         .node {
-            stroke: var(--color-text); /* High contrast - UI/UX: Accessibility */
+            stroke: rgba(0,0,0,0.2);
             stroke-width: 1.5;
             cursor: pointer;
             transition: all var(--duration-fast) var(--ease-out);
@@ -489,11 +492,6 @@
         .node:hover {
             stroke-width: 4;
             stroke: var(--color-primary);
-            filter: brightness(1.2); /* Subtle hover feedback - UI/UX: Visual Feedback */
-        }
-        .node:focus-visible {
-            outline: 2px solid var(--color-primary);
-            outline-offset: 2px;
         }
         .node.healthy { fill: var(--color-healthy); }
         .node.infected { fill: var(--color-infected); animation: pulse-infected 1.5s infinite; }
@@ -508,13 +506,14 @@
             stroke-opacity: 0.4;
             transition: all var(--duration-fast) var(--ease-out);
         }
-        .link:hover { stroke: var(--color-primary); stroke-width: 3; stroke-opacity: 1; filter: brightness(1.2); /* UI/UX: Visual Feedback */ }
+        .link:hover { stroke: var(--color-primary); stroke-width: 3; stroke-opacity: 1; }
         
         .virus-particle {
             fill: var(--color-infected);
             stroke: white;
             stroke-width: 1px;
         }
+
 
         /* Notifications */
         #notification-container {
@@ -533,22 +532,9 @@
             font-weight: 600;
             box-shadow: var(--shadow-md);
             animation: slideInRight 0.5s var(--ease-out) both;
-            animation-duration: 5s; /* Extended duration - UI/UX: Visual Feedback */
-            position: relative; /* For dismiss button */
-            padding-right: 40px; /* Space for dismiss button */
         }
         .notification.error { background-color: var(--color-error); }
         .notification.success { background-color: var(--color-success); }
-        .dismiss-btn {
-            position: absolute;
-            top: 5px;
-            right: 5px;
-            background: transparent;
-            border: none;
-            color: white;
-            font-size: 1.2rem;
-            cursor: pointer;
-        }
 
         /* Animations */
         @keyframes fadeInDown {
@@ -607,11 +593,6 @@
             .stat-value { font-size: 1.25rem; }
             .difficulty-grid { grid-template-columns: 1fr; }
             .final-stats { grid-template-columns: 1fr 1fr; }
-            .btn {
-                padding: var(--space-16) var(--space-32); /* Increased for touch - UI/UX: Responsiveness */
-                min-width: 44px;
-                min-height: 44px;
-            }
         }
 
         @media (max-width: 480px) {
@@ -643,9 +624,10 @@
                         allowfullscreen>
                     </iframe>
                 </div>
-                <button class="btn btn--primary btn--lg" id="start-game-btn">Start Game</button>
+                <button id="start-game-btn" class="btn btn--primary btn--lg">Start Game</button>
             </div>
         </div>
+
 
         <!-- Main Menu Screen -->
         <div id="menu-screen" class="screen">
@@ -718,7 +700,7 @@
                     </div>
                     <div class="game-controls">
                         <button class="btn btn--secondary btn--sm" id="pause-game">⏸️ Pause</button>
-                        <button class="btn btn--primary" id="next-day" aria-label="Advance to next day in simulation">Next Day ⏭️</button> <!-- ARIA label - UI/UX: Accessibility -->
+                        <button class="btn btn--primary" id="next-day">Next Day ⏭️</button>
                     </div>
                 </div>
 
@@ -787,6 +769,7 @@
                 </div>
         </div>
     </div>
+
     <script>
         class EpidemicSimulator {
             constructor() {
@@ -801,10 +784,6 @@
                 this.masterGain = null;
                 this.themeMusicTimeout = null;
                 this.themeMusicSequence = [];
-
-                this.resourceBudget = 100; // Starting budget - Gameplay: Balance Difficulty
-                this.complianceLevel = 1.0; // Starts at 100% - Gameplay: Add Depth
-                this.escapeRisk = 0.05; // 5% chance in hard mode - Gameplay: Add Depth
 
                 this.scenarios = {
                     urban: { id: "urban", name: "Urban Neighborhood", description: "A mysterious respiratory illness has emerged in a tight-knit community with low vaccination rates.", networkType: "scale-free", duration: 14, initialInfected: 2, baseTransmissionRate: 0.15, icon: "🏘️", diseaseName: "Acinetobacter baumannii", agent: "Bacterium", vector: "Direct contact, surfaces" },
@@ -821,9 +800,9 @@
                 };
 
                 this.tools = {
-                    vaccinate: { name: "&#x1F489; Vaccinate", description: "Protect susceptible individuals", availableDay: 2, oncePerPerson: true, baseDailyLimit: 5, validTargets: ["healthy"] }, // Unicode for reliability - Icon Fix
-                    quarantine: { name: "&#x1F6AB; Quarantine", description: "Isolate any individual", availableDay: 3, oncePerPerson: true, baseDailyLimit: 3, validTargets: ["healthy", "infected", "recovered"] },
-                    severLink: { name: "&#x1F517; Sever Link", description: "Break a connection", availableDay: 1, oncePerPerson: false, baseDailyLimit: 3, validTargets: ["any"] }
+                    vaccinate: { name: "💉 Vaccinate", description: "Protect susceptible individuals", availableDay: 2, oncePerPerson: true, baseDailyLimit: 5, validTargets: ["healthy"] },
+                    quarantine: { name: "🚫 Quarantine", description: "Isolate any individual", availableDay: 3, oncePerPerson: true, baseDailyLimit: 3, validTargets: ["healthy", "infected", "recovered"] },
+                    severLink: { name: "🔗 Sever Link", description: "Break a connection", availableDay: 1, oncePerPerson: false, baseDailyLimit: 3, validTargets: ["any"] }
                 };
 
                 this.init();
@@ -905,7 +884,8 @@
                 oscillator.start(this.audioContext.currentTime);
                 oscillator.stop(this.audioContext.currentTime + duration);
             }
-            
+
+
             populateMenu() {
                 const scenarioGrid = document.querySelector('.scenario-grid');
                 scenarioGrid.innerHTML = Object.values(this.scenarios).map(s => `
@@ -955,14 +935,6 @@
                 });
                 document.getElementById('play-again').addEventListener('click', () => this.startGame());
                 document.getElementById('try-different-scenario').addEventListener('click', () => this.showScreen('menu'));
-
-                // Keyboard navigation for tools - UI/UX: Accessibility
-                document.addEventListener('keydown', (e) => {
-                    if (e.key === 'Tab') {
-                        const tools = document.querySelectorAll('.tool-item:not(.disabled)');
-                        if (tools.length > 0) tools[0].focus();
-                    }
-                });
 
                 // Volume control
                 document.getElementById('master-volume').addEventListener('input', (e) => {
@@ -1021,8 +993,6 @@
                     dailyUsage: Object.keys(this.tools).reduce((acc, tool) => ({ ...acc, [tool]: 0 }), {}),
                     usedOnPeople: new Set(),
                     log: [],
-                    resourceBudget: 100, // Gameplay: Balance Difficulty
-                    complianceLevel: 1.0, // Gameplay: Add Depth
                 };
             }
             
@@ -1030,6 +1000,7 @@
                 const n = this.gameState.stats.initialPopulation;
                 let nodes = Array.from({ length: n }, (_, i) => ({ id: i, state: 'healthy', daysInfected: 0, removed: false }));
                 let links;
+
                 switch (this.currentScenario.networkType) {
                     case 'scale-free': ({ links } = this.generateScaleFreeNetwork(n, 4)); break;
                     case 'small-world': ({ links } = this.generateSmallWorldNetwork(n, 8, 0.15)); break;
@@ -1075,14 +1046,7 @@
                 this.particleGroup = this.visGroup.append('g').attr("class", "particles");
 
                 const zoom = d3.zoom().scaleExtent([0.3, 7]).on('zoom', (event) => this.visGroup.attr('transform', event.transform));
-                svg.call(zoom).on("dblclick.zoom", null); // Disable double-click zoom for touch - UI/UX: Responsiveness
-
-                // For keyboard navigation - UI/UX: Accessibility
-                svg.attr('tabindex', 0).on('keydown', (event) => {
-                    if (event.key === 'ArrowRight') {
-                        this.focusNextNode();
-                    }
-                });
+                svg.call(zoom);
 
                 this.simulation = d3.forceSimulation()
                     .force('link', d3.forceLink().id(d => d.id).distance(50).strength(0.5))
@@ -1097,19 +1061,6 @@
                 });
 
                 this.updateNetworkVisualization(true);
-            }
-
-            // New method for keyboard navigation - UI/UX: Accessibility
-            focusNextNode() {
-                const nodes = this.nodeGroup.selectAll('circle');
-                const currentFocus = document.activeElement;
-                let nextIndex = 0;
-                nodes.each((d, i, els) => {
-                    if (els[i] === currentFocus) nextIndex = i + 1;
-                });
-                if (nextIndex < nodes.size()) {
-                    nodes.nodes()[nextIndex].focus();
-                }
             }
 
             updateNetworkVisualization(isInitial = false) {
@@ -1129,8 +1080,6 @@
                 node.enter().append('circle')
                     .attr('class', d => `node ${d.state}`)
                     .attr('r', 0)
-                    .attr('aria-label', d => `Person ${d.id}, status: ${d.state}`) // ARIA for accessibility - UI/UX: Accessibility
-                    .attr('title', d => `Person ${d.id}: ${d.state.charAt(0).toUpperCase() + d.state.slice(1)}. ${d.state === 'infected' ? `Infected for ${d.daysInfected} days—monitor for high-degree connections.` : 'Healthy—consider vaccination to build herd immunity.'}`) // Educational tooltip - UI/UX: Visual Feedback
                     .on('click', (event, d) => this.handleNodeClick(event, d))
                     .on('mouseover', function() { d3.select(this).transition().duration(150).attr('r', 12); })
                     .on('mouseout', function() { d3.select(this).transition().duration(150).attr('r', 7); })
@@ -1151,7 +1100,6 @@
                 
                 link.enter().append('line')
                     .attr('class', 'link')
-                    .attr('title', d => `Connection between ${d.source.id} and ${d.target.id}: Potential transmission path—sever to simulate social distancing.`) // Tooltip for links - UI/UX: Visual Feedback
                     .on('click', (event, d) => this.handleLinkClick(event, d));
                 
                 // Update simulation
@@ -1206,12 +1154,6 @@
             }
 
             applyToolToNode(toolId, node) {
-                const toolCosts = { vaccinate: 20, quarantine: 15 }; // Resource costs - Gameplay: Balance Difficulty
-                if (this.gameState.resourceBudget < toolCosts[toolId]) {
-                    this.showNotification(`Insufficient resources for ${toolId}.`, 'error');
-                    return;
-                }
-                this.gameState.resourceBudget -= toolCosts[toolId];
                 this.gameState.dailyUsage[toolId]++;
                 if (this.tools[toolId].oncePerPerson) this.gameState.usedOnPeople.add(`${toolId}-${node.id}`);
 
@@ -1224,11 +1166,6 @@
                     node.state = 'quarantined';
                     this.gameState.stats.totalProtected++;
                     logMessage = `Person ${node.id} has been quarantined.`;
-                    if (this.selectedDifficulty === 'hard' && Math.random() < this.escapeRisk) { // Gameplay: Add Depth
-                        node.state = 'infected'; // Escape event
-                        this.showNotification(`Quarantine escape! Person ${node.id} is now infected.`, 'error');
-                        this.addLogEntry(`Quarantine failed for Person ${node.id} due to escape.`);
-                    }
                 }
                 
                 node.removed = true;
@@ -1252,8 +1189,6 @@
                 const logMessage = `Connection between ${linkToRemove.source.id} and ${linkToRemove.target.id} severed.`;
                 this.showNotification(logMessage, 'success');
                 this.addLogEntry(logMessage);
-                this.gameState.complianceLevel -= 0.05; // Social cost - Gameplay: Add Depth
-                this.addLogEntry(`Social cost: Compliance reduced to ${(this.gameState.complianceLevel * 100).toFixed(0)}%.`);
                 this.playSound(400, 0.15, 'sawtooth');
                 this.updateUI();
                 this.updateNetworkVisualization();
@@ -1272,11 +1207,10 @@
                 this.addLogEntry(`Day ${this.gameState.day} begins.`, true);
                 this.updateUI();
                 this.updateNetworkVisualization();
-                this.showPostDaySummary(); // Gameplay: Improve Feedback
             }
 
             simulateSpread() {
-                const transmissionRate = this.scaleTransmissionRate() * this.gameState.complianceLevel; // Scaled and compliance-affected - Gameplay: Balance & Depth
+                const transmissionRate = this.currentScenario.baseTransmissionRate * this.difficulties[this.selectedDifficulty].transmissionMultiplier;
                 let newInfections = 0;
 
                 this.network.nodes.filter(n => n.state === 'infected').forEach(infected => {
@@ -1313,13 +1247,7 @@
                     });
             }
 
-            scaleTransmissionRate() { // Gameplay: Balance Difficulty
-                if (this.selectedDifficulty === 'hard' && this.gameState.day > 5) {
-                    return this.currentScenario.baseTransmissionRate * this.difficulties[this.selectedDifficulty].transmissionMultiplier * (1 + (this.gameState.day - 5) * 0.05); // Increases 5% per day after day 5
-                }
-                return this.currentScenario.baseTransmissionRate * this.difficulties[this.selectedDifficulty].transmissionMultiplier;
-            }
-            
+
             updateOutcomes() {
                 const recoveryTime = this.difficulties[this.selectedDifficulty].recoveryTime;
                 const fatalityRate = this.difficulties[this.selectedDifficulty].fatalityRate;
@@ -1441,25 +1369,11 @@
                 const notification = document.createElement('div');
                 notification.className = `notification ${type}`;
                 notification.textContent = message;
-                const dismissBtn = document.createElement('button');
-                dismissBtn.className = 'dismiss-btn';
-                dismissBtn.textContent = '×';
-                dismissBtn.onclick = () => notification.remove();
-                notification.appendChild(dismissBtn); // Dismiss button - UI/UX: Visual Feedback
                 container.appendChild(notification);
                 setTimeout(() => {
-                    notification.remove();
-                }, 5000); // Extended to 5 seconds - UI/UX: Visual Feedback
-            }
-
-            showPostDaySummary() { // Gameplay: Improve Feedback
-                const infected = this.network.nodes.filter(n => n.state === 'infected').length;
-                const hint = infected > 5 ? 'Hint: Vaccinate high-degree nodes early to build herd immunity.' : 'Good progress! Consider severing links in clusters.';
-                this.showNotification(`Day ${this.gameState.day} Summary: ${infected} infected. ${hint}`, 'info');
-                // Tutorial overlay on first few days
-                if (this.gameState.day <= 3) {
-                    this.showNotification('Tutorial: Use tools on nodes/links to intervene. Monitor stats!', 'success');
-                }
+                    notification.style.animation = 'fadeOutRight 0.5s forwards';
+                    setTimeout(() => notification.remove(), 500);
+                }, 3000);
             }
 
             togglePause() {
@@ -1476,4 +1390,3 @@
     </script>
 </body>
 </html>
-
