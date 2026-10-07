@@ -10,6 +10,7 @@ import {
     updateOutcomes,
     checkGameOver as resolveGameOver,
     canUseTool,
+    canAdvanceDay,
 } from './sim/engine.js';
 import { showScreen as renderScreen } from './ui/screens.js';
 import { NetworkView } from './ui/network-view.js';
@@ -22,6 +23,14 @@ import {
 } from './ui/panels.js';
 import { populateMenus, fillBriefing, markDifficultySelected } from './ui/briefing.js';
 import { AudioEngine } from './audio.js';
+
+// Music-hook thresholds (stingers are implemented by the audio track; every
+// call below uses optional chaining so nothing breaks if they land later):
+// - 'spike': a single day produces SPIKE_INFECTION_THRESHOLD or more new infections
+// - 'milestone': totalProtected crosses any MILESTONE_THRESHOLDS value
+// - 'win' / 'loss': game ends contained (win) or overwhelmed/timeout (loss)
+const SPIKE_INFECTION_THRESHOLD = 8;
+const MILESTONE_THRESHOLDS = [25, 50, 75];
 
 export class EpidemicSimulator {
     constructor() {
@@ -173,21 +182,26 @@ export class EpidemicSimulator {
         if (this.tools[toolId].oncePerPerson) this.gameState.usedOnPeople.add(`${toolId}-${node.id}`);
 
         let logMessage = '';
-        if (toolId === 'vaccinate') {
-            node.state = 'vaccinated';
+        if (toolId === 'vaccinate' || toolId === 'quarantine') {
+            // Protected nodes stay visible: re-state the node instead of
+            // removing it. The network view renders node.state to its CSS
+            // class, so .node.vaccinated / .node.quarantined styling applies.
+            const prevProtected = this.gameState.stats.totalProtected;
+            node.state = toolId === 'vaccinate' ? 'vaccinated' : 'quarantined';
             this.gameState.stats.totalProtected++;
-            logMessage = `Person ${node.id} has been vaccinated.`;
-        } else if (toolId === 'quarantine') {
-            node.state = 'quarantined';
-            this.gameState.stats.totalProtected++;
-            logMessage = `Person ${node.id} has been quarantined.`;
+            logMessage =
+                toolId === 'vaccinate'
+                    ? `Person ${node.id} has been vaccinated.`
+                    : `Person ${node.id} has been quarantined.`;
+            // Music hook: milestone stinger each time totalProtected crosses
+            // 25, 50, or 75. Called with optional chaining; safe if the audio
+            // track has not landed yet.
+            if (MILESTONE_THRESHOLDS.some((m) => prevProtected < m && this.gameState.stats.totalProtected >= m)) {
+                this.audio.playStinger?.('milestone');
+            }
         }
 
-        node.removed = true;
         this.audio.playSound(800, 0.2, 'sine');
-
-        this.network.nodes = this.network.nodes.filter((n) => !n.removed);
-        this.network.links = this.network.links.filter((l) => !l.source.removed && !l.target.removed);
 
         showNotification(logMessage, 'success');
         addLogEntry(this.gameState.day, logMessage);
@@ -211,6 +225,10 @@ export class EpidemicSimulator {
 
     nextDay() {
         if (this.gameState.gameOver) return;
+        if (!canAdvanceDay(this.gameState)) {
+            showNotification('The game is paused. Resume to advance the day.', 'info');
+            return;
+        }
         this.gameState.day++;
         Object.keys(this.gameState.dailyUsage).forEach((tool) => (this.gameState.dailyUsage[tool] = 0));
 
@@ -222,6 +240,10 @@ export class EpidemicSimulator {
             this.audio.playSound(150, 0.2, 'triangle');
         }
         if (count > 0) addLogEntry(this.gameState.day, `${count} new infections reported.`, true);
+        // Music hook: spike stinger when a day produces 8+ new infections.
+        if (count >= SPIKE_INFECTION_THRESHOLD) {
+            this.audio.playStinger?.('spike');
+        }
 
         const difficulty = this.difficulties[this.selectedDifficulty];
         const outcomes = updateOutcomes(this.gameState, this.network, difficulty.recoveryTime, difficulty.fatalityRate);
@@ -241,20 +263,25 @@ export class EpidemicSimulator {
         addLogEntry(this.gameState.day, `Day ${this.gameState.day} begins.`, true);
         this.updateUI();
         this.view.update(this.network.nodes, this.network.links);
+        // Music hook: let the audio track adjust the mood after each day.
+        this.audio.updateMood?.(this.gameState.stats);
     }
 
     checkGameOver() {
         const result = resolveGameOver(this.gameState, this.network, this.currentScenario.duration);
         if (result) {
             this.gameState.gameOver = true;
+            this.gameState.outcome = result;
             this.audio.playSound(261, 1.0, 'sine');
+            // Music hook: 'win' for contained, 'loss' for overwhelmed or timeout.
+            this.audio.playStinger?.(result === 'contained' ? 'win' : 'loss');
+            this.audio.stopGameMusic?.();
             setTimeout(() => this.showGameOver(), 1000);
         }
     }
 
     showGameOver() {
-        const success = this.network.nodes.filter((n) => n.state === 'infected').length === 0;
-        renderGameOver({ success, stats: this.gameState.stats, difficultyId: this.selectedDifficulty });
+        renderGameOver({ outcome: this.gameState.outcome, stats: this.gameState.stats, difficultyId: this.selectedDifficulty });
         this.showScreen('game-over');
     }
 
@@ -275,13 +302,21 @@ export class EpidemicSimulator {
             infected: this.network.nodes.filter((n) => n.state === 'infected').length,
             protected: this.gameState.stats.totalProtected,
             population: this.network.nodes.length,
+            paused: this.gameState.paused,
         });
         renderTools(this.tools, difficulty, this.gameState.day, this.gameState.dailyUsage);
+        // Real pause: the Next Day button is disabled while paused (nextDay()
+        // also early-returns via canAdvanceDay as a second layer).
+        const nextDayBtn = document.getElementById('next-day');
+        if (nextDayBtn) nextDayBtn.disabled = this.gameState.paused;
     }
 
     togglePause() {
         this.gameState.paused = !this.gameState.paused;
         document.getElementById('pause-game').innerHTML = this.gameState.paused ? '▶️ Resume' : '⏸️ Pause';
+        // D3 side: NetworkView exposes its force simulation through
+        // setPaused(), which calls .stop() / .restart() internally.
         this.view.setPaused(this.gameState.paused);
+        this.updateUI();
     }
 }

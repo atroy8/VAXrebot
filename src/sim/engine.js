@@ -9,6 +9,13 @@ const nodeId = (ref) => (ref && typeof ref === 'object' ? ref.id : ref);
 // One day of spread. Returns { events: [{ source, target }], count }.
 // `transmissionRate` is the fully computed per-contact probability
 // (scenario.baseTransmissionRate * difficulty.transmissionMultiplier).
+//
+// Protected-node rules (nodes stay visible, never removed):
+// - Quarantined nodes neither infect others nor become infected. Applying
+//   quarantine re-states a node to 'quarantined', so it is excluded from both
+//   the spreader list (requires state 'infected') and the target list
+//   (requires state 'healthy').
+// - Vaccinated nodes remain immune: targets must be 'healthy'.
 export function simulateSpread(state, network, transmissionRate, rng = Math.random) {
     const events = [];
     const byId = new Map(network.nodes.map((n) => [n.id, n]));
@@ -66,12 +73,24 @@ export function updateOutcomes(state, network, recoveryTime, fatalityRate, rng =
     return outcomes;
 }
 
-// End-of-day check. Returns 'contained' (win), 'timeout', or null.
+// Loss threshold: deaths at or above 20% of the initial population.
+export const OVERWHELMED_DEATH_FRACTION = 0.2;
+
+// End-of-day check. Returns 'contained' (win), 'overwhelmed' (loss),
+// 'timeout' (neutral), or null. Precedence: contained > overwhelmed > timeout.
 export function checkGameOver(state, network, durationDays) {
     const activeInfected = network.nodes.filter((n) => n.state === 'infected').length;
     if (activeInfected === 0) return 'contained';
+    const initial = state.stats.initialPopulation;
+    if (initial > 0 && state.stats.totalDead >= initial * OVERWHELMED_DEATH_FRACTION) return 'overwhelmed';
     if (state.day >= durationDays) return 'timeout';
     return null;
+}
+
+// Turn-advance gate for the real pause. nextDay() may run only when the game
+// is neither over nor paused. Pure so it is unit-testable without a DOM.
+export function canAdvanceDay(state) {
+    return !state.gameOver && !state.paused;
 }
 
 // Daily usage cap for a tool under a difficulty: floor(base * multiplier).

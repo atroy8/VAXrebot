@@ -1,7 +1,13 @@
 // ALL D3 touchpoints live in this file and nowhere else.
 // NetworkView owns the force simulation, zoom, drag, data joins, transitions,
 // and virus-particle animations. Node rendering reads node.state for its CSS class.
+// Node glyphs come from the local sprite set in src/sprites.js (fully offline).
 import * as d3 from 'd3';
+import { spriteFor } from '../sprites.js';
+
+// Sprite size in SVG units (nodes have radius 7; sprites sit slightly larger).
+const SPRITE_SIZE = 16;
+const SPRITE_HOVER_SIZE = 24;
 
 export class NetworkView {
     constructor() {
@@ -45,7 +51,9 @@ export class NetworkView {
             .force('collision', d3.forceCollide().radius(12));
 
         this.simulation.on('tick', () => {
-            this.nodeGroup.selectAll('circle').attr('cx', (d) => d.x).attr('cy', (d) => d.y);
+            this.nodeGroup
+                .selectAll('g.node-group')
+                .attr('transform', (d) => `translate(${d.x},${d.y})`);
             this.linkGroup
                 .selectAll('line')
                 .attr('x1', (d) => d.source.x)
@@ -74,31 +82,84 @@ export class NetworkView {
                 d.fy = null;
             });
 
-        // Update nodes
-        const node = this.nodeGroup.selectAll('circle').data(nodes, (d) => d.id);
+        // Update nodes. Each node is a <g> holding a state-colored circle (which
+        // doubles as the fallback if a sprite fails to load) plus a centered
+        // <image> sprite for the node's state. The group is translated on tick.
+        const node = this.nodeGroup.selectAll('g.node-group').data(nodes, (d) => d.id);
 
-        node.exit().transition().duration(500).attr('r', 0).remove();
+        node.exit().transition().duration(500).style('opacity', 0).remove();
 
-        node.enter()
-            .append('circle')
-            .attr('class', (d) => `node ${d.state}`)
-            .attr('r', 0)
+        const entered = node
+            .enter()
+            .append('g')
+            .attr('class', 'node-group')
+            .attr('transform', (d) => `translate(${d.x},${d.y})`)
             .on('click', (event, d) => view.onNodeClick(event, d))
             .on('mouseover', function () {
-                d3.select(this).transition().duration(150).attr('r', 12);
+                const group = d3.select(this);
+                group.select('circle').transition().duration(150).attr('r', 12);
+                group
+                    .select('image')
+                    .transition()
+                    .duration(150)
+                    .attr('width', SPRITE_HOVER_SIZE)
+                    .attr('height', SPRITE_HOVER_SIZE)
+                    .attr('x', -SPRITE_HOVER_SIZE / 2)
+                    .attr('y', -SPRITE_HOVER_SIZE / 2);
             })
             .on('mouseout', function () {
-                d3.select(this).transition().duration(150).attr('r', 7);
+                const group = d3.select(this);
+                group.select('circle').transition().duration(150).attr('r', 7);
+                group
+                    .select('image')
+                    .transition()
+                    .duration(150)
+                    .attr('width', SPRITE_SIZE)
+                    .attr('height', SPRITE_SIZE)
+                    .attr('x', -SPRITE_SIZE / 2)
+                    .attr('y', -SPRITE_SIZE / 2);
             })
-            .call(drag)
-            .merge(node)
-            .attr('cx', (d) => d.x)
-            .attr('cy', (d) => d.y)
+            .call(drag);
+
+        entered.append('circle').attr('class', (d) => `node ${d.state}`).attr('r', 0);
+
+        entered
+            .append('image')
+            .attr('class', 'node-sprite')
+            .attr('href', (d) => spriteFor(d.state))
+            .attr('width', 0)
+            .attr('height', 0)
+            .attr('x', 0)
+            .attr('y', 0)
+            // pointer-events:none keeps the underlying circle as the hit target,
+            // so the existing .node:hover CSS and fallback rendering keep working.
+            .style('pointer-events', 'none')
+            // If a sprite fails to load, hide the broken image so the
+            // state-colored circle beneath serves as the fallback.
+            .on('error', function () {
+                d3.select(this).style('display', 'none');
+            });
+
+        const merged = node.merge(entered);
+        merged.attr('transform', (d) => `translate(${d.x},${d.y})`);
+
+        const nodeTransition = merged
             .transition()
             .duration(isInitial ? 500 : 250)
-            .delay((d, i) => (isInitial ? i * 10 : 0))
+            .delay((d, i) => (isInitial ? i * 10 : 0));
+
+        nodeTransition
+            .select('circle')
             .attr('r', 7)
             .attr('class', (d) => `node ${d.state}`);
+
+        nodeTransition
+            .select('image')
+            .attr('href', (d) => spriteFor(d.state))
+            .attr('width', SPRITE_SIZE)
+            .attr('height', SPRITE_SIZE)
+            .attr('x', -SPRITE_SIZE / 2)
+            .attr('y', -SPRITE_SIZE / 2);
 
         // Update links
         const link = this.linkGroup
