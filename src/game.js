@@ -36,7 +36,6 @@ import {
 import { populateDifficulties, fillBriefing, setFixedDifficulty } from './ui/briefing.js';
 import { renderLevelSelect } from './ui/level-select.js';
 import { AudioEngine } from './audio.js';
-import introVideoUrl from './assets/intro.mp4';
 
 // Music-hook thresholds (stingers are implemented by the audio track; every
 // call below uses optional chaining so nothing breaks if they land later):
@@ -90,8 +89,8 @@ export class EpidemicSimulator {
     // the first pointer interaction with the intro screen. startGameMusic
     // is a safe no-op when the music toggle is off.
     setupIntro() {
-        const video = document.getElementById('intro-video');
-        if (video) video.src = introVideoUrl;
+        // The globe home screen owns first-gesture audio now; keep the
+        // welcome-screen tap listener as a fallback music starter.
         const welcome = document.getElementById('welcome-screen');
         if (welcome) {
             welcome.addEventListener('pointerdown', () => this.audio.startGameMusic(), { once: true });
