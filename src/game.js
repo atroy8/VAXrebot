@@ -22,7 +22,7 @@ import {
     canAdvanceDay,
 } from './sim/engine.js';
 import { showScreen as renderScreen } from './ui/screens.js';
-import { NetworkView } from './ui/network-view.js';
+import { NetworkView } from './ui/network-view-3d.js';
 import {
     renderHeader,
     renderTools,
