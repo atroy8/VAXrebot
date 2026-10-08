@@ -1,23 +1,9 @@
-// Menu + briefing screen population. Renders the scenario and difficulty cards
-// and fills the briefing panel; game.js owns selection state.
+// Menu + briefing screen population. Phase 1: the scenario picker is gone,
+// replaced by the level-select screen (src/ui/level-select.js). The briefing
+// keeps the difficulty cards, but levels fix the difficulty, so game.js
+// calls setFixedDifficulty() to preselect it and lock the picker.
 
-export function populateMenus(scenarios, difficulties) {
-    const scenarioGrid = document.querySelector('.scenario-grid');
-    scenarioGrid.innerHTML = Object.values(scenarios)
-        .map(
-            (s) => `
-                <div class="scenario-card" data-scenario="${s.id}">
-                    <div class="scenario-icon">${s.icon}</div>
-                    <h3>${s.name}</h3>
-                    <p>${s.description}</p>
-                    <div class="scenario-stats">
-                        <span>${s.duration} days</span> • <span>${s.networkType} network</span>
-                    </div>
-                </div>
-            `
-        )
-        .join('');
-
+export function populateDifficulties(difficulties) {
     const difficultyGrid = document.querySelector('.difficulty-grid');
     difficultyGrid.innerHTML = Object.entries(difficulties)
         .map(
@@ -31,6 +17,17 @@ export function populateMenus(scenarios, difficulties) {
             `
         )
         .join('');
+}
+
+// Levels set the difficulty: preselect the card, disable the picker, and
+// relabel the section so the player knows it is part of the mission.
+export function setFixedDifficulty(difficultyId, difficulties) {
+    const r0 = difficulties[difficultyId] ? difficulties[difficultyId].R0 : '';
+    markDifficultySelected(difficultyId, r0);
+    const grid = document.querySelector('.difficulty-grid');
+    if (grid) grid.classList.add('fixed');
+    const label = document.getElementById('difficulty-label');
+    if (label) label.textContent = 'Mission difficulty:';
 }
 
 export function fillBriefing(scenario) {

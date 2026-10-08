@@ -61,7 +61,7 @@ export function showNotification(message, type = 'info') {
     }, 3000);
 }
 
-export function renderGameOver({ outcome, stats, difficultyId }) {
+export function renderGameOver({ outcome, stats, difficultyId, stars = 0, fundingEarned = 0, livesSaved = 0 }) {
     const attackRate = stats.initialPopulation > 0 ? (stats.totalInfected / stats.initialPopulation) * 100 : 0;
     const caseFatalityRate = stats.totalInfected > 0 ? (stats.totalDead / stats.totalInfected) * 100 : 0;
 
@@ -95,6 +95,21 @@ export function renderGameOver({ outcome, stats, difficultyId }) {
     document.getElementById('people-protected').textContent = stats.totalProtected;
 
     document.getElementById('game-over-message').textContent = message;
+
+    // Progression rewards: stars, funding, and lives saved on a win.
+    // Rendered only when provided so the pre-progression callers keep working.
+    const existing = document.getElementById('game-over-rewards');
+    if (existing) existing.remove();
+    if (stars > 0) {
+        const rewards = document.createElement('div');
+        rewards.id = 'game-over-rewards';
+        rewards.className = 'game-over-rewards';
+        rewards.innerHTML = `
+            <div class="reward-stars">${'★'.repeat(stars)}${'☆'.repeat(3 - stars)}</div>
+            <div class="reward-line">+${fundingEarned} funding earned</div>
+            <div class="reward-line">${livesSaved.toLocaleString()} lives saved in this mission</div>`;
+        document.getElementById('game-over-message').after(rewards);
+    }
 
     // Outcome hook for styling: win, loss, or neutral on the screen element.
     // Burnout is neutral (not a victory, not a defeat).

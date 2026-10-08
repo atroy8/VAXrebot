@@ -287,13 +287,35 @@
         }
         .menu-subtitle { color: var(--color-text-secondary); font-size: 1.25rem; }
 
-        .scenario-grid {
+        /* Level Select (progression phase 1): HUD + region groups + level cards.
+           The world map UI arrives in phase 2; this is a functional list. */
+        .hud-bar {
+            display: flex;
+            gap: var(--space-16);
+            justify-content: center;
+            margin-top: var(--space-16);
+            flex-wrap: wrap;
+        }
+        .hud-item {
+            background: var(--color-surface);
+            border: 1px solid var(--color-card-border);
+            border-radius: var(--radius-base);
+            padding: var(--space-8) var(--space-16);
+            font-weight: bold;
+            font-size: 1rem;
+        }
+        .level-region { margin-bottom: var(--space-32); }
+        .region-header h2 { margin-bottom: var(--space-8); }
+        .region-header p { color: var(--color-text-secondary); margin-bottom: var(--space-8); }
+        .region-progress { font-size: 0.875rem; color: var(--color-text-secondary); margin-bottom: var(--space-16); }
+        .region-gate { font-weight: bold; }
+        .region-levels {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
             gap: var(--space-24);
         }
 
-        .scenario-card {
+        .level-card {
             background: var(--color-surface);
             border: 1px solid var(--color-card-border);
             border-radius: var(--radius-lg);
@@ -303,22 +325,30 @@
             text-align: center;
             box-shadow: var(--shadow-sm);
             animation: fadeInUp 0.5s var(--ease-out) both;
+            min-height: 44px;
         }
-        .scenario-card:nth-child(1) { animation-delay: 0.1s; }
-        .scenario-card:nth-child(2) { animation-delay: 0.2s; }
-        .scenario-card:nth-child(3) { animation-delay: 0.3s; }
-        .scenario-card:nth-child(4) { animation-delay: 0.4s; }
-        .scenario-card:nth-child(5) { animation-delay: 0.5s; }
-
-        .scenario-card:hover {
+        .level-card:hover {
             border-color: var(--color-primary);
             box-shadow: var(--shadow-lg);
             transform: translateY(-5px) scale(1.02);
         }
-        .scenario-icon { font-size: 3rem; margin-bottom: var(--space-16); display: block; }
-        .scenario-card h3 { margin-bottom: var(--space-8); }
-        .scenario-card p { color: var(--color-text-secondary); margin-bottom: var(--space-16); }
-        .scenario-stats { font-size: 0.875rem; color: var(--color-text-secondary); }
+        .level-card.locked { cursor: not-allowed; opacity: 0.55; }
+        .level-card.locked:hover { transform: none; box-shadow: var(--shadow-sm); border-color: var(--color-card-border); }
+        .level-icon { font-size: 3rem; margin-bottom: var(--space-16); display: block; }
+        .level-card h3 { margin-bottom: var(--space-8); }
+        .level-card p { color: var(--color-text-secondary); margin-bottom: var(--space-16); }
+        .level-lock-reason { font-size: 0.875rem; font-style: italic; }
+        .level-meta { display: flex; justify-content: center; gap: var(--space-16); align-items: center; }
+        .level-stars { color: #f5b301; font-size: 1.25rem; letter-spacing: 2px; }
+        .level-difficulty { font-size: 0.875rem; color: var(--color-text-secondary); }
+
+        /* Fixed difficulty on the briefing screen: the level sets it. */
+        .difficulty-grid.fixed { pointer-events: none; opacity: 0.85; }
+
+        /* Game-over rewards (stars, funding, lives saved). */
+        .game-over-rewards { text-align: center; margin: var(--space-16) 0; }
+        .reward-stars { color: #f5b301; font-size: 2rem; letter-spacing: 4px; }
+        .reward-line { color: var(--color-text-secondary); margin-top: var(--space-8); }
 
         /* Briefing Screen */
         .briefing-content {
@@ -632,7 +662,7 @@
         .btn,
         .tool-item,
         .difficulty-card,
-        .scenario-card {
+        .level-card {
             touch-action: manipulation;
             -webkit-tap-highlight-color: transparent;
         }

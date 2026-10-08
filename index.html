@@ -23,15 +23,21 @@
         </div>
 
 
-        <!-- Main Menu Screen -->
+        <!-- Level Select Screen: progression entry point (phase 1: functional
+             list grouped by region; world map UI arrives in phase 2) -->
         <div id="menu-screen" class="screen">
             <div class="container">
                 <div class="menu-header">
                     <h1>Epidemic Control Simulator</h1>
-                    <p class="menu-subtitle">Your strategic decisions can save a community. Choose a scenario to begin.</p>
+                    <p class="menu-subtitle">You are a field epidemiologist. Contain outbreaks, earn stars, save lives.</p>
+                    <div class="hud-bar">
+                        <span id="hud-stars" class="hud-item">⭐ 0</span>
+                        <span id="hud-funding" class="hud-item">💰 0</span>
+                        <span id="hud-lives" class="hud-item">❤️ 0</span>
+                    </div>
                 </div>
-                <div class="scenario-grid">
-                    <!-- Scenario cards will be dynamically generated here -->
+                <div id="level-grid">
+                    <!-- Region groups and level cards render here -->
                 </div>
             </div>
         </div>
@@ -54,13 +60,13 @@
                     </div>
                 </div>
                 <div class="difficulty-selection">
-                    <strong>Select Difficulty:</strong>
+                    <strong id="difficulty-label">Select Difficulty:</strong>
                     <div class="difficulty-grid">
                         <!-- Difficulty cards will be dynamically generated here -->
                     </div>
                 </div>
                 <div class="briefing-actions">
-                    <button class="btn btn--secondary" id="back-to-menu">Back to Scenarios</button>
+                    <button class="btn btn--secondary" id="back-to-menu">Back to Levels</button>
                     <button class="btn btn--primary" id="start-simulation">Begin Containment</button>
                 </div>
             </div>
@@ -158,8 +164,8 @@
                     </div>
                     <p id="game-over-message" class="game-over-message"></p>
                     <div class="game-over-actions">
-                        <button class="btn btn--secondary" id="play-again">Play Same Scenario</button>
-                        <button class="btn btn--primary" id="try-different-scenario">Choose New Scenario</button>
+                        <button class="btn btn--secondary" id="play-again">Replay Level</button>
+                        <button class="btn btn--primary" id="try-different-scenario">Choose Level</button>
                     </div>
                 </div>
         </div>
