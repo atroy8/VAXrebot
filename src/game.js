@@ -23,6 +23,7 @@ import {
 } from './ui/panels.js';
 import { populateMenus, fillBriefing, markDifficultySelected } from './ui/briefing.js';
 import { AudioEngine } from './audio.js';
+import introVideoUrl from './assets/intro.mp4';
 
 // Music-hook thresholds (stingers are implemented by the audio track; every
 // call below uses optional chaining so nothing breaks if they land later):
@@ -55,7 +56,22 @@ export class EpidemicSimulator {
         this.audio.initAudio();
         populateMenus(this.scenarios, this.difficulties);
         this.bindEvents();
+        this.setupIntro();
         this.showScreen('welcome');
+    }
+
+    // Looping video intro: bundled MP4 (fully offline), title as HTML
+    // overlay, screen holds until the player taps Start. Browsers block
+    // audio before the first user gesture, so the ambient loop starts on
+    // the first pointer interaction with the intro screen. startGameMusic
+    // is a safe no-op when the music toggle is off.
+    setupIntro() {
+        const video = document.getElementById('intro-video');
+        if (video) video.src = introVideoUrl;
+        const welcome = document.getElementById('welcome-screen');
+        if (welcome) {
+            welcome.addEventListener('pointerdown', () => this.audio.startGameMusic(), { once: true });
+        }
     }
 
     bindEvents() {
@@ -95,6 +111,7 @@ export class EpidemicSimulator {
         this.currentScreen = screenName;
 
         if (screenName === 'menu') {
+            this.audio.stopGameMusic(); // intro ambient loop yields to the menu theme
             this.audio.startThemeMusic();
         } else {
             this.audio.stopThemeMusic();
@@ -114,7 +131,12 @@ export class EpidemicSimulator {
     }
 
     startGame() {
-        this.gameState = initGameState(this.tools);
+        // Population varies per scenario: pick uniformly from the scenario's
+        // range so each run feels different. The 8%-or-5-deaths loss rule
+        // keeps the math fair at any size.
+        const [popMin, popMax] = this.currentScenario.populationRange;
+        const population = popMin + Math.floor(Math.random() * (popMax - popMin + 1));
+        this.gameState = initGameState(this.tools, population);
         this.createNetwork();
         this.view.setup({
             onNodeClick: (event, node) => this.handleNodeClick(event, node),
@@ -186,8 +208,15 @@ export class EpidemicSimulator {
             // Protected nodes stay visible: re-state the node instead of
             // removing it. The network view renders node.state to its CSS
             // class, so .node.vaccinated / .node.quarantined styling applies.
+            // Quarantining a sick node is isolation, not a cure: it keeps the
+            // flag so the sim keeps ticking its illness and counts it active.
             const prevProtected = this.gameState.stats.totalProtected;
-            node.state = toolId === 'vaccinate' ? 'vaccinated' : 'quarantined';
+            if (toolId === 'vaccinate') {
+                node.state = 'vaccinated';
+            } else {
+                node.sickWhileQuarantined = node.state === 'infected';
+                node.state = 'quarantined';
+            }
             this.gameState.stats.totalProtected++;
             logMessage =
                 toolId === 'vaccinate'

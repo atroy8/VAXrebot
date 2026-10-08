@@ -208,9 +208,53 @@
             transition-delay: 0s, 0s, 0s;
         }
         
-        /* Welcome Screen */
+        /* Welcome Screen: full-bleed looping video intro with title overlay */
         #welcome-screen .container {
             text-align: center;
+        }
+        .intro-wrap {
+            position: relative;
+            width: 100%;
+            min-height: 100vh;
+            min-height: 100dvh;
+            overflow: hidden;
+            background-color: #060a14;
+        }
+        .intro-video {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .intro-overlay {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: var(--space-16);
+            padding: var(--space-32);
+            text-align: center;
+            background: linear-gradient(to top, rgba(4, 8, 18, 0.82) 0%, rgba(4, 8, 18, 0.25) 55%, rgba(4, 8, 18, 0.45) 100%);
+        }
+        .intro-overlay h1 {
+            color: #fff;
+            font-size: clamp(2rem, 6vw, 3.5rem);
+            text-shadow: 0 2px 24px rgba(0, 0, 0, 0.7);
+            margin: 0;
+        }
+        .intro-overlay .menu-subtitle {
+            color: rgba(255, 255, 255, 0.85);
+            font-size: clamp(1rem, 3vw, 1.25rem);
+            text-shadow: 0 1px 12px rgba(0, 0, 0, 0.7);
+            margin: 0;
+        }
+        .intro-overlay .btn--lg {
+            margin-top: var(--space-16);
+            min-width: 200px;
+            min-height: 48px;
         }
         .video-container {
             width: 100%;

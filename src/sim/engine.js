@@ -11,10 +11,10 @@ const nodeId = (ref) => (ref && typeof ref === 'object' ? ref.id : ref);
 // (scenario.baseTransmissionRate * difficulty.transmissionMultiplier).
 //
 // Protected-node rules (nodes stay visible, never removed):
-// - Quarantined nodes neither infect others nor become infected. Applying
-//   quarantine re-states a node to 'quarantined', so it is excluded from both
-//   the spreader list (requires state 'infected') and the target list
-//   (requires state 'healthy').
+// - Quarantined nodes neither infect others nor become infected. Quarantining
+//   an infected node keeps it sick: it ticks daysInfected and resolves via
+//   updateOutcomes (recover/die) while isolated, and counts as active infected
+//   for the win check until it resolves. Isolation is not a cure.
 // - Vaccinated nodes remain immune: targets must be 'healthy'.
 export function simulateSpread(state, network, transmissionRate, rng = Math.random) {
     const events = [];
@@ -36,7 +36,7 @@ export function simulateSpread(state, network, transmissionRate, rng = Math.rand
     }
 
     for (const n of network.nodes) {
-        if (n.state === 'infected') n.daysInfected++;
+        if (n.state === 'infected' || (n.state === 'quarantined' && n.sickWhileQuarantined)) n.daysInfected++;
     }
 
     return { events, count: events.length };
@@ -49,7 +49,11 @@ export function updateOutcomes(state, network, recoveryTime, fatalityRate, rng =
     const outcomes = [];
 
     for (const node of network.nodes) {
-        if (node.state !== 'infected' || node.daysInfected < recoveryTime) continue;
+        // Quarantined nodes that were sick when isolated keep resolving:
+        // they tick daysInfected (see simulateSpread) and recover or die here.
+        const stillSick =
+            node.state === 'infected' || (node.state === 'quarantined' && node.sickWhileQuarantined);
+        if (!stillSick || node.daysInfected < recoveryTime) continue;
         if (rng() < fatalityRate) {
             node.state = 'dead';
             node.removed = true;
@@ -57,6 +61,7 @@ export function updateOutcomes(state, network, recoveryTime, fatalityRate, rng =
             outcomes.push({ node, outcome: 'died' });
         } else {
             node.state = 'recovered';
+            node.sickWhileQuarantined = false; // isolation served its purpose
             state.stats.totalRecovered++;
             outcomes.push({ node, outcome: 'recovered' });
         }
@@ -73,16 +78,24 @@ export function updateOutcomes(state, network, recoveryTime, fatalityRate, rng =
     return outcomes;
 }
 
-// Loss threshold: deaths at or above 20% of the initial population.
-export const OVERWHELMED_DEATH_FRACTION = 0.2;
+// Loss threshold: deaths at or above 8% of the initial population, with a
+// floor of 5 deaths so small populations do not swing on a single case.
+export const OVERWHELMED_DEATH_FRACTION = 0.08;
+export const OVERWHELMED_DEATH_FLOOR = 5;
 
 // End-of-day check. Returns 'contained' (win), 'overwhelmed' (loss),
 // 'timeout' (neutral), or null. Precedence: contained > overwhelmed > timeout.
+// Quarantined nodes that were sick when isolated still count as active
+// infected until they resolve (recover/die), so quarantining the sick is
+// isolation, not a cure.
 export function checkGameOver(state, network, durationDays) {
-    const activeInfected = network.nodes.filter((n) => n.state === 'infected').length;
+    const activeInfected = network.nodes.filter(
+        (n) => n.state === 'infected' || (n.state === 'quarantined' && n.sickWhileQuarantined)
+    ).length;
     if (activeInfected === 0) return 'contained';
     const initial = state.stats.initialPopulation;
-    if (initial > 0 && state.stats.totalDead >= initial * OVERWHELMED_DEATH_FRACTION) return 'overwhelmed';
+    const deathLine = Math.max(initial * OVERWHELMED_DEATH_FRACTION, OVERWHELMED_DEATH_FLOOR);
+    if (initial > 0 && state.stats.totalDead >= deathLine) return 'overwhelmed';
     if (state.day >= durationDays) return 'timeout';
     return null;
 }
