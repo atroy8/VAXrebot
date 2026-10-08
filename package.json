@@ -6,12 +6,14 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run"
   },
   "dependencies": {
     "d3": "^7"
   },
   "devDependencies": {
-    "vite": "^7"
+    "vite": "^7",
+    "vitest": "^5.0.3"
   }
 }

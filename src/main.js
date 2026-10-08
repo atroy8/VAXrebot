@@ -4,3 +4,4 @@ import { EpidemicSimulator } from './game.js';
         document.addEventListener('DOMContentLoaded', () => {
             window.game = new EpidemicSimulator();
         });
+import('./ui/onboarding.js').then((m) => m.maybeShowOnboarding());

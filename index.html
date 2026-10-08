@@ -10,23 +10,15 @@
         <!-- Notification Container -->
         <div id="notification-container"></div>
 
-        <!-- Welcome Screen -->
+        <!-- Welcome Screen: looping video intro, holds until the player taps Start -->
         <div id="welcome-screen" class="screen active">
-            <div class="container">
-                <div class="menu-header">
-                    <h1>Welcome to the Simulator</h1>
+            <div class="intro-wrap">
+                <video id="intro-video" class="intro-video" autoplay muted loop playsinline></video>
+                <div class="intro-overlay">
+                    <h1>Epidemic Control Simulator</h1>
                     <p class="menu-subtitle">An interactive simulation of epidemic control.</p>
+                    <button id="start-game-btn" class="btn btn--primary btn--lg">Start</button>
                 </div>
-                <div class="video-container">
-                    <iframe 
-                        src="https://www.youtube.com/embed/huFsASh7ykE" 
-                        title="YouTube video player" 
-                        frameborder="0" 
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-                        allowfullscreen>
-                    </iframe>
-                </div>
-                <button id="start-game-btn" class="btn btn--primary btn--lg">Start Game</button>
             </div>
         </div>
 
