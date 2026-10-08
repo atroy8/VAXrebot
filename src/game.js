@@ -3,6 +3,15 @@
 import { scenarios } from './config/scenarios.js';
 import { difficulties } from './config/difficulties.js';
 import { tools } from './config/tools.js';
+import { LEVELS, REGIONS, levelById } from './config/levels.js';
+import { createStorage, loadSave, writeSave } from './save.js';
+import {
+    isLevelUnlocked,
+    calculateStars,
+    fundingAward,
+    livesSavedForRun,
+    recordCompletion,
+} from './progress.js';
 import { generateNetwork } from './sim/network.js';
 import { initGameState } from './sim/state.js';
 import {
@@ -21,7 +30,8 @@ import {
     showNotification,
     renderGameOver,
 } from './ui/panels.js';
-import { populateMenus, fillBriefing, markDifficultySelected } from './ui/briefing.js';
+import { populateDifficulties, fillBriefing, setFixedDifficulty } from './ui/briefing.js';
+import { renderLevelSelect } from './ui/level-select.js';
 import { AudioEngine } from './audio.js';
 import introVideoUrl from './assets/intro.mp4';
 
@@ -37,6 +47,7 @@ export class EpidemicSimulator {
     constructor() {
         this.currentScreen = 'welcome';
         this.currentScenario = null;
+        this.currentLevel = null;
         this.selectedDifficulty = 'medium';
         this.gameState = null;
         this.network = { nodes: [], links: [] };
@@ -46,6 +57,10 @@ export class EpidemicSimulator {
         this.difficulties = difficulties;
         this.tools = tools;
 
+        // Progression: versioned save behind a swappable storage backend.
+        this.storage = createStorage();
+        this.save = loadSave(this.storage);
+
         this.audio = new AudioEngine(() => this.currentScreen);
         this.view = new NetworkView();
 
@@ -54,10 +69,15 @@ export class EpidemicSimulator {
 
     init() {
         this.audio.initAudio();
-        populateMenus(this.scenarios, this.difficulties);
+        populateDifficulties(this.difficulties);
+        this.refreshLevelSelect();
         this.bindEvents();
         this.setupIntro();
         this.showScreen('welcome');
+    }
+
+    refreshLevelSelect() {
+        renderLevelSelect({ save: this.save, levels: LEVELS, regions: REGIONS });
     }
 
     // Looping video intro: bundled MP4 (fully offline), title as HTML
@@ -77,14 +97,9 @@ export class EpidemicSimulator {
     bindEvents() {
         document.getElementById('start-game-btn').addEventListener('click', () => this.showScreen('menu'));
 
-        document.querySelector('.scenario-grid').addEventListener('click', (e) => {
-            const card = e.target.closest('.scenario-card');
-            if (card) this.selectScenario(card.dataset.scenario);
-        });
-
-        document.querySelector('.difficulty-grid').addEventListener('click', (e) => {
-            const card = e.target.closest('.difficulty-card');
-            if (card) this.selectDifficulty(card.dataset.difficulty);
+        document.getElementById('level-grid').addEventListener('click', (e) => {
+            const card = e.target.closest('.level-card');
+            if (card && !card.classList.contains('locked')) this.selectLevel(card.dataset.level);
         });
 
         document.getElementById('back-to-menu').addEventListener('click', () => this.showScreen('menu'));
@@ -111,6 +126,7 @@ export class EpidemicSimulator {
         this.currentScreen = screenName;
 
         if (screenName === 'menu') {
+            this.refreshLevelSelect();
             this.audio.stopGameMusic(); // intro ambient loop yields to the menu theme
             this.audio.startThemeMusic();
         } else {
@@ -118,16 +134,18 @@ export class EpidemicSimulator {
         }
     }
 
-    selectScenario(scenarioId) {
-        this.currentScenario = this.scenarios[scenarioId];
-        fillBriefing(this.currentScenario);
-        this.selectDifficulty('medium'); // Default to medium
+    selectLevel(levelId) {
+        if (!isLevelUnlocked(this.save, LEVELS, REGIONS, levelId)) return;
+        const level = levelById(levelId);
+        if (!level) return;
+        this.currentLevel = level;
+        this.currentScenario = this.scenarios[level.scenarioId];
+        this.selectedDifficulty = level.difficultyId;
+        // Briefing shows the mission name; the disease profile still comes
+        // from the underlying scenario.
+        fillBriefing({ ...this.currentScenario, name: level.name, description: level.blurb });
+        setFixedDifficulty(level.difficultyId, this.difficulties);
         this.showScreen('briefing');
-    }
-
-    selectDifficulty(difficultyId) {
-        this.selectedDifficulty = difficultyId;
-        markDifficultySelected(difficultyId, this.difficulties[difficultyId].R0);
     }
 
     startGame() {
@@ -310,7 +328,25 @@ export class EpidemicSimulator {
     }
 
     showGameOver() {
-        renderGameOver({ outcome: this.gameState.outcome, stats: this.gameState.stats, difficultyId: this.selectedDifficulty });
+        const outcome = this.gameState.outcome;
+        const stats = this.gameState.stats;
+        // Progression: record stars, funding, and lives saved, then persist.
+        // recordCompletion only banks rewards on a 'contained' win.
+        const stars = calculateStars(outcome, stats);
+        const fundingEarned = fundingAward(stars);
+        const livesSaved = livesSavedForRun(outcome, stats);
+        if (this.currentLevel) {
+            this.save = recordCompletion(this.save, this.currentLevel.id, outcome, stats);
+            writeSave(this.storage, this.save);
+        }
+        renderGameOver({
+            outcome,
+            stats,
+            difficultyId: this.selectedDifficulty,
+            stars,
+            fundingEarned,
+            livesSaved,
+        });
         this.showScreen('game-over');
     }
 
@@ -324,7 +360,7 @@ export class EpidemicSimulator {
     updateUI() {
         const difficulty = this.difficulties[this.selectedDifficulty];
         renderHeader({
-            scenarioName: this.currentScenario.name,
+            scenarioName: this.currentLevel ? this.currentLevel.name : this.currentScenario.name,
             difficultyName: difficulty.name,
             difficultyId: this.selectedDifficulty,
             day: this.gameState.day,
