@@ -5,7 +5,7 @@ export function initGameState(tools, population = 100) {
         day: 1,
         paused: false,
         gameOver: false,
-        outcome: null, // 'contained' | 'overwhelmed' | 'timeout' once the game ends
+        outcome: null, // 'contained' | 'overwhelmed' | 'timeout' | 'burnout' once the game ends
         stats: {
             totalInfected: 0,
             totalProtected: 0,

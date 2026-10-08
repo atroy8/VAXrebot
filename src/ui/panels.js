@@ -1,6 +1,7 @@
 // DOM rendering for the game screen chrome: header stats, tools panel,
 // action log, toast notifications, and the game-over stats screen.
 // No game logic here; callers pass plain data.
+import { spriteFor } from '../sprites.js';
 
 export function renderHeader({ scenarioName, difficultyName, difficultyId, day, infected, protected: protectedCount, population, paused = false }) {
     document.getElementById('game-scenario-name').textContent = scenarioName;
@@ -65,19 +66,25 @@ export function renderGameOver({ outcome, stats, difficultyId }) {
     const caseFatalityRate = stats.totalInfected > 0 ? (stats.totalDead / stats.totalInfected) * 100 : 0;
 
     // Distinct copy per outcome. 'overwhelmed' is the loss: deaths reached the
-    // 20% threshold and overwhelmed the response. Keep copy plain, no em dashes.
+    // loss threshold and overwhelmed the response. 'burnout' is neutral: the
+    // virus faded on its own because the player never intervened. Keep copy
+    // plain, no em dashes.
     const title =
         outcome === 'contained'
             ? 'Outbreak Contained!'
             : outcome === 'overwhelmed'
               ? 'Outbreak Overwhelmed'
-              : 'Simulation Over';
+              : outcome === 'burnout'
+                ? 'Outbreak Burned Out'
+                : 'Simulation Over';
     const message =
         outcome === 'contained'
             ? 'Excellent work! Your strategic interventions stopped the spread.'
             : outcome === 'overwhelmed'
               ? 'Deaths have overwhelmed the response. Too many lives were lost before the outbreak could be contained. Review the results and try a new strategy.'
-              : 'The simulation period has ended. Analyze the results and try a new strategy.';
+              : outcome === 'burnout'
+                ? 'The virus ran its course and faded on its own. You never intervened, so this is not a victory. Containment requires action: try a new strategy.'
+                : 'The simulation period has ended. Analyze the results and try a new strategy.';
 
     document.getElementById('game-over-title').textContent = title;
     document.getElementById('final-total-infected').textContent = stats.totalInfected;
@@ -89,7 +96,8 @@ export function renderGameOver({ outcome, stats, difficultyId }) {
 
     document.getElementById('game-over-message').textContent = message;
 
-    // Outcome hook for styling: win, loss, or timeout on the screen element.
+    // Outcome hook for styling: win, loss, or neutral on the screen element.
+    // Burnout is neutral (not a victory, not a defeat).
     const screen = document.getElementById('game-over-screen');
     screen.classList.remove('outcome-win', 'outcome-loss', 'outcome-timeout');
     screen.classList.add(outcome === 'contained' ? 'outcome-win' : outcome === 'overwhelmed' ? 'outcome-loss' : 'outcome-timeout');
@@ -99,4 +107,28 @@ export function renderGameOver({ outcome, stats, difficultyId }) {
     badge.textContent = difficultyId;
     document.getElementById('final-difficulty-badge').innerHTML = 'Completed on ';
     document.getElementById('final-difficulty-badge').appendChild(badge);
+}
+
+// Network legend: one badge per node state, using the same sprites as the
+// graph. Rendered once into the network panel; idempotent.
+const LEGEND_ITEMS = [
+    ['healthy', 'Healthy'],
+    ['infected', 'Infected'],
+    ['recovered', 'Recovered'],
+    ['vaccinated', 'Vaccinated'],
+    ['quarantined', 'Quarantined'],
+    ['dead', 'Deceased'],
+];
+
+export function renderLegend() {
+    const container = document.querySelector('.network-container');
+    if (!container || container.querySelector('.network-legend')) return;
+    const legend = document.createElement('div');
+    legend.className = 'network-legend';
+    legend.setAttribute('aria-label', 'Node state legend');
+    legend.innerHTML = LEGEND_ITEMS.map(
+        ([state, label]) =>
+            `<span class="legend-item"><img src="${spriteFor(state)}" alt="${label}" width="24" height="24" loading="lazy"><span>${label}</span></span>`
+    ).join('');
+    container.appendChild(legend);
 }

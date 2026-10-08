@@ -12,7 +12,12 @@ export function maybeShowOnboarding() {
         dismissed = false;
     }
     if (dismissed) return;
+    showOnboarding();
+}
 
+// Force-show the overlay (the "How to play" button). Does not touch the
+// dismissal flag: reopening it never re-arms the first-visit behavior.
+export function showOnboarding() {
     const overlay = document.createElement('div');
     overlay.className = 'onboarding-overlay';
     overlay.innerHTML = `

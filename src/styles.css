@@ -430,6 +430,36 @@
             background-color: var(--color-secondary);
             padding: 0;
         }
+
+        /* Node-state legend strip along the bottom of the network panel */
+        .network-legend {
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: var(--space-8) var(--space-16);
+            padding: var(--space-8) var(--space-12);
+            background: rgba(10, 14, 26, 0.78);
+            backdrop-filter: blur(4px);
+            z-index: 5;
+        }
+        .legend-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            color: rgba(255, 255, 255, 0.88);
+            font-size: 0.78rem;
+            line-height: 1;
+            white-space: nowrap;
+        }
+        .legend-item img {
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+        }
         
         .tools-list { display: flex; flex-direction: column; gap: var(--space-12); }
         .tool-item {

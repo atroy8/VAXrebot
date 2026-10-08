@@ -72,6 +72,7 @@ describe('checkGameOver loss state', () => {
 
     it('precedence: contained beats overwhelmed', () => {
         const state = stateWithDead(8);
+        state.stats.totalProtected = 4; // player intervened, so this is a real win
         const network = pairNetwork('healthy', 'healthy'); // no active infected
         expect(checkGameOver(state, network, 30)).toBe('contained');
     });

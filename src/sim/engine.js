@@ -84,15 +84,22 @@ export const OVERWHELMED_DEATH_FRACTION = 0.08;
 export const OVERWHELMED_DEATH_FLOOR = 5;
 
 // End-of-day check. Returns 'contained' (win), 'overwhelmed' (loss),
-// 'timeout' (neutral), or null. Precedence: contained > overwhelmed > timeout.
+// 'timeout' or 'burnout' (neutral), or null.
+// Precedence: contained > overwhelmed > timeout.
 // Quarantined nodes that were sick when isolated still count as active
 // infected until they resolve (recover/die), so quarantining the sick is
 // isolation, not a cure.
+// Passivity rule: if the virus dies out with zero player intervention
+// (no vaccinations, quarantines, or severed links), the verdict is
+// 'burnout', not 'contained'. Doing nothing is not a victory.
 export function checkGameOver(state, network, durationDays) {
     const activeInfected = network.nodes.filter(
         (n) => n.state === 'infected' || (n.state === 'quarantined' && n.sickWhileQuarantined)
     ).length;
-    if (activeInfected === 0) return 'contained';
+    if (activeInfected === 0) {
+        const intervened = state.stats.totalProtected + state.stats.linksSevered > 0;
+        return intervened ? 'contained' : 'burnout';
+    }
     const initial = state.stats.initialPopulation;
     const deathLine = Math.max(initial * OVERWHELMED_DEATH_FRACTION, OVERWHELMED_DEATH_FLOOR);
     if (initial > 0 && state.stats.totalDead >= deathLine) return 'overwhelmed';

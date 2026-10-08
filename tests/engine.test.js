@@ -174,8 +174,22 @@ describe('updateOutcomes', () => {
 });
 
 describe('checkGameOver', () => {
-    it('returns contained when no active infections remain (win)', () => {
+    it('returns contained when no active infections remain and the player intervened (win)', () => {
         const state = freshState();
+        state.stats.totalProtected = 3; // player did something
+        const network = chainNetwork([]);
+        expect(checkGameOver(state, network, 14)).toBe('contained');
+    });
+
+    it('returns burnout when the virus fades with zero player intervention', () => {
+        const state = freshState(); // totalProtected and linksSevered are 0
+        const network = chainNetwork([]);
+        expect(checkGameOver(state, network, 14)).toBe('burnout');
+    });
+
+    it('a single severed link counts as intervention (no burnout)', () => {
+        const state = freshState();
+        state.stats.linksSevered = 1;
         const network = chainNetwork([]);
         expect(checkGameOver(state, network, 14)).toBe('contained');
     });
@@ -197,6 +211,7 @@ describe('checkGameOver', () => {
     it('win takes precedence over timeout on the final day', () => {
         const state = freshState();
         state.day = 14;
+        state.stats.totalProtected = 2;
         const network = chainNetwork([]);
         expect(checkGameOver(state, network, 14)).toBe('contained');
     });

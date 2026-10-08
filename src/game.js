@@ -17,6 +17,7 @@ import { NetworkView } from './ui/network-view.js';
 import {
     renderHeader,
     renderTools,
+    renderLegend,
     addLogEntry,
     showNotification,
     renderGameOver,
@@ -57,6 +58,7 @@ export class EpidemicSimulator {
         populateMenus(this.scenarios, this.difficulties);
         this.bindEvents();
         this.setupIntro();
+        renderLegend();
         this.showScreen('welcome');
     }
 
@@ -91,6 +93,11 @@ export class EpidemicSimulator {
         document.getElementById('start-simulation').addEventListener('click', () => this.startGame());
         document.getElementById('next-day').addEventListener('click', () => this.nextDay());
         document.getElementById('pause-game').addEventListener('click', () => this.togglePause());
+        // Onboarding re-entry: reopen the How to play overlay on demand.
+        // Lazy import keeps it out of the initial bundle path.
+        document.getElementById('how-to-play').addEventListener('click', () => {
+            import('./ui/onboarding.js').then((m) => m.showOnboarding());
+        });
         document.getElementById('tools-list').addEventListener('click', (e) => {
             const toolItem = e.target.closest('.tool-item');
             if (toolItem && !toolItem.classList.contains('disabled')) {
@@ -302,7 +309,8 @@ export class EpidemicSimulator {
             this.gameState.gameOver = true;
             this.gameState.outcome = result;
             this.audio.playSound(261, 1.0, 'sine');
-            // Music hook: 'win' for contained, 'loss' for overwhelmed or timeout.
+            // Music hook: 'win' for contained, 'loss' for everything else
+            // (overwhelmed, timeout, burnout: none of them are victories).
             this.audio.playStinger?.(result === 'contained' ? 'win' : 'loss');
             this.audio.stopGameMusic?.();
             setTimeout(() => this.showGameOver(), 1000);
