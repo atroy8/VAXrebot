@@ -293,7 +293,7 @@ describe('initGameState', () => {
         expect(state.day).toBe(1);
         expect(state.paused).toBe(false);
         expect(state.gameOver).toBe(false);
-        expect(state.dailyUsage).toEqual({ vaccinate: 0, quarantine: 0, severLink: 0 });
+        expect(state.dailyUsage).toEqual({ vaccinate: 0, quarantine: 0, severLink: 0, eureka: 0, blitz: 0, pay: 0 });
         expect(state.usedOnPeople).toBeInstanceOf(Set);
         expect(state.stats.initialPopulation).toBe(100);
         expect(state).not.toHaveProperty('log');

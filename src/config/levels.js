@@ -42,6 +42,7 @@ export const LEVELS = [
         scenarioId: 'care',
         difficultyId: 'easy',
         blurb: 'A nursing home reports respiratory symptoms. Protect the vulnerable.',
+        target: 800, // per-capita score target: 1 star >= 800, 2 stars >= 1040, 3 stars >= 1280
     },
     {
         id: 'r1-elementary',
@@ -50,6 +51,7 @@ export const LEVELS = [
         scenarioId: 'school',
         difficultyId: 'easy',
         blurb: 'Flu-like illness is moving through classrooms. Keep the school safe.',
+        target: 800, // per-capita score target: 1 star >= 800, 2 stars >= 1040, 3 stars >= 1280
     },
     {
         id: 'r1-old-town',
@@ -58,6 +60,7 @@ export const LEVELS = [
         scenarioId: 'urban',
         difficultyId: 'medium',
         blurb: 'A tight-knit neighborhood with low vaccination rates needs you.',
+        target: 800, // per-capita score target: 1 star >= 800, 2 stars >= 1040, 3 stars >= 1280
     },
     // Region 2: National Response
     {
@@ -67,6 +70,7 @@ export const LEVELS = [
         scenarioId: 'festival',
         difficultyId: 'medium',
         blurb: 'Festival flu is surfacing among attendees. Stop a multi-state outbreak.',
+        target: 800, // per-capita score target: 1 star >= 800, 2 stars >= 1040, 3 stars >= 1280
     },
     {
         id: 'r2-high-school',
@@ -75,6 +79,7 @@ export const LEVELS = [
         scenarioId: 'school',
         difficultyId: 'medium',
         blurb: 'A large high school is a tinderbox. Balance safety and staying open.',
+        target: 800, // per-capita score target: 1 star >= 800, 2 stars >= 1040, 3 stars >= 1280
     },
     {
         id: 'r2-airport',
@@ -83,6 +88,7 @@ export const LEVELS = [
         scenarioId: 'global',
         difficultyId: 'medium',
         blurb: 'Cases among travelers. You are the first line of defense.',
+        target: 800, // per-capita score target: 1 star >= 800, 2 stars >= 1040, 3 stars >= 1280
     },
     // Region 3: Global Frontline
     {
@@ -92,6 +98,7 @@ export const LEVELS = [
         scenarioId: 'urban',
         difficultyId: 'hard',
         blurb: 'A dense metro district. High fatality, rapid spread.',
+        target: 800, // per-capita score target: 1 star >= 800, 2 stars >= 1040, 3 stars >= 1280
     },
     {
         id: 'r3-harbor',
@@ -100,6 +107,7 @@ export const LEVELS = [
         scenarioId: 'festival',
         difficultyId: 'hard',
         blurb: 'A mega-festival seeding outbreaks worldwide. Your hardest test yet.',
+        target: 800, // per-capita score target: 1 star >= 800, 2 stars >= 1040, 3 stars >= 1280
     },
     {
         id: 'r3-hub',
@@ -108,6 +116,7 @@ export const LEVELS = [
         scenarioId: 'global',
         difficultyId: 'hard',
         blurb: 'The pandemic frontline. Everything you have learned, all at once.',
+        target: 800, // per-capita score target: 1 star >= 800, 2 stars >= 1040, 3 stars >= 1280
     },
 ];
 

@@ -12,6 +12,8 @@ import {
     livesSavedForRun,
     recordCompletion,
 } from './progress.js';
+import { isPowerUp, usePowerUp, getCharges } from './economy.js';
+import { mountShop, renderShop } from './ui/shop.js';
 import { generateNetwork } from './sim/network.js';
 import { initGameState } from './sim/state.js';
 import {
@@ -115,8 +117,15 @@ export class EpidemicSimulator {
         });
         document.getElementById('tools-list').addEventListener('click', (e) => {
             const toolItem = e.target.closest('.tool-item');
-            if (toolItem && !toolItem.classList.contains('disabled')) {
-                this.selectTool(toolItem.dataset.tool);
+            if (!toolItem || toolItem.classList.contains('disabled')) return;
+            const toolId = toolItem.dataset.tool;
+            // Power-ups are instant consumables: route through the economy
+            // module, which spends one charge and applies the effect through
+            // the game's tool system. Everything else selects as before.
+            if (isPowerUp(toolId)) {
+                this.usePowerUpFlow(toolId);
+            } else {
+                this.selectTool(toolId);
             }
         });
         document.getElementById('play-again').addEventListener('click', () => this.startGame());
@@ -340,7 +349,9 @@ export class EpidemicSimulator {
         const stats = this.gameState.stats;
         // Progression: record stars, funding, and lives saved, then persist.
         // recordCompletion only banks rewards on a 'contained' win.
-        const stars = calculateStars(outcome, stats);
+        // Points-to-stars scoring needs the run length and the level target.
+        stats.daysUsed = this.gameState.day;
+        const stars = calculateStars(outcome, stats, this.currentLevel);
         const fundingEarned = fundingAward(stars);
         const livesSaved = livesSavedForRun(outcome, stats);
         if (this.currentLevel) {
@@ -365,6 +376,50 @@ export class EpidemicSimulator {
         });
     }
 
+    // Power-up flow: hand the economy module the gameApi it needs, spend
+    // one charge, and sync the persisted save back onto this.save.
+    usePowerUpFlow(powerUpId) {
+        const gameApi = {
+            network: this.network,
+            gameState: this.gameState,
+            log: (day, message, important) => addLogEntry(day, message, important),
+            notify: (message, type) => showNotification(message, type),
+            refreshUI: () => this.updateUI(),
+            updateView: () => this.view.update(this.network.nodes, this.network.links),
+            checkGameOver: () => this.checkGameOver(),
+            playSound: (freq, dur, type) => this.audio.playSound(freq, dur, type),
+        };
+        const result = usePowerUp(powerUpId, gameApi);
+        if (result.save) this.save = result.save;
+        this.updateUI();
+    }
+
+    // Power-ups show charge counts (not daily limits) in the tool list and
+    // are disabled while no charges remain.
+    renderPowerUpCharges() {
+        const charges = getCharges();
+        for (const [id, count] of Object.entries(charges)) {
+            const item = document.querySelector(`#tools-list .tool-item[data-tool="${id}"]`);
+            if (!item) continue;
+            item.classList.toggle('disabled', count < 1);
+            const usage = item.querySelector('.tool-usage');
+            if (usage) usage.textContent = `⚡${count}`;
+        }
+    }
+
+    // Power-up shop lives below the tool list on the game screen.
+    refreshShop() {
+        if (!this.shopEl || !document.getElementById('powerup-shop')) {
+            this.shopEl = mountShop();
+        }
+        renderShop(this.shopEl, {
+            onPurchase: ({ save }) => {
+                if (save) this.save = save;
+                this.updateUI();
+            },
+        });
+    }
+
     updateUI() {
         const difficulty = this.difficulties[this.selectedDifficulty];
         renderHeader({
@@ -378,6 +433,8 @@ export class EpidemicSimulator {
             paused: this.gameState.paused,
         });
         renderTools(this.tools, difficulty, this.gameState.day, this.gameState.dailyUsage);
+        this.renderPowerUpCharges();
+        this.refreshShop();
         // Real pause: the Next Day button is disabled while paused (nextDay()
         // also early-returns via canAdvanceDay as a second layer).
         const nextDayBtn = document.getElementById('next-day');

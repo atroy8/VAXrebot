@@ -6,23 +6,29 @@
 // On web we use localStorage; when it is unavailable (private mode, tests)
 // we fall back to an in-memory backend so the game never crashes.
 //
-// Save schema (version 1):
+// Save schema (version 2):
 // {
-//   version: 1,
-//   funding: number,          // grant funding balance (spends on consumables later)
+//   version: 2,
+//   funding: number,          // grant funding balance (spends on power-up charges)
 //   livesSaved: number,       // cumulative lives saved across wins
 //   levels: {
 //     [levelId]: { stars: 0-3, completed: boolean, bestDeaths: number }
-//   }
+//   },
+//   powerups: { eureka: number, blitz: number, pay: number },  // charge inventory
+//   openedChests: string[]    // supply chest ids already claimed (each opens once)
 // }
 // Unlock state is DERIVED from completions + gating rules (src/progress.js),
 // never stored, so the rules stay the single source of truth.
 //
-// Corrupt or version-mismatched saves reset to a fresh save rather than
-// crashing. resetSave() is exposed for a future settings-screen button.
+// Migration: version 1 saves (no powerups/openedChests) upgrade in place to
+// version 2 with empty inventories. Corrupt or version-mismatched saves
+// reset to a fresh save rather than crashing. resetSave() is exposed for a
+// future settings-screen button.
 
 export const SAVE_KEY = 'vaxrebot-save-v1';
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
+
+const DEFAULT_CHARGES = { eureka: 0, blitz: 0, pay: 0 };
 
 export function createMemoryBackend() {
     const store = new Map();
@@ -61,6 +67,8 @@ export function freshSave() {
         funding: 0,
         livesSaved: 0,
         levels: {},
+        powerups: { ...DEFAULT_CHARGES },
+        openedChests: [],
     };
 }
 
@@ -68,12 +76,24 @@ function isValidSave(data) {
     return (
         data &&
         typeof data === 'object' &&
-        data.version === SAVE_VERSION &&
+        (data.version === 1 || data.version === SAVE_VERSION) &&
         typeof data.funding === 'number' &&
         typeof data.livesSaved === 'number' &&
         data.levels &&
         typeof data.levels === 'object'
     );
+}
+
+// Normalize a loaded save to the current schema: v1 saves gain empty
+// charge inventory and chest lists; any save missing the new fields gets
+// defaults filled in so readers never have to null-check.
+function normalizeSave(data) {
+    return {
+        ...data,
+        version: SAVE_VERSION,
+        powerups: { ...DEFAULT_CHARGES, ...(data.powerups || {}) },
+        openedChests: Array.isArray(data.openedChests) ? data.openedChests : [],
+    };
 }
 
 export function loadSave(storage) {
@@ -82,7 +102,7 @@ export function loadSave(storage) {
         if (!raw) return freshSave();
         const data = JSON.parse(raw);
         if (!isValidSave(data)) return freshSave();
-        return data;
+        return normalizeSave(data);
     } catch {
         // Corrupt JSON or unreadable storage: start fresh, never crash.
         return freshSave();

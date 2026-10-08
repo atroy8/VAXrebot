@@ -1,4 +1,4 @@
-// Progression phase 1 tests: save system + unlock gating + stars/funding.
+// Progression tests: save system + unlock gating + points-to-stars scoring.
 // Pure logic and the memory storage backend; no DOM, node environment.
 import { describe, it, expect } from 'vitest';
 import {
@@ -20,6 +20,8 @@ import {
     levelRecord,
     isLevelUnlocked,
     lockReason,
+    calculatePoints,
+    calculateScore,
     calculateStars,
     fundingAward,
     livesSavedForRun,
@@ -27,7 +29,9 @@ import {
     regionProgress,
 } from '../src/progress.js';
 
-// A contained win on level 0 with stats shaped like the real game stats.
+// A contained win on level 0 (care scenario, duration 18, target 800) with
+// stats shaped like the real game stats. No daysUsed: defaults to par, so
+// no speed bonus unless the test stamps one.
 function winStats(overrides = {}) {
     return {
         initialPopulation: 100,
@@ -39,20 +43,47 @@ function winStats(overrides = {}) {
     };
 }
 
+const LEVEL_0 = 'r1-care-home';
+
 describe('save system', () => {
     it('round-trips a save through the memory backend', () => {
         const storage = createMemoryBackend();
         const save = freshSave();
         save.funding = 125;
         save.livesSaved = 340;
+        save.powerups.blitz = 2;
+        save.openedChests.push('chest-a');
         save.levels['r1-care-home'] = { stars: 2, completed: true, bestDeaths: 3 };
         expect(writeSave(storage, save)).toBe(true);
         expect(loadSave(storage)).toEqual(save);
     });
 
     it('returns a fresh save when nothing is stored', () => {
-        const loaded = loadSave(createMemoryBackend());
-        expect(loaded).toEqual({ version: SAVE_VERSION, funding: 0, livesSaved: 0, levels: {} });
+        expect(loadSave(createMemoryBackend())).toEqual(freshSave());
+    });
+
+    it('fresh saves carry empty charge inventory and chest lists', () => {
+        expect(freshSave().powerups).toEqual({ eureka: 0, blitz: 0, pay: 0 });
+        expect(freshSave().openedChests).toEqual([]);
+    });
+
+    it('migrates a version 1 save in place, keeping progress', () => {
+        const storage = createMemoryBackend();
+        storage.setItem(
+            'vaxrebot-save-v1',
+            JSON.stringify({
+                version: 1,
+                funding: 75,
+                livesSaved: 40,
+                levels: { 'r1-care-home': { stars: 1, completed: true, bestDeaths: 8 } },
+            })
+        );
+        const loaded = loadSave(storage);
+        expect(loaded.version).toBe(SAVE_VERSION);
+        expect(loaded.funding).toBe(75);
+        expect(loaded.levels['r1-care-home'].stars).toBe(1);
+        expect(loaded.powerups).toEqual({ eureka: 0, blitz: 0, pay: 0 });
+        expect(loaded.openedChests).toEqual([]);
     });
 
     it('resets corrupt JSON to a fresh save instead of crashing', () => {
@@ -111,10 +142,18 @@ describe('unlock gating', () => {
 
     it('region 2 unlocks at 6 stars', () => {
         let save = freshSave();
+        // Solid wins: 2 stars each = 6 stars total on every hometown level
+        // (daysUsed 12 keeps the speed bonus under the 3-star line on all
+        // three scenario durations).
         for (const level of LEVELS.filter((l) => l.regionId === 'hometown')) {
-            save = recordCompletion(save, level.id, 'contained', winStats({ totalDead: 1 }));
+            save = recordCompletion(
+                save,
+                level.id,
+                'contained',
+                winStats({ totalDead: 1, totalRecovered: 40, daysUsed: 12 })
+            );
         }
-        expect(totalStars(save)).toBe(9);
+        expect(totalStars(save)).toBe(6);
         const region2First = LEVELS.find((l) => l.regionId === 'national');
         expect(isLevelUnlocked(save, LEVELS, REGIONS, region2First.id)).toBe(true);
     });
@@ -129,24 +168,69 @@ describe('unlock gating', () => {
     });
 });
 
-describe('star calculation', () => {
-    it('awards 1 star for a contained win regardless of deaths', () => {
-        expect(calculateStars('contained', winStats({ totalDead: 40 }))).toBe(1);
+describe('points formula', () => {
+    it('scores 10 per survivor plus 2 per recovered', () => {
+        // pop 100, 5 dead, 10 recovered: 950 + 20 = 970
+        expect(calculatePoints('contained', winStats({ totalDead: 5 }), LEVEL_0)).toBe(970);
     });
 
-    it('awards 2 stars at or under 5% deaths', () => {
-        expect(calculateStars('contained', winStats({ totalDead: 5 }))).toBe(2);
-        expect(calculateStars('contained', winStats({ totalDead: 6 }))).toBe(1);
+    it('adds a speed bonus for finishing under par days', () => {
+        // care par is 18 days; day 8 finish: 20 * 10 = 200 bonus
+        const fast = calculatePoints('contained', winStats({ daysUsed: 8 }), LEVEL_0);
+        const slow = calculatePoints('contained', winStats({ daysUsed: 18 }), LEVEL_0);
+        expect(fast - slow).toBe(200);
     });
 
-    it('awards 3 stars at or under 2% deaths', () => {
-        expect(calculateStars('contained', winStats({ totalDead: 2 }))).toBe(3);
-        expect(calculateStars('contained', winStats({ totalDead: 3 }))).toBe(2);
+    it('penalizes power-up use', () => {
+        const clean = calculatePoints('contained', winStats(), LEVEL_0);
+        const boosted = calculatePoints('contained', winStats({ powerUpsUsed: 2 }), LEVEL_0);
+        expect(clean - boosted).toBe(40);
+    });
+
+    it('scores 0 for losses and timeouts', () => {
+        expect(calculatePoints('overwhelmed', winStats(), LEVEL_0)).toBe(0);
+        expect(calculatePoints('timeout', winStats(), LEVEL_0)).toBe(0);
+    });
+
+    it('normalizes per capita so population rolls do not inflate stars', () => {
+        const small = calculateScore('contained', winStats({ initialPopulation: 50, totalDead: 0, totalRecovered: 5 }), LEVEL_0);
+        const big = calculateScore('contained', winStats({ initialPopulation: 200, totalDead: 0, totalRecovered: 20 }), LEVEL_0);
+        expect(small).toBeCloseTo(big, 5);
+    });
+});
+
+describe('points-to-stars', () => {
+    // LEVEL_0 target is 800: 1 star >= 800, 2 stars >= 1040, 3 stars >= 1280.
+    it('awards 1 star for beating the target', () => {
+        // 5 dead, 10 recovered: 970 points -> score 970
+        expect(calculateStars('contained', winStats({ totalDead: 5 }), LEVEL_0)).toBe(1);
+    });
+
+    it('awards 2 stars at 130% of target', () => {
+        // 2 dead, 30 recovered, day 10 of 18: 980 + 60 + 160 = 1200
+        expect(calculateStars('contained', winStats({ totalDead: 2, totalRecovered: 30, daysUsed: 10 }), LEVEL_0)).toBe(2);
+    });
+
+    it('awards 3 stars at 160% of target', () => {
+        // 0 dead, 40 recovered, day 8 of 18: 1000 + 80 + 200 = 1280
+        expect(calculateStars('contained', winStats({ totalDead: 0, totalRecovered: 40, daysUsed: 8 }), LEVEL_0)).toBe(3);
+    });
+
+    it('awards 0 stars for a messy win below target', () => {
+        // 40 dead: 600 + 20 = 620, still counts as completed but banks nothing
+        expect(calculateStars('contained', winStats({ totalDead: 40 }), LEVEL_0)).toBe(0);
     });
 
     it('awards 0 stars for overwhelmed and timeout', () => {
-        expect(calculateStars('overwhelmed', winStats())).toBe(0);
-        expect(calculateStars('timeout', winStats())).toBe(0);
+        expect(calculateStars('overwhelmed', winStats(), LEVEL_0)).toBe(0);
+        expect(calculateStars('timeout', winStats(), LEVEL_0)).toBe(0);
+    });
+
+    it('accepts a level object or id', () => {
+        const stats = winStats({ totalDead: 5 });
+        expect(calculateStars('contained', stats, levelById(LEVEL_0))).toBe(
+            calculateStars('contained', stats, LEVEL_0)
+        );
     });
 });
 
@@ -175,21 +259,36 @@ describe('lives saved', () => {
 
 describe('recordCompletion', () => {
     it('banks stars, funding, and lives on a win', () => {
+        // 2 dead, 10 recovered: 980 + 20 = 1000 -> 1 star
         const save = recordCompletion(freshSave(), 'r1-care-home', 'contained', winStats({ totalDead: 2 }));
-        expect(save.levels['r1-care-home']).toEqual({ stars: 3, completed: true, bestDeaths: 2 });
-        expect(save.funding).toBe(125);
+        expect(save.levels['r1-care-home']).toEqual({ stars: 1, completed: true, bestDeaths: 2 });
+        expect(save.funding).toBe(75);
         expect(save.livesSaved).toBe(98);
     });
 
     it('keeps the best star count on replay', () => {
-        let save = recordCompletion(freshSave(), 'r1-care-home', 'contained', winStats({ totalDead: 30 }));
+        let save = recordCompletion(freshSave(), 'r1-care-home', 'contained', winStats({ totalDead: 10 }));
         expect(save.levels['r1-care-home'].stars).toBe(1);
-        save = recordCompletion(save, 'r1-care-home', 'contained', winStats({ totalDead: 1 }));
-        expect(save.levels['r1-care-home'].stars).toBe(3);
+        save = recordCompletion(
+            save,
+            'r1-care-home',
+            'contained',
+            winStats({ totalDead: 1, totalRecovered: 40, daysUsed: 8 })
+        );
+        expect(save.levels['r1-care-home'].stars).toBe(2);
         expect(save.levels['r1-care-home'].bestDeaths).toBe(1);
         // Funding and lives accumulate across both runs.
-        expect(save.funding).toBe(75 + 125);
-        expect(save.livesSaved).toBe(70 + 99);
+        expect(save.funding).toBe(75 + 100);
+        expect(save.livesSaved).toBe(90 + 99);
+    });
+
+    it('passes power-up inventory and opened chests through untouched', () => {
+        const before = freshSave();
+        before.powerups.eureka = 1;
+        before.openedChests.push('chest-a');
+        const after = recordCompletion(before, 'r1-care-home', 'contained', winStats());
+        expect(after.powerups.eureka).toBe(1);
+        expect(after.openedChests).toEqual(['chest-a']);
     });
 
     it('records nothing on a loss', () => {
@@ -216,10 +315,17 @@ describe('level list sanity', () => {
         }
     });
 
+    it('every level has a scoring target', () => {
+        for (const level of LEVELS) {
+            expect(typeof level.target).toBe('number');
+            expect(level.target).toBeGreaterThan(0);
+        }
+    });
+
     it('regionProgress reports completion and stars', () => {
         let save = freshSave();
         save = recordCompletion(save, 'r1-care-home', 'contained', winStats({ totalDead: 2 }));
         const p = regionProgress(save, LEVELS, 'hometown');
-        expect(p).toEqual({ total: 3, completed: 1, stars: 3, maxStars: 9 });
+        expect(p).toEqual({ total: 3, completed: 1, stars: 1, maxStars: 9 });
     });
 });
