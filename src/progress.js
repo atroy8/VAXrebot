@@ -1,15 +1,50 @@
 // Progression rules: pure functions over (save, levels, stats).
 // No DOM, no storage here; game.js wires these to src/save.js and the UI.
 // All numbers are documented below so balance stays legible.
+//
+// UNIFIED POINTS-TO-STARS SCORING
+// ------------------------------
+// Every contained win earns points from one formula, then stars are read
+// off the level's per-level `target` (src/config/levels.js). Losses,
+// timeouts, and anything else score 0 points and 0 stars.
+//
+// Points formula (on a 'contained' win):
+//   points = 10 * survivors
+//          +  2 * totalRecovered
+//          + 20 * max(0, parDays - daysUsed)
+//          - 20 * powerUpsUsed
+// where survivors = initialPopulation - totalDead, parDays is the level's
+// scenario duration, daysUsed is the day the run ended on, and
+// powerUpsUsed counts power-up charges spent that run (power-ups are easy
+// mode, so each one costs a little glory).
+//
+// Scores are normalized per capita so a lucky high-population roll does
+// not inflate stars: score = points / initialPopulation * 100.
+// Star thresholds against the level's target:
+//   1 star: score >= target
+//   2 stars: score >= 130% of target
+//   3 stars: score >= 160% of target
+// A messy win below target still counts as completed (unlocking the next
+// level) but banks 0 stars; region star gates then require replays for a
+// cleaner run, Candy Crush style.
+//
+// Worked example (target 800, pop 100, par 18, 0 power-ups):
+//   clean fast win (0 dead, 40 recovered, day 8): 1000+80+200 = 1280 -> 3 stars
+//   decent win (3 dead, 30 recovered, day 12):     970+60+120 = 1150 -> 2 stars
+//   rough win (15 dead, 20 recovered, day 17):     850+40+20  =  910 -> 1 star
+//   disaster win (30 dead):                        700+...     < 800 -> 0 stars
 
-// Star rules (deaths as a fraction of the level's initial population):
-// - 1 star: contained the outbreak (a win), regardless of deaths.
-// - 2 stars: contained with deaths at or under 5% of the population.
-// - 3 stars: contained with deaths at or under 2% of the population.
-// Losses, timeouts, and anything else earn 0 stars.
-export const STAR_RULES = {
-    twoStarDeathFraction: 0.05,
-    threeStarDeathFraction: 0.02,
+import { levelById } from './config/levels.js';
+import { scenarios } from './config/scenarios.js';
+
+export const SCORING = {
+    perSurvivor: 10,
+    perRecovered: 2,
+    perDayUnderPar: 20,
+    perPowerUp: 20,
+    perCapitaBase: 100,
+    twoStarRatio: 1.3,
+    threeStarRatio: 1.6,
 };
 
 // Funding (grant) awards per completed level:
@@ -55,14 +90,54 @@ export function lockReason(save, levels, regions, levelId) {
     return null;
 }
 
-export function calculateStars(outcome, stats) {
+function parDaysFor(level) {
+    const scenario = level && scenarios[level.scenarioId];
+    return scenario ? scenario.duration : 0;
+}
+
+// Raw points for one run. `stats` is the game-state stats object plus two
+// run-scoped fields the game stamps in: daysUsed (day the run ended) and
+// powerUpsUsed (charges spent). Missing fields default to no speed bonus
+// and no penalty so bare stats shapes still score.
+export function calculatePoints(outcome, stats, level) {
     if (outcome !== 'contained') return 0;
+    const resolved = typeof level === 'string' ? levelById(level) : level;
     const pop = stats.initialPopulation || 0;
-    if (pop <= 0) return 1;
-    const deathFraction = stats.totalDead / pop;
-    if (deathFraction <= STAR_RULES.threeStarDeathFraction) return 3;
-    if (deathFraction <= STAR_RULES.twoStarDeathFraction) return 2;
-    return 1;
+    if (pop <= 0) return 0;
+    const survivors = Math.max(0, pop - (stats.totalDead || 0));
+    const recovered = stats.totalRecovered || 0;
+    const parDays = parDaysFor(resolved);
+    const daysUsed = stats.daysUsed == null ? parDays : stats.daysUsed;
+    const speedBonus = SCORING.perDayUnderPar * Math.max(0, parDays - daysUsed);
+    const powerUpPenalty = SCORING.perPowerUp * (stats.powerUpsUsed || 0);
+    return (
+        SCORING.perSurvivor * survivors +
+        SCORING.perRecovered * recovered +
+        speedBonus -
+        powerUpPenalty
+    );
+}
+
+// Per-capita score (0-~1500 scale) for one run.
+export function calculateScore(outcome, stats, level) {
+    const pop = stats.initialPopulation || 0;
+    if (pop <= 0) return 0;
+    return (calculatePoints(outcome, stats, level) / pop) * SCORING.perCapitaBase;
+}
+
+// Stars from score vs the level's target. `level` may be a level object or
+// a level id (resolved via LEVELS). A contained win below target still
+// counts as completed but earns 0 stars.
+export function calculateStars(outcome, stats, level) {
+    if (outcome !== 'contained') return 0;
+    const resolved = typeof level === 'string' ? levelById(level) : level;
+    const target = (resolved && resolved.target) || 0;
+    if (target <= 0) return 1; // no target configured: any win gets 1 star
+    const score = calculateScore(outcome, stats, resolved);
+    if (score >= target * SCORING.threeStarRatio) return 3;
+    if (score >= target * SCORING.twoStarRatio) return 2;
+    if (score >= target) return 1;
+    return 0;
 }
 
 export function fundingAward(stars) {
@@ -78,15 +153,19 @@ export function livesSavedForRun(outcome, stats) {
 }
 
 // Record a finished level. Pure: returns a NEW save object, keeping the best
-// star count per level. Funding and lives saved accumulate.
+// star count per level. Funding and lives saved accumulate. The new economy
+// fields (powerups, openedChests) pass through untouched.
 export function recordCompletion(save, levelId, outcome, stats) {
-    const stars = calculateStars(outcome, stats);
+    const level = levelById(levelId);
+    const stars = calculateStars(outcome, stats, level);
     const prev = levelRecord(save, levelId);
     const next = {
         version: save.version,
         funding: save.funding + fundingAward(stars),
         livesSaved: save.livesSaved + livesSavedForRun(outcome, stats),
         levels: { ...save.levels },
+        powerups: { ...(save.powerups || {}) },
+        openedChests: Array.isArray(save.openedChests) ? [...save.openedChests] : [],
     };
     if (outcome === 'contained') {
         const deaths = stats.totalDead;
