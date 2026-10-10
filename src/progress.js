@@ -90,7 +90,10 @@ export function lockReason(save, levels, regions, levelId) {
     return null;
 }
 
-function parDaysFor(level) {
+// Par days: a level's tuned parDays when set (src/config/levels.js),
+// otherwise its scenario duration.
+export function parDaysFor(level) {
+    if (level && level.tuning && level.tuning.parDays != null) return level.tuning.parDays;
     const scenario = level && scenarios[level.scenarioId];
     return scenario ? scenario.duration : 0;
 }

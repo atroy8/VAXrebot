@@ -2,8 +2,9 @@
 // action log, toast notifications, and the game-over stats screen.
 // No game logic here; callers pass plain data.
 import { spriteFor } from '../sprites.js';
+import { toolDailyLimit } from '../sim/engine.js';
 
-export function renderHeader({ scenarioName, difficultyName, difficultyId, day, infected, protected: protectedCount, population, paused = false }) {
+export function renderHeader({ scenarioName, difficultyName, difficultyId, day, infected, protected: protectedCount, population, paused = false, cases = null, caseCap = Infinity, r = null, actionsLeft = null }) {
     document.getElementById('game-scenario-name').textContent = scenarioName;
     const badge = `<span class="difficulty-badge ${difficultyId}">${difficultyName}</span>`;
     document.getElementById('current-difficulty-badge').innerHTML = badge;
@@ -13,13 +14,32 @@ export function renderHeader({ scenarioName, difficultyName, difficultyId, day, 
     document.getElementById('infected-count').textContent = infected;
     document.getElementById('protected-count').textContent = protectedCount;
     document.getElementById('population-count').textContent = population;
+
+    // Case cap meter: total cases so far against the cap that ends the run.
+    const capEl = document.getElementById('case-meter');
+    if (capEl && cases != null) {
+        const finite = Number.isFinite(caseCap);
+        capEl.querySelector('.case-meter-value').textContent = finite ? `${cases}/${caseCap}` : String(cases);
+        const share = finite ? Math.min(1, cases / caseCap) : 0;
+        capEl.style.setProperty('--fill', String(share));
+        capEl.classList.toggle('warn', share >= 0.7);
+    }
+    // Effective R: above 1 the outbreak grows, below 1 it shrinks.
+    const rEl = document.getElementById('r-value');
+    if (rEl) {
+        rEl.textContent = r == null ? '–' : r >= 5 ? '5+' : r.toFixed(1);
+        rEl.classList.toggle('r-up', r != null && r > 1);
+        rEl.classList.toggle('r-down', r != null && r <= 1);
+    }
+    const aEl = document.getElementById('actions-left');
+    if (aEl && actionsLeft != null) aEl.textContent = actionsLeft;
 }
 
 export function renderTools(tools, difficulty, day, dailyUsage) {
     const toolsList = document.getElementById('tools-list');
     toolsList.innerHTML = Object.entries(tools)
         .map(([id, tool]) => {
-            const limit = Math.floor(tool.baseDailyLimit * difficulty.toolLimitMultiplier);
+            const limit = toolDailyLimit(tool, difficulty, id);
             const available = day >= tool.availableDay;
             const disabled = !available || dailyUsage[id] >= limit;
             return `

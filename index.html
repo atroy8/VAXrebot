@@ -97,11 +97,25 @@
                             <span class="stat-label">Population</span>
                             <span class="stat-value" id="population-count">0</span>
                         </div>
+                        <div class="stat case-meter" id="case-meter" title="Total cases so far. Reach the cap and the outbreak is out of control.">
+                            <span class="stat-label">Cases / cap</span>
+                            <span class="stat-value case-meter-value">0</span>
+                            <span class="case-meter-bar" aria-hidden="true"></span>
+                        </div>
+                        <div class="stat" title="Effective R: new cases each sick person causes. Above 1 it grows, below 1 it shrinks.">
+                            <span class="stat-label">R</span>
+                            <span class="stat-value" id="r-value">–</span>
+                        </div>
+                        <div class="stat">
+                            <span class="stat-label">Actions left</span>
+                            <span class="stat-value" id="actions-left">0</span>
+                        </div>
                     </div>
                     <div class="game-controls">
                         <button class="btn btn--secondary btn--sm" id="how-to-play">How to play</button>
                         <button class="btn btn--secondary btn--sm" id="pause-game">⏸️ Pause</button>
-                        <button class="btn btn--primary" id="next-day">Next Day ⏭️</button>
+                        <button class="btn btn--secondary btn--sm" id="hold-advance" hidden>Hold</button>
+                        <button class="btn btn--primary next-day-btn" id="next-day">Next day</button>
                     </div>
                 </div>
 
