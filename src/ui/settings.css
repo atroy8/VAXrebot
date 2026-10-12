@@ -1,0 +1,91 @@
+/* Settings gear, sheet and the sample ad overlay. */
+.settings-fab {
+    position: fixed;
+    top: calc(env(safe-area-inset-top, 0px) + 12px);
+    right: calc(env(safe-area-inset-right, 0px) + 12px);
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(255, 255, 255, 0.92);
+    color: #1f2a44;
+    display: grid;
+    place-items: center;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+    z-index: 900;
+    cursor: pointer;
+}
+.settings-fab:active { transform: scale(0.94); }
+/* Only on the home and level screens: never during a level or results. */
+body:has(#game-screen.active) .settings-fab,
+body:has(#game-over-screen.active) .settings-fab,
+body:has(#briefing-screen.active) .settings-fab,
+body:has(.onboarding-overlay) .settings-fab { display: none; }
+
+.settings-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(10, 16, 32, 0.55);
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    z-index: 1000;
+}
+.settings-sheet {
+    width: 100%;
+    max-width: 480px;
+    max-height: 88vh;
+    overflow-y: auto;
+    background: #fff;
+    color: #1f2a44;
+    border-radius: 20px 20px 0 0;
+    padding: 16px 16px calc(env(safe-area-inset-bottom, 0px) + 20px);
+    box-sizing: border-box;
+    animation: settings-up 180ms ease-out;
+}
+@keyframes settings-up { from { transform: translateY(40px); opacity: 0; } to { transform: none; opacity: 1; } }
+.settings-head { display: flex; align-items: center; justify-content: space-between; }
+.settings-head h2 { margin: 0; font-size: 1.3rem; }
+.settings-x {
+    width: 44px; height: 44px; border: none; background: none;
+    font-size: 1.8rem; line-height: 1; color: #6c757d; cursor: pointer;
+}
+.settings-group { margin-top: 14px; }
+.settings-group h3 {
+    margin: 0 0 6px; font-size: 0.8rem; letter-spacing: 0.06em;
+    text-transform: uppercase; color: #6c757d;
+}
+.settings-note { margin: 0 0 8px; font-size: 0.9rem; color: #495057; }
+.settings-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    width: 100%; min-height: 48px; padding: 10px 14px; margin-bottom: 8px;
+    box-sizing: border-box; border: 1px solid #dee2e6; border-radius: 12px;
+    background: #f8f9fa; color: inherit; font: inherit; font-size: 1rem;
+    text-align: left; text-decoration: none; cursor: pointer;
+}
+.settings-switch input { width: 24px; height: 24px; flex: none; }
+.settings-danger { color: #b02a37; border-color: #f1aeb5; background: #fff5f5; }
+
+.ad-overlay {
+    position: fixed; inset: 0; z-index: 1100;
+    background: rgba(10, 16, 32, 0.8);
+    display: grid; place-items: center; padding: 16px;
+}
+.ad-card {
+    position: relative; width: 100%; max-width: 360px; box-sizing: border-box;
+    background: #fff; color: #1f2a44; border-radius: 18px; padding: 28px 20px 20px;
+    text-align: center;
+}
+.ad-tag {
+    position: absolute; top: 10px; left: 10px; font-size: 0.75rem; font-weight: 700;
+    padding: 2px 8px; border-radius: 6px; background: #ffc107; color: #1f2a44;
+}
+.ad-title { margin: 0 0 8px; font-size: 1.3rem; font-weight: 700; }
+.ad-copy { margin: 0 0 16px; color: #495057; }
+.ad-remove, .ad-close {
+    display: block; width: 100%; min-height: 48px; margin-top: 8px;
+    border-radius: 12px; font: inherit; font-size: 1rem; cursor: pointer;
+}
+.ad-remove { border: 1px solid #0d6efd; background: #fff; color: #0d6efd; }
+.ad-close { border: none; background: #0d6efd; color: #fff; }
+.ad-close:disabled { background: #9ec5fe; cursor: default; }
