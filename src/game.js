@@ -4,7 +4,10 @@ import { scenarios } from './config/scenarios.js';
 import { difficulties } from './config/difficulties.js';
 import { tools } from './config/tools.js';
 import { LEVELS, REGIONS, levelById } from './config/levels.js';
-import { createStorage, loadSave, writeSave } from './save.js';
+import { createStorage, loadSave, writeSave, resetSave } from './save.js';
+import { createMonetization } from './monetization/monetization.js';
+import { createWebAdProvider } from './monetization/ad-provider-web.js';
+import { mountSettings } from './ui/settings.js';
 import {
     isLevelUnlocked,
     calculateStars,
@@ -71,6 +74,14 @@ export class EpidemicSimulator {
         this.storage = createStorage();
         this.save = loadSave(this.storage);
 
+        // Monetization: Remove Ads entitlement plus between-level ad pacing.
+        // The web build uses a labeled sample ad; the App Store build swaps
+        // in AdMob behind the same provider contract.
+        this.monetization = createMonetization({
+            storage: this.storage,
+            provider: createWebAdProvider({ onRemoveAds: () => this.settings?.open() }),
+        });
+
         this.audio = new AudioEngine(() => this.currentScreen);
         this.view = new NetworkView();
         this.activeDifficulty = null; // level difficulty with tuning applied
@@ -91,6 +102,14 @@ export class EpidemicSimulator {
         this.refreshLevelSelect();
         this.bindEvents();
         this.setupIntro();
+        this.settings = mountSettings({
+            monetization: this.monetization,
+            notify: (msg) => showNotification(msg, 'info'),
+            onResetProgress: () => {
+                this.save = resetSave(this.storage);
+                window.location.reload();
+            },
+        });
         renderLegend();
         this.showScreen('welcome');
     }
@@ -144,8 +163,11 @@ export class EpidemicSimulator {
                 this.selectTool(toolId);
             }
         });
-        document.getElementById('play-again').addEventListener('click', () => this.startGame());
-        document.getElementById('try-different-scenario').addEventListener('click', () => this.showScreen('menu'));
+        // Leaving the results screen is the only place an ad may show.
+        document.getElementById('play-again').addEventListener('click', () => this.leaveResults(() => this.startGame()));
+        document
+            .getElementById('try-different-scenario')
+            .addEventListener('click', () => this.leaveResults(() => this.showScreen('menu')));
 
         // Volume control
         document.getElementById('master-volume').addEventListener('input', (e) => {
@@ -401,6 +423,19 @@ export class EpidemicSimulator {
         setTimeout(() => this.showGameOver(), 1000);
     }
 
+    // Between levels: maybe show an interstitial (free version only, at most
+    // one per two levels), then continue. Never blocks if the ad fails.
+    async leaveResults(next) {
+        if (this.leavingResults) return;
+        this.leavingResults = true;
+        try {
+            await this.monetization.maybeShowInterstitial({ inLevel: false });
+        } finally {
+            this.leavingResults = false;
+            next();
+        }
+    }
+
     showGameOver() {
         const outcome = this.gameState.outcome;
         const stats = this.gameState.stats;
@@ -415,6 +450,7 @@ export class EpidemicSimulator {
             this.save = recordCompletion(this.save, this.currentLevel.id, outcome, stats);
             writeSave(this.storage, this.save);
         }
+        this.monetization.onLevelFinished();
         renderGameOver({
             outcome,
             stats,
