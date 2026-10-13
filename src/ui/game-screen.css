@@ -1,0 +1,298 @@
+/* Game screen rebuild (roadmap item 7, nightly 2026-10-13).
+   Phone first: compact HUD on top, network fills the middle, tool tray and
+   Next day at the bottom within thumb reach. No text log, no emoji.
+   Loaded after styles.css, so these rules win over the older layout. */
+
+#game-screen.screen { padding: 0; overflow: hidden; }
+
+.game-layout {
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    grid-template-rows: auto 1fr auto;
+    grid-template-areas:
+        "header header"
+        "tools network"
+        "footer footer";
+    height: 100vh;
+    height: 100dvh;
+    width: 100%;
+    gap: 12px;
+    padding: 12px;
+}
+
+/* ---- HUD ---- */
+.game-header {
+    grid-area: header;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    padding: 10px 12px;
+}
+.game-topbar { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.game-info { display: flex; align-items: baseline; gap: 8px; min-width: 0; flex: 1; }
+.game-info h4 {
+    margin: 0;
+    font-size: 1.05rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+}
+.game-icons { display: flex; gap: 6px; flex: none; }
+.icon-btn {
+    width: 44px;
+    height: 44px;
+    display: inline-grid;
+    place-items: center;
+    border: none;
+    border-radius: 50%;
+    background: var(--color-secondary, #eef2f7);
+    color: var(--color-text, #1f2937);
+    font-size: 1.4rem;
+    line-height: 1;
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+}
+.icon-btn:active { transform: scale(0.94); }
+#pause-game .icon-play { display: none; }
+#pause-game[aria-pressed="true"] .icon-play { display: block; }
+#pause-game[aria-pressed="true"] .icon-pause { display: none; }
+
+.game-stats {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 6px;
+    width: 100%;
+}
+.game-stats .stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+    padding: 4px 2px;
+    border-radius: 12px;
+    background: var(--color-secondary, #f1f4f9);
+}
+.game-stats .stat-label { font-size: 0.72rem; line-height: 1.1; white-space: nowrap; }
+.game-stats .stat-value { font-size: 1.2rem; line-height: 1.2; }
+.game-stats .case-meter-bar { width: 80%; }
+
+/* ---- Network ---- */
+.network-container { grid-area: network; min-height: 0; }
+.tool-hint,
+.day-banner {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 6;
+    max-width: calc(100% - 24px);
+    width: max-content;
+    padding: 8px 14px;
+    border-radius: 999px;
+    font-size: 0.9rem;
+    line-height: 1.25;
+    text-align: center;
+    pointer-events: none;
+}
+.tool-hint { bottom: 10px; background: rgba(10, 14, 26, 0.82); color: #fff; }
+.tool-hint[hidden], .day-banner[hidden] { display: none; }
+.day-banner {
+    top: 10px;
+    font-weight: 700;
+    background: #fff;
+    color: #1f2937;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+    animation: dayBannerIn 1.8s ease both;
+}
+.day-banner.bad { background: #ffe3e3; color: #a4161a; }
+.day-banner.good { background: #dcfce7; color: #166534; }
+@keyframes dayBannerIn {
+    0% { opacity: 0; transform: translate(-50%, -10px) scale(0.96); }
+    12% { opacity: 1; transform: translate(-50%, 0) scale(1); }
+    80% { opacity: 1; }
+    100% { opacity: 0; }
+}
+
+/* Legend: a small Key pill that expands on tap. */
+.network-legend { display: none; }
+.network-legend.open { display: flex; bottom: 0; }
+.legend-toggle {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    z-index: 7;
+    min-width: 44px;
+    height: 44px;
+    padding: 0 14px;
+    border: none;
+    border-radius: 999px;
+    background: rgba(10, 14, 26, 0.72);
+    color: #fff;
+    font: inherit;
+    font-size: 0.9rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+/* ---- Tool tray ---- */
+.tools-panel { grid-area: tools; gap: 10px; overflow: visible; }
+.tools-title { margin: 0; }
+.tools-list { display: flex; flex-direction: column; gap: 8px; }
+.tool-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    min-height: 52px;
+    padding: 8px 12px;
+    border: 2px solid var(--color-border);
+    border-radius: 14px;
+    background: var(--color-surface);
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+.tool-item:hover { transform: none; }
+.tool-item.selected {
+    border-color: var(--color-primary);
+    background: var(--color-secondary);
+    box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.25);
+}
+.tool-item.selected .tool-name::before { content: none; }
+.tool-item.disabled { opacity: 0.45; }
+.tool-item.empty { opacity: 0.7; border-style: dashed; }
+.tool-icon {
+    flex: none;
+    width: 30px;
+    height: 30px;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--tool-color, #64748b);
+    color: #fff;
+}
+.tool-icon svg { width: 18px; height: 18px; }
+.tool-text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.tool-name { font-weight: 700; font-size: 0.95rem; line-height: 1.15; }
+.tool-usage { font-size: 0.78rem; color: var(--color-text-secondary); white-space: nowrap; }
+.tool-item.shop-chip .tool-icon { background: #f0b400; }
+
+.day-controls { display: flex; gap: 8px; margin-top: auto; }
+.day-controls .btn { min-height: 52px; font-size: 1.05rem; }
+.day-controls .next-day-btn { flex: 1; }
+.hold-btn[hidden] { display: none; }
+
+/* ---- Footer and pause card ---- */
+.game-footer { grid-area: footer; gap: 12px; }
+.pause-title, .resume-btn { display: none; }
+#game-screen.is-paused .game-footer {
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 40;
+    width: min(320px, calc(100vw - 32px));
+    padding: 20px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+}
+#game-screen.is-paused::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: rgba(10, 14, 26, 0.45);
+    z-index: 30;
+}
+#game-screen.is-paused .pause-title { display: block; font-size: 1.4rem; font-weight: 700; }
+#game-screen.is-paused .resume-btn { display: block; width: 100%; min-height: 52px; }
+.volume-control { display: flex; align-items: center; gap: 10px; width: 100%; max-width: 280px; }
+.volume-label { font-size: 0.9rem; color: var(--color-text-secondary); }
+#music-toggle { min-height: 44px; }
+
+/* ---- Shop sheet ---- */
+.shop-sheet { position: fixed; inset: 0; z-index: 50; display: flex; align-items: flex-end; justify-content: center; }
+.shop-sheet[hidden] { display: none; }
+.shop-sheet-backdrop { position: absolute; inset: 0; background: rgba(10, 14, 26, 0.5); }
+.shop-sheet-panel {
+    position: relative;
+    width: min(480px, 100%);
+    max-height: 85dvh;
+    overflow-y: auto;
+    padding: 8px 12px calc(12px + env(safe-area-inset-bottom, 0px));
+    border-radius: 22px 22px 0 0;
+    background: var(--color-surface);
+}
+.shop-sheet-x { position: absolute; top: 10px; right: 10px; z-index: 1; }
+.shop-sheet .powerup-shop { margin: 0; }
+.shop-sheet .shop-buy { min-height: 44px; }
+
+/* ---- Phones ---- */
+@media (max-width: 768px) {
+    .game-layout {
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+        height: 100dvh;
+        min-height: 0;
+        gap: 8px;
+        padding: 8px 8px calc(8px + env(safe-area-inset-bottom, 0px));
+    }
+    .game-header { flex-wrap: nowrap; padding: 8px 10px; gap: 6px; }
+    .game-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .game-stats .stat--extra { display: none; }
+    .game-stats .stat-value { font-size: 1.1rem; }
+    .network-container { flex: 1 1 auto; height: auto; min-height: 0; }
+    .panel { height: auto; max-height: none; }
+    .tools-panel { flex: none; padding: 8px; gap: 8px; }
+    .tools-title { display: none; }
+    .tools-list {
+        flex-direction: row;
+        overflow-x: auto;
+        scroll-snap-type: x proximity;
+        scrollbar-width: none;
+        margin: 0 -8px;
+        padding: 2px 8px;
+    }
+    .tools-list::-webkit-scrollbar { display: none; }
+    .tool-item {
+        flex: 0 0 auto;
+        flex-direction: column;
+        justify-content: center;
+        gap: 2px;
+        width: 76px;
+        min-height: 72px;
+        padding: 6px 4px;
+        text-align: center;
+        scroll-snap-align: start;
+    }
+    .tool-text { align-items: center; }
+    .tool-name { font-size: 0.78rem; }
+    .tool-usage { font-size: 0.7rem; }
+    .game-footer { display: none; }
+}
+
+/* Locked and spent tools stay tappable so they can explain themselves. */
+#tools-list .tool-item.disabled { pointer-events: auto; cursor: help; }
+
+/* Phones: fade the tray's right edge so it reads as scrollable. */
+@media (max-width: 768px) {
+    .tools-list {
+        -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+        mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+    }
+    .tools-list.at-end { -webkit-mask-image: none; mask-image: none; }
+}
+
+/* Phones: toasts sit just above the tray, not over the HUD. */
+@media (max-width: 768px) {
+    #notification-container { top: auto; bottom: calc(176px + env(safe-area-inset-bottom, 0px)); left: 16px; right: 16px; align-items: center; }
+}
+
+/* Info and warning toasts had no background (white text on the page). */
+.notification.info { background-color: #1f2937; }
+.notification.warning { background-color: #b45309; }
