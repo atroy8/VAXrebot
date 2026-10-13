@@ -34,6 +34,7 @@
 // LineSegments draw for all links, per-node work is O(1) per frame.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { fitCamera } from './game-screen-model.js';
 
 // Bundle every face frame at build time so the game works fully offline.
 // Map ends up as: textures[state][frame] -> THREE.Texture
@@ -191,6 +192,10 @@ export class NetworkView {
         const canvas = this.renderer.domElement;
         canvas.style.position = 'absolute';
         canvas.style.inset = '0';
+        // setSize(..., false) leaves CSS size alone; pin it to the container so
+        // high-DPI phones do not show a 2x or 3x zoomed corner of the scene.
+        canvas.style.width = '100%';
+        canvas.style.height = '100%';
         canvas.style.touchAction = 'none';
         this.container.appendChild(canvas);
 
@@ -411,6 +416,7 @@ export class NetworkView {
             this.controls.target.set(0, 0, 0);
             for (let s = 0; s < WARMUP_STEPS; s++) this.layoutStep();
             this.frameNetwork();
+            this.autoFit = true;
         }
         this.physicsSettled = false;
         this.settleCalmFrames = 0;
@@ -494,16 +500,30 @@ export class NetworkView {
     }
 
     // Fit the whole network on screen (portrait phones included).
+    // Uses the network's bounding box, so a lopsided layout is centred too.
+    fitTarget() {
+        const pts = [];
+        for (const o of this.nodeObjs.values()) pts.push(o.pos);
+        return fitCamera(pts, { fovDeg: this.camera.fov, aspect: this.camera.aspect, pad: 1.9 });
+    }
+
     frameNetwork() {
-        let r = 1;
-        for (const o of this.nodeObjs.values()) r = Math.max(r, Math.hypot(o.pos.x, o.pos.y));
-        r += 1.4;
-        const vFov = (this.camera.fov * Math.PI) / 180;
-        const fitH = r / Math.tan(vFov / 2);
-        const fitW = r / (Math.tan(vFov / 2) * Math.max(0.3, this.camera.aspect));
-        this.camera.position.set(0, 0, Math.max(fitH, fitW));
-        this.controls.target.set(0, 0, 0);
-        this.controls.maxDistance = Math.max(fitH, fitW) * 1.6;
+        const { cx, cy, distance } = this.fitTarget();
+        this.camera.position.set(cx, cy, distance);
+        this.controls.target.set(cx, cy, 0);
+        this.controls.maxDistance = distance * 1.6;
+    }
+
+    // While the layout is still spreading out, keep easing the camera so the
+    // whole network stays on screen. Stops as soon as the player pans or zooms.
+    easeToFit(rate = 0.15) {
+        const { cx, cy, distance } = this.fitTarget();
+        const p = this.camera.position;
+        p.x += (cx - p.x) * rate;
+        p.y += (cy - p.y) * rate;
+        p.z += (distance - p.z) * rate;
+        this.controls.target.set(p.x, p.y, 0);
+        this.controls.maxDistance = Math.max(this.controls.maxDistance, distance * 1.6);
     }
 
     // Highlight every severable link while the Sever tool is selected.
@@ -643,6 +663,7 @@ export class NetworkView {
             }
         }
 
+        if (this.autoFit && this.nodeObjs.size) this.easeToFit();
         this.controls.update();
         // Tiny camera shake on a sever, restored right after the render.
         let sx = 0;
@@ -769,10 +790,21 @@ export class NetworkView {
         const ndc = new THREE.Vector2();
         let downX = 0, downY = 0, downT = 0;
 
+        const down = new Set();
         canvas.addEventListener('pointerdown', (e) => {
             downX = e.clientX; downY = e.clientY; downT = performance.now();
+            down.add(e.pointerId);
+            if (down.size > 1) this.autoFit = false; // pinch zoom
         });
+        canvas.addEventListener('pointermove', (e) => {
+            if (down.has(e.pointerId) && Math.hypot(e.clientX - downX, e.clientY - downY) > 10) this.autoFit = false;
+        });
+        const lift = (e) => down.delete(e.pointerId);
+        canvas.addEventListener('pointercancel', lift);
+        canvas.addEventListener('pointerleave', lift);
+        canvas.addEventListener('wheel', () => { this.autoFit = false; }, { passive: true });
         canvas.addEventListener('pointerup', (e) => {
+            down.delete(e.pointerId);
             const moved = Math.hypot(e.clientX - downX, e.clientY - downY);
             if (moved > 10 || performance.now() - downT > 600) return; // it was a drag
             this.handleTap(e, ndc);
