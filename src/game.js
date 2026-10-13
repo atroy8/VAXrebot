@@ -15,7 +15,9 @@ import {
     livesSavedForRun,
     recordCompletion,
 } from './progress.js';
-import { isPowerUp, usePowerUp, getCharges } from './economy.js';
+import { isPowerUp, usePowerUp, getCharges, getFunding } from './economy.js';
+import './ui/game-screen.css';
+import { toolHint, dayBanner } from './ui/game-screen-model.js';
 import { mountShop, renderShop } from './ui/shop.js';
 import { generateNetwork } from './sim/network.js';
 import { initGameState } from './sim/state.js';
@@ -39,6 +41,8 @@ import {
     renderLegend,
     addLogEntry,
     showNotification,
+    showToolHint,
+    showDayBanner,
     renderGameOver,
 } from './ui/panels.js';
 import { populateDifficulties, fillBriefing, setFixedDifficulty } from './ui/briefing.js';
@@ -145,6 +149,14 @@ export class EpidemicSimulator {
         document.getElementById('next-day').addEventListener('click', () => this.nextDay());
         document.getElementById('hold-advance').addEventListener('click', () => this.autoAdvance.hold());
         document.getElementById('pause-game').addEventListener('click', () => this.togglePause());
+        document.getElementById('resume-game').addEventListener('click', () => this.togglePause());
+        const tray = document.getElementById('tools-list');
+        tray.addEventListener('scroll', () => {
+            tray.classList.toggle('at-end', tray.scrollLeft + tray.clientWidth >= tray.scrollWidth - 4);
+        }, { passive: true });
+        document.getElementById('shop-sheet').addEventListener('click', (e) => {
+            if (e.target.closest('[data-shop-close]')) this.closeShop();
+        });
         // Onboarding re-entry: reopen the How to play overlay on demand.
         // Lazy import keeps it out of the initial bundle path.
         document.getElementById('how-to-play').addEventListener('click', () => {
@@ -152,8 +164,18 @@ export class EpidemicSimulator {
         });
         document.getElementById('tools-list').addEventListener('click', (e) => {
             const toolItem = e.target.closest('.tool-item');
-            if (!toolItem || toolItem.classList.contains('disabled')) return;
+            if (!toolItem || !this.gameState) return;
             const toolId = toolItem.dataset.tool;
+            if (toolId === 'shop' || toolItem.classList.contains('empty')) {
+                this.openShop();
+                return;
+            }
+            // Locked or spent tools explain themselves instead of doing nothing.
+            if (toolItem.classList.contains('disabled')) {
+                const { reason } = canUseTool(this.gameState, this.tools, toolId, this.difficulty);
+                if (reason) showNotification(reason.replace(/^[^A-Za-z]+/, ''), 'info');
+                return;
+            }
             // Power-ups are instant consumables: route through the economy
             // module, which spends one charge and applies the effect through
             // the game's tool system. Everything else selects as before.
@@ -223,6 +245,10 @@ export class EpidemicSimulator {
         this.gameState = initGameState(this.tools, population);
         this.createNetwork();
         this.selectedTool = null;
+        showToolHint('');
+        this.closeShop();
+        document.getElementById('game-screen').classList.remove('is-paused');
+        document.getElementById('pause-game').setAttribute('aria-pressed', 'false');
         this.view.setup({
             onNodeClick: (event, node) => this.handleNodeClick(event, node),
             onLinkClick: (event, link) => this.handleLinkClick(event, link),
@@ -385,7 +411,11 @@ export class EpidemicSimulator {
                 outcome === 'died' ? `Person ${node.id} has died from the infection.` : `Person ${node.id} has recovered.`
             );
         }
-        if (outcomes.some((o) => o.outcome === 'died')) {
+        const died = outcomes.filter((o) => o.outcome === 'died').length;
+        if (!result) {
+            showDayBanner(dayBanner({ day: this.gameState.day - 1, newCases: count, recovered: outcomes.length - died, died }));
+        }
+        if (died > 0) {
             this.view.update(this.network.nodes, this.network.links);
         }
 
@@ -450,6 +480,9 @@ export class EpidemicSimulator {
             this.save = recordCompletion(this.save, this.currentLevel.id, outcome, stats);
             writeSave(this.storage, this.save);
         }
+        // Toasts from the last day should not cover the results.
+        document.getElementById('notification-container')?.replaceChildren();
+        showToolHint('');
         this.monetization.onLevelFinished();
         renderGameOver({
             outcome,
@@ -458,6 +491,7 @@ export class EpidemicSimulator {
             stars,
             fundingEarned,
             livesSaved,
+            caseCap: caseCapFor(this.gameState, this.currentScenario),
         });
         this.showScreen('game-over');
     }
@@ -466,8 +500,11 @@ export class EpidemicSimulator {
         this.selectedTool = this.selectedTool === toolId ? null : toolId;
         this.view.setToolMode?.(this.selectedTool);
         document.querySelectorAll('.tool-item').forEach((item) => {
-            item.classList.toggle('selected', item.dataset.tool === this.selectedTool);
+            const on = item.dataset.tool === this.selectedTool;
+            item.classList.toggle('selected', on);
+            item.setAttribute('aria-pressed', String(on));
         });
+        showToolHint(this.selectedTool ? toolHint(this.selectedTool, this.tools) : '');
     }
 
     // Power-up flow: hand the economy module the gameApi it needs, spend
@@ -488,23 +525,12 @@ export class EpidemicSimulator {
         this.updateUI();
     }
 
-    // Power-ups show charge counts (not daily limits) in the tool list and
-    // are disabled while no charges remain.
-    renderPowerUpCharges() {
-        const charges = getCharges();
-        for (const [id, count] of Object.entries(charges)) {
-            const item = document.querySelector(`#tools-list .tool-item[data-tool="${id}"]`);
-            if (!item) continue;
-            item.classList.toggle('disabled', count < 1);
-            const usage = item.querySelector('.tool-usage');
-            if (usage) usage.textContent = `⚡${count}`;
-        }
-    }
-
-    // Power-up shop lives below the tool list on the game screen.
+    // Power-up shop: a bottom sheet opened from the Shop chip, or by tapping
+    // a power-up that has no charges left.
     refreshShop() {
         if (!this.shopEl || !document.getElementById('powerup-shop')) {
             this.shopEl = mountShop();
+            document.getElementById('shop-sheet-body')?.appendChild(this.shopEl);
         }
         renderShop(this.shopEl, {
             onPurchase: ({ save }) => {
@@ -512,6 +538,17 @@ export class EpidemicSimulator {
                 this.updateUI();
             },
         });
+    }
+
+    openShop() {
+        this.refreshShop();
+        const sheet = document.getElementById('shop-sheet');
+        if (sheet) sheet.hidden = false;
+    }
+
+    closeShop() {
+        const sheet = document.getElementById('shop-sheet');
+        if (sheet) sheet.hidden = true;
     }
 
     updateUI() {
@@ -530,9 +567,12 @@ export class EpidemicSimulator {
             r: this.lastR,
             actionsLeft: actionsRemaining(this.gameState, this.tools, this.difficulty),
         });
-        renderTools(this.tools, difficulty, this.gameState.day, this.gameState.dailyUsage);
-        this.renderPowerUpCharges();
-        this.refreshShop();
+        renderTools(this.tools, difficulty, this.gameState.day, this.gameState.dailyUsage, {
+            charges: getCharges(),
+            funding: getFunding(),
+            selected: this.selectedTool,
+        });
+        if (!document.getElementById('shop-sheet')?.hidden) this.refreshShop();
         // Real pause: the Next Day button is disabled while paused (nextDay()
         // also early-returns via canAdvanceDay as a second layer).
         const nextDayBtn = document.getElementById('next-day');
@@ -541,7 +581,10 @@ export class EpidemicSimulator {
 
     togglePause() {
         this.gameState.paused = !this.gameState.paused;
-        document.getElementById('pause-game').innerHTML = this.gameState.paused ? '▶️ Resume' : '⏸️ Pause';
+        const pauseBtn = document.getElementById('pause-game');
+        pauseBtn.setAttribute('aria-pressed', String(this.gameState.paused));
+        pauseBtn.setAttribute('aria-label', this.gameState.paused ? 'Resume' : 'Pause');
+        document.getElementById('game-screen').classList.toggle('is-paused', this.gameState.paused);
         // D3 side: NetworkView exposes its force simulation through
         // setPaused(), which calls .stop() / .restart() internally.
         this.view.setPaused(this.gameState.paused);
