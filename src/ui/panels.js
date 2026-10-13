@@ -2,7 +2,22 @@
 // action log, toast notifications, and the game-over stats screen.
 // No game logic here; callers pass plain data.
 import { spriteFor } from '../sprites.js';
-import { toolDailyLimit } from '../sim/engine.js';
+import { toolChips, lossReason } from './game-screen-model.js';
+
+// Small inline icons for the tool tray (no emoji on the game screen).
+const ICONS = {
+    vaccinate:
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" d="M17 3l4 4M19 5l-9.5 9.5M14 6l4 4M7 13l4 4M5.5 18.5L3 21M8.5 11.5l-3 3 3 3 3-3"/></svg>',
+    quarantine:
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round" d="M4 11l8-7 8 7v9H4z"/><path fill="currentColor" d="M10 14h4v6h-4z"/></svg>',
+    severLink:
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="18" r="3" fill="none" stroke="currentColor" stroke-width="2.4"/><circle cx="18" cy="18" r="3" fill="none" stroke="currentColor" stroke-width="2.4"/><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" d="M8 16L17 4M16 16L7 4"/></svg>',
+    powerUp:
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>',
+    shop:
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" d="M4 7h16l-1.5 12h-13zM9 7a3 3 0 0 1 6 0"/></svg>',
+};
+const TOOL_COLORS = { vaccinate: '#7c3aed', quarantine: '#f97316', severLink: '#0ea5e9' };
 
 export function renderHeader({ scenarioName, difficultyName, difficultyId, day, infected, protected: protectedCount, population, paused = false, cases = null, caseCap = Infinity, r = null, actionsLeft = null }) {
     document.getElementById('game-scenario-name').textContent = scenarioName;
@@ -10,7 +25,7 @@ export function renderHeader({ scenarioName, difficultyName, difficultyId, day, 
     document.getElementById('current-difficulty-badge').innerHTML = badge;
 
     // Clear paused indicator: the day stat reads "N (Paused)" while paused.
-    document.getElementById('current-day').textContent = paused ? `${day} (Paused)` : day;
+    document.getElementById('current-day').textContent = day; // the pause card says Paused
     document.getElementById('infected-count').textContent = infected;
     document.getElementById('protected-count').textContent = protectedCount;
     document.getElementById('population-count').textContent = population;
@@ -35,31 +50,64 @@ export function renderHeader({ scenarioName, difficultyName, difficultyId, day, 
     if (aEl && actionsLeft != null) aEl.textContent = actionsLeft;
 }
 
-export function renderTools(tools, difficulty, day, dailyUsage) {
+// Bottom tool tray: one button per tool plus a Shop button. Power-ups with
+// no charges stay tappable ('empty') so a tap can open the shop.
+export function renderTools(tools, difficulty, day, dailyUsage, { charges = {}, funding = null, selected = null } = {}) {
     const toolsList = document.getElementById('tools-list');
-    toolsList.innerHTML = Object.entries(tools)
-        .map(([id, tool]) => {
-            const limit = toolDailyLimit(tool, difficulty, id);
-            const available = day >= tool.availableDay;
-            const disabled = !available || dailyUsage[id] >= limit;
-            return `
-                <div class="tool-item ${disabled ? 'disabled' : ''}" data-tool="${id}">
-                    <div class="tool-header">
-                        <span class="tool-name">${tool.name}</span>
-                        <span class="tool-usage">${dailyUsage[id]}/${limit}</span>
-                    </div>
-                    <p class="tool-description">${tool.description}</p>
-                    ${!available ? `<div class="tool-availability">Available Day ${tool.availableDay}</div>` : ''}
-                </div>
-            `;
+    const chips = toolChips(tools, difficulty, day, dailyUsage, charges);
+    const html = chips
+        .map((c) => {
+            const cls = ['tool-item', c.state === 'locked' || c.state === 'spent' ? 'disabled' : '', c.state === 'empty' ? 'empty' : '', selected === c.id ? 'selected' : '']
+                .filter(Boolean)
+                .join(' ');
+            const color = c.color || TOOL_COLORS[c.id] || '#64748b';
+            const icon = ICONS[c.id] || ICONS.powerUp;
+            return `<button type="button" class="${cls}" data-tool="${c.id}" aria-pressed="${selected === c.id}" ${c.state === 'locked' || c.state === 'spent' ? 'aria-disabled="true"' : ''}>
+                    <span class="tool-icon" style="--tool-color:${color}">${icon}</span>
+                    <span class="tool-text"><span class="tool-name">${c.label}</span><span class="tool-usage">${c.usage}</span></span>
+                </button>`;
         })
         .join('');
+    const shop = `<button type="button" class="tool-item shop-chip" data-tool="shop">
+            <span class="tool-icon">${ICONS.shop}</span>
+            <span class="tool-text"><span class="tool-name">Shop</span><span class="tool-usage">${funding == null ? 'Power-ups' : `${funding} funds`}</span></span>
+        </button>`;
+    toolsList.innerHTML = html + shop;
 }
 
-// Note: the old write-only gameState.log array is gone; the DOM log below is
-// the source of truth (capped at 50 entries, reverse-chronological).
+// One-line hint over the network for the selected tool; empty hides it.
+export function showToolHint(text) {
+    const el = document.getElementById('tool-hint');
+    if (!el) return;
+    el.textContent = text || '';
+    el.hidden = !text;
+    // The hint teaches once, then gets out of the way of the network.
+    clearTimeout(showToolHint.timer);
+    if (text) showToolHint.timer = setTimeout(() => { el.hidden = true; }, 4500);
+}
+
+// Day banner (replaces the old text log): one line, fades on its own.
+export function showDayBanner({ text, tone = 'calm' }) {
+    const el = document.getElementById('day-banner');
+    if (!el) return;
+    el.hidden = true;
+    el.className = `day-banner ${tone}`;
+    el.textContent = text;
+    // Restart the CSS animation on every day.
+    void el.offsetWidth;
+    el.hidden = false;
+    clearTimeout(showDayBanner.timer);
+    showDayBanner.timer = setTimeout(() => {
+        el.hidden = true;
+    }, 1900);
+}
+
+// The text log is gone from the game screen (item 7). Kept as a safe no-op
+// so older callers and power-ups keep working; it writes only if a log
+// container exists (none in the current markup).
 export function addLogEntry(day, message, important = false) {
     const logContainer = document.getElementById('log-entries');
+    if (!logContainer) return;
     const entry = document.createElement('div');
     entry.className = `log-entry ${important ? 'important' : ''}`;
     entry.innerHTML = `<span class="log-time">Day ${day}</span> <span class="log-message">${message}</span>`;
@@ -69,19 +117,29 @@ export function addLogEntry(day, message, important = false) {
     }
 }
 
+// Toasts: plain text (emoji stripped), an identical toast already on screen
+// is refreshed instead of stacked, and at most two show at once.
 export function showNotification(message, type = 'info') {
     const container = document.getElementById('notification-container');
-    const notification = document.createElement('div');
-    notification.className = `notification ${type}`;
-    notification.textContent = message;
-    container.appendChild(notification);
-    setTimeout(() => {
+    if (!container) return;
+    const text = String(message).replace(/[\p{Extended_Pictographic}\ufe0f\u200d]\s*/gu, '').trim();
+    let notification = [...container.children].find((n) => n.textContent === text && !n.dataset.leaving);
+    if (!notification) {
+        notification = document.createElement('div');
+        notification.className = `notification ${type}`;
+        notification.textContent = text;
+        container.appendChild(notification);
+        while (container.children.length > 2) container.firstChild.remove();
+    }
+    clearTimeout(notification._timer);
+    notification._timer = setTimeout(() => {
+        notification.dataset.leaving = '1';
         notification.style.animation = 'fadeOutRight 0.5s forwards';
         setTimeout(() => notification.remove(), 500);
     }, 3000);
 }
 
-export function renderGameOver({ outcome, stats, difficultyId, stars = 0, fundingEarned = 0, livesSaved = 0 }) {
+export function renderGameOver({ outcome, stats, difficultyId, stars = 0, fundingEarned = 0, livesSaved = 0, caseCap = Infinity }) {
     const attackRate = stats.initialPopulation > 0 ? (stats.totalInfected / stats.initialPopulation) * 100 : 0;
     const caseFatalityRate = stats.totalInfected > 0 ? (stats.totalDead / stats.totalInfected) * 100 : 0;
 
@@ -101,7 +159,7 @@ export function renderGameOver({ outcome, stats, difficultyId, stars = 0, fundin
         outcome === 'contained'
             ? 'Excellent work! Your strategic interventions stopped the spread.'
             : outcome === 'overwhelmed'
-              ? 'Deaths have overwhelmed the response. Too many lives were lost before the outbreak could be contained. Review the results and try a new strategy.'
+              ? lossReason({ totalInfected: stats.totalInfected, caseCap })
               : outcome === 'burnout'
                 ? 'The virus ran its course and faded on its own. You never intervened, so this is not a victory. Containment requires action: try a new strategy.'
                 : 'The simulation period has ended. Analyze the results and try a new strategy.';
@@ -166,4 +224,15 @@ export function renderLegend() {
             `<span class="legend-item"><img src="${spriteFor(state)}" alt="${label}" width="24" height="24" loading="lazy"><span>${label}</span></span>`
     ).join('');
     container.appendChild(legend);
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'legend-toggle';
+    toggle.textContent = 'Key';
+    toggle.setAttribute('aria-expanded', 'false');
+    toggle.addEventListener('click', () => {
+        const open = legend.classList.toggle('open');
+        toggle.setAttribute('aria-expanded', String(open));
+        toggle.textContent = open ? 'Hide key' : 'Key';
+    });
+    container.appendChild(toggle);
 }
