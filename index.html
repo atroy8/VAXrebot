@@ -76,26 +76,25 @@
         <div id="game-screen" class="screen">
             <div class="game-layout">
                 <div class="game-header">
-                    <div class="game-info">
-                        <h4 id="game-scenario-name"></h4>
-                        <span id="current-difficulty-badge"></span>
+                    <div class="game-topbar">
+                        <div class="game-info">
+                            <h4 id="game-scenario-name"></h4>
+                            <span id="current-difficulty-badge"></span>
+                        </div>
+                        <div class="game-icons">
+                            <button type="button" class="icon-btn" id="how-to-play" aria-label="How to play">
+                                <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" d="M9 9a3 3 0 1 1 4.2 2.75c-.75.33-1.2 1-1.2 1.8V14"/><circle cx="12" cy="18" r="1.4" fill="currentColor"/></svg>
+                            </button>
+                            <button type="button" class="icon-btn" id="pause-game" aria-label="Pause">
+                                <svg class="icon-pause" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1.5" fill="currentColor"/><rect x="14" y="5" width="4" height="14" rx="1.5" fill="currentColor"/></svg>
+                                <svg class="icon-play" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z" fill="currentColor"/></svg>
+                            </button>
+                        </div>
                     </div>
                     <div class="game-stats">
-                        <div class="stat">
+                        <div class="stat stat--day">
                             <span class="stat-label">Day</span>
                             <span class="stat-value" id="current-day">1</span>
-                        </div>
-                        <div class="stat">
-                            <span class="stat-label">Infected</span>
-                            <span class="stat-value infected" id="infected-count">0</span>
-                        </div>
-                        <div class="stat">
-                            <span class="stat-label">Protected</span>
-                            <span class="stat-value protected" id="protected-count">0</span>
-                        </div>
-                        <div class="stat">
-                            <span class="stat-label">Population</span>
-                            <span class="stat-value" id="population-count">0</span>
                         </div>
                         <div class="stat case-meter" id="case-meter" title="Total cases so far. Reach the cap and the outbreak is out of control.">
                             <span class="stat-label">Cases / cap</span>
@@ -107,40 +106,55 @@
                             <span class="stat-value" id="r-value">–</span>
                         </div>
                         <div class="stat">
-                            <span class="stat-label">Actions left</span>
+                            <span class="stat-label">Actions</span>
                             <span class="stat-value" id="actions-left">0</span>
                         </div>
-                    </div>
-                    <div class="game-controls">
-                        <button class="btn btn--secondary btn--sm" id="how-to-play">How to play</button>
-                        <button class="btn btn--secondary btn--sm" id="pause-game">⏸️ Pause</button>
-                        <button class="btn btn--secondary btn--sm" id="hold-advance" hidden>Hold</button>
-                        <button class="btn btn--primary next-day-btn" id="next-day">Next day</button>
-                    </div>
-                </div>
-
-                <div class="panel tools-panel">
-                    <h4>Intervention Tools</h4>
-                    <div class="tools-list" id="tools-list">
-                        <!-- Tools will be generated here -->
+                        <div class="stat stat--extra">
+                            <span class="stat-label">Sick now</span>
+                            <span class="stat-value infected" id="infected-count">0</span>
+                        </div>
+                        <div class="stat stat--extra">
+                            <span class="stat-label">Protected</span>
+                            <span class="stat-value protected" id="protected-count">0</span>
+                        </div>
+                        <div class="stat stat--extra">
+                            <span class="stat-label">Population</span>
+                            <span class="stat-value" id="population-count">0</span>
+                        </div>
                     </div>
                 </div>
 
                 <div class="panel network-container">
                     <svg id="network-svg"></svg>
+                    <div class="tool-hint" id="tool-hint" aria-live="polite" hidden></div>
+                    <div class="day-banner" id="day-banner" aria-live="polite" hidden></div>
                 </div>
 
-                <div class="panel action-log">
-                    <h4>Action Log</h4>
-                    <div class="log-entries" id="log-entries"></div>
-                </div>
-                
-                <div class="game-footer">
-                    <div class="volume-control">
-                        <span>🔇</span>
-                        <input type="range" id="master-volume" min="0" max="1" step="0.05" value="0.3">
-                        <span>🔊</span>
+                <div class="panel tools-panel" id="tool-tray">
+                    <h4 class="tools-title">Tools</h4>
+                    <div class="tools-list" id="tools-list" role="toolbar" aria-label="Tools">
+                        <!-- Tools will be generated here -->
                     </div>
+                    <div class="day-controls">
+                        <button type="button" class="btn btn--secondary hold-btn" id="hold-advance" hidden>Hold</button>
+                        <button type="button" class="btn btn--primary next-day-btn" id="next-day">Next day</button>
+                    </div>
+                </div>
+
+                <div class="game-footer" id="game-footer">
+                    <div class="pause-title">Paused</div>
+                    <label class="volume-control">
+                        <span class="volume-label">Volume</span>
+                        <input type="range" id="master-volume" min="0" max="1" step="0.05" value="0.3" aria-label="Volume">
+                    </label>
+                    <button type="button" class="btn btn--primary resume-btn" id="resume-game">Resume</button>
+                </div>
+            </div>
+            <div class="shop-sheet" id="shop-sheet" hidden>
+                <div class="shop-sheet-backdrop" data-shop-close></div>
+                <div class="shop-sheet-panel" role="dialog" aria-modal="true" aria-label="Power-up shop">
+                    <button type="button" class="icon-btn shop-sheet-x" data-shop-close aria-label="Close shop">&times;</button>
+                    <div id="shop-sheet-body"></div>
                 </div>
             </div>
         </div>

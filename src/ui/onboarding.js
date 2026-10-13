@@ -28,17 +28,17 @@ export function showOnboarding() {
                 <div class="onboarding-card">
                     <span class="onboarding-step">1</span>
                     <h3>Contain the outbreak</h3>
-                    <p>A virus is spreading through the community network. Your goal is to stop it before it overwhelms the response.</p>
+                    <p>A virus is spreading through a town. Each dot is a person and each line is a contact the virus can travel along.</p>
                 </div>
                 <div class="onboarding-card">
                     <span class="onboarding-step">2</span>
-                    <h3>Pick a tool each day</h3>
-                    <p>Choose an intervention from the Tools panel, then click people or connections in the network to apply it. Each tool has a daily limit, so choose wisely.</p>
+                    <h3>Pick a tool, then tap</h3>
+                    <p>Choose a tool from the tray at the bottom, then tap a person or a line. You get a few actions a day. When they run out, the next day starts on its own.</p>
                 </div>
                 <div class="onboarding-card">
                     <span class="onboarding-step">3</span>
                     <h3>Win or lose</h3>
-                    <p>You win by eradicating the virus. You lose if deaths overwhelm the response. Watch the Action Log to learn what is working.</p>
+                    <p>You win when nobody is sick. You lose if total cases reach the cap on the case meter. Watch R: below 1 means the outbreak is shrinking.</p>
                 </div>
             </div>
             <div class="onboarding-actions">
