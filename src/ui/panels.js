@@ -198,7 +198,7 @@ export function renderGameOver({ outcome, stats, difficultyId, stars = 0, fundin
     const badge = document.createElement('span');
     badge.className = `difficulty-badge ${difficultyId}`;
     badge.textContent = difficultyId;
-    document.getElementById('final-difficulty-badge').innerHTML = 'Completed on ';
+    document.getElementById('final-difficulty-badge').innerHTML = outcome === 'contained' ? 'Completed on ' : 'Played on ';
     document.getElementById('final-difficulty-badge').appendChild(badge);
 }
 
