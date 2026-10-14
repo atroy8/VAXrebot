@@ -34,7 +34,8 @@ import {
 import { levelRules } from './config/level-rules.js';
 import { createAutoAdvance } from './ui/auto-advance.js';
 import { showScreen as renderScreen } from './ui/screens.js';
-import { NetworkView } from './ui/network-view-3d.js';
+import { createViewLoader } from './ui/view-loader.js';
+import { lessonFor, debriefLine } from './config/lessons.js';
 import {
     renderHeader,
     renderTools,
@@ -45,7 +46,7 @@ import {
     showDayBanner,
     renderGameOver,
 } from './ui/panels.js';
-import { populateDifficulties, fillBriefing, setFixedDifficulty } from './ui/briefing.js';
+import { populateDifficulties, fillBriefing, setFixedDifficulty, fillLessonCard } from './ui/briefing.js';
 import { renderLevelSelect } from './ui/level-select.js';
 import { AudioEngine } from './audio.js';
 
@@ -87,7 +88,9 @@ export class EpidemicSimulator {
         });
 
         this.audio = new AudioEngine(() => this.currentScreen);
-        this.view = new NetworkView();
+        // The 3D network view (and three.js) loads on demand: see view-loader.js.
+        this.view = null;
+        this.viewLoader = createViewLoader(() => import('./ui/network-view-3d.js'));
         this.activeDifficulty = null; // level difficulty with tuning applied
         this.lastR = null;
         this.autoAdvance = createAutoAdvance({
@@ -231,10 +234,27 @@ export class EpidemicSimulator {
         // from the underlying scenario.
         fillBriefing({ ...this.currentScenario, name: level.name, description: level.blurb });
         setFixedDifficulty(level.difficultyId, this.difficulties);
+        const lesson = lessonFor(level.id);
+        fillLessonCard('briefing-lesson', lesson?.title, lesson?.brief);
+        // Start fetching the network view while the player reads the briefing.
+        this.viewLoader.prefetch();
         this.showScreen('briefing');
     }
 
-    startGame() {
+    async startGame() {
+        if (this.startingGame) return;
+        if (!this.view) {
+            this.startingGame = true;
+            try {
+                const { NetworkView } = await this.viewLoader.load();
+                this.view = new NetworkView();
+            } catch (err) {
+                showNotification('Could not load the map. Tap Begin Containment to try again.', 'info');
+                return;
+            } finally {
+                this.startingGame = false;
+            }
+        }
         // Population varies per scenario: pick uniformly from the scenario's
         // range so each run feels different. The 8%-or-5-deaths loss rule
         // keeps the math fair at any size.
@@ -493,6 +513,8 @@ export class EpidemicSimulator {
             livesSaved,
             caseCap: caseCapFor(this.gameState, this.currentScenario),
         });
+        const lesson = this.currentLevel ? lessonFor(this.currentLevel.id) : null;
+        fillLessonCard('game-over-lesson', lesson?.title, debriefLine(lesson, outcome));
         this.showScreen('game-over');
     }
 
