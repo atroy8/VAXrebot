@@ -1084,3 +1084,121 @@
 .next-day-btn { position: relative; overflow: hidden; min-width: 9.5em; }
 .next-day-btn.counting::before { content: ''; position: absolute; inset: 0; transform-origin: left; transform: scaleX(var(--progress, 0)); background: rgba(255,255,255,.28); pointer-events: none; }
 #hold-advance[hidden] { display: none; }
+
+/* Lesson card (item 5): one real public health idea per level, named on the
+   briefing and again on the results screen. */
+.lesson-card {
+    display: grid;
+    gap: 2px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    background: rgba(16, 185, 129, 0.10);
+    border: 1px solid rgba(16, 185, 129, 0.35);
+    border-left: 4px solid #10b981;
+    text-align: left;
+}
+.lesson-card[hidden] { display: none; }
+.lesson-kicker {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #059669;
+}
+.lesson-title { font-size: 1.05rem; line-height: 1.25; }
+.lesson-text { margin: 0; font-size: 0.92rem; line-height: 1.4; color: var(--color-text-secondary); }
+.briefing-content > .lesson-card { margin-bottom: var(--space-16); }
+.lesson-card--debrief { margin: var(--space-16) 0; }
+
+/* Onboarding on phones: the three cards stacked taller than the screen, so the
+   Start Playing button sat below the fold, half cut off. Compact cards with the
+   step badge beside the text, and a full-width button that always shows. */
+@media (max-width: 600px) {
+    .onboarding-dialog {
+        padding: var(--space-20, 20px) var(--space-16);
+        max-height: calc(100dvh - 32px);
+        display: flex;
+        flex-direction: column;
+    }
+    .onboarding-dialog h2 { margin: 0 0 4px; }
+    .onboarding-cards { grid-template-columns: 1fr; gap: 10px; margin: var(--space-16) 0; overflow-y: auto; }
+    .onboarding-card {
+        display: grid;
+        grid-template-columns: 32px 1fr;
+        column-gap: 12px;
+        padding: 12px;
+    }
+    .onboarding-step { grid-row: span 2; }
+    .onboarding-card h3 { margin: 4px 0 2px; font-size: 1rem; }
+    .onboarding-card p { font-size: 0.875rem; line-height: 1.4; }
+    .onboarding-actions { flex-shrink: 0; }
+    .onboarding-actions .btn { width: 100%; min-height: 48px; }
+}
+
+/* Briefing: when a level fixes the difficulty, only its card is shown, as a
+   compact row. On phones the Begin button stays pinned in view; before this it
+   sat about 400 px below the fold under three tall difficulty cards. */
+.difficulty-grid.fixed { grid-template-columns: 1fr; }
+.difficulty-grid.fixed .difficulty-card:not(.selected) { display: none; }
+.difficulty-grid.fixed .difficulty-card.selected {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    column-gap: 12px;
+    text-align: left;
+    padding: 10px 14px;
+    box-shadow: none;
+    transform: none;
+}
+.difficulty-grid.fixed .difficulty-card.selected::after { display: none; }
+.difficulty-grid.fixed .difficulty-icon { font-size: 1.5rem; grid-row: span 2; }
+.difficulty-grid.fixed .difficulty-card h4 { margin: 0; }
+.difficulty-grid.fixed .difficulty-card p { grid-column: 2; }
+.difficulty-grid.fixed .difficulty-card .r0-value { grid-column: 3; grid-row: 1 / span 2; margin: 0; }
+
+@media (max-width: 600px) {
+    #briefing-screen { align-items: stretch; }
+    .briefing-content {
+        max-height: 100dvh;
+        border-radius: 0;
+        padding: var(--space-16) var(--space-16) 0;
+        display: flex;
+        flex-direction: column;
+    }
+    .briefing-content > div { margin-bottom: var(--space-16); }
+    .briefing-content h2 { margin: 0 0 var(--space-12, 12px); }
+    .disease-dynamics { padding: var(--space-12, 12px) var(--space-16); }
+    .disease-dynamics .dynamics-grid { grid-template-columns: 1fr 1fr; gap: 4px 12px; font-size: 0.875rem; }
+    .briefing-actions {
+        position: sticky;
+        bottom: 0;
+        margin: auto calc(-1 * var(--space-16)) 0;
+        padding: 12px var(--space-16) calc(12px + env(safe-area-inset-bottom));
+        background: var(--color-surface);
+        border-top: 1px solid var(--color-border);
+        flex-direction: row;
+        gap: 10px;
+    }
+    .briefing-actions .btn { flex: 1; min-height: 48px; width: auto; }
+    .briefing-content > .briefing-actions { margin-bottom: 0; }
+}
+
+/* Results on phones: six full-width stat rows pushed the lesson and the
+   Replay / Choose Level buttons below the fold. Use a 3 x 2 grid of small
+   tiles, label above number. */
+@media (max-width: 600px) {
+    .final-stats { grid-template-columns: repeat(3, 1fr); gap: 8px; margin: var(--space-16) 0; }
+    .final-stat {
+        display: flex;
+        flex-direction: column-reverse;
+        align-items: center;
+        justify-content: center;
+        gap: 2px;
+        padding: 10px 4px;
+    }
+    .final-stat .stat-value { font-size: 1.35rem; line-height: 1.1; }
+    .final-stat-label { font-size: 0.7rem; line-height: 1.2; }
+    .game-over-message { margin: var(--space-12, 12px) 0; font-size: 0.95rem; }
+    .game-over-actions { margin-top: var(--space-16); gap: 10px; }
+    .game-over-actions .btn { min-height: 48px; }
+}

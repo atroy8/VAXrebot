@@ -46,6 +46,11 @@
         <div id="briefing-screen" class="screen">
             <div class="briefing-content">
                 <h2 id="briefing-title"></h2>
+                <div class="lesson-card" id="briefing-lesson" hidden>
+                    <span class="lesson-kicker">Lesson</span>
+                    <strong class="lesson-title" id="briefing-lesson-title"></strong>
+                    <p class="lesson-text" id="briefing-lesson-text"></p>
+                </div>
                 <div class="briefing-description">
                     <strong>Situation Briefing:</strong>
                     <p id="briefing-description-text"></p>
@@ -191,6 +196,11 @@
                         </div>
                     </div>
                     <p id="game-over-message" class="game-over-message"></p>
+                    <div class="lesson-card lesson-card--debrief" id="game-over-lesson" hidden>
+                        <span class="lesson-kicker">Lesson</span>
+                        <strong class="lesson-title" id="game-over-lesson-title"></strong>
+                        <p class="lesson-text" id="game-over-lesson-text"></p>
+                    </div>
                     <div class="game-over-actions">
                         <button class="btn btn--secondary" id="play-again">Replay Level</button>
                         <button class="btn btn--primary" id="try-different-scenario">Choose Level</button>
