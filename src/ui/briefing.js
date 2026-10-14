@@ -43,3 +43,15 @@ export function markDifficultySelected(difficultyId, r0) {
     document.querySelector(`.difficulty-card[data-difficulty="${difficultyId}"]`).classList.add('selected');
     document.getElementById('briefing-r0').textContent = r0;
 }
+
+// Lesson card (item 5): fills #<id>, #<id>-title and #<id>-text, or hides the
+// card when there is no lesson. Used by the briefing and the results screen.
+export function fillLessonCard(id, title, text) {
+    const card = document.getElementById(id);
+    if (!card) return;
+    const show = Boolean(title && text);
+    card.hidden = !show;
+    if (!show) return;
+    document.getElementById(`${id}-title`).textContent = title;
+    document.getElementById(`${id}-text`).textContent = text;
+}
