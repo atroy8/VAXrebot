@@ -3,6 +3,7 @@
 // No game logic here; callers pass plain data.
 import { spriteFor } from '../sprites.js';
 import { toolChips, lossReason } from './game-screen-model.js';
+import { threatPipsHtml } from './briefing.js';
 
 // Small inline icons for the tool tray (no emoji on the game screen).
 const ICONS = {
@@ -19,9 +20,12 @@ const ICONS = {
 };
 const TOOL_COLORS = { vaccinate: '#7c3aed', quarantine: '#f97316', severLink: '#0ea5e9' };
 
-export function renderHeader({ scenarioName, difficultyName, difficultyId, day, infected, protected: protectedCount, population, paused = false, cases = null, caseCap = Infinity, r = null, actionsLeft = null }) {
+export function renderHeader({ scenarioName, difficultyName, difficultyId, threatPips = null, day, infected, protected: protectedCount, population, paused = false, cases = null, caseCap = Infinity, r = null, actionsLeft = null }) {
     document.getElementById('game-scenario-name').textContent = scenarioName;
-    const badge = `<span class="difficulty-badge ${difficultyId}">${difficultyName}</span>`;
+    const badge =
+        threatPips != null
+            ? `<span class="threat-badge" aria-label="Threat ${threatPips} of 5">${threatPipsHtml(threatPips)}</span>`
+            : `<span class="difficulty-badge ${difficultyId}">${difficultyName}</span>`;
     document.getElementById('current-difficulty-badge').innerHTML = badge;
 
     // Clear paused indicator: the day stat reads "N (Paused)" while paused.
@@ -139,7 +143,7 @@ export function showNotification(message, type = 'info') {
     }, 3000);
 }
 
-export function renderGameOver({ outcome, stats, difficultyId, stars = 0, fundingEarned = 0, livesSaved = 0, caseCap = Infinity }) {
+export function renderGameOver({ outcome, stats, difficultyId, threatPips = null, stars = 0, fundingEarned = 0, livesSaved = 0, caseCap = Infinity }) {
     const attackRate = stats.initialPopulation > 0 ? (stats.totalInfected / stats.initialPopulation) * 100 : 0;
     const caseFatalityRate = stats.totalInfected > 0 ? (stats.totalDead / stats.totalInfected) * 100 : 0;
 
@@ -195,11 +199,17 @@ export function renderGameOver({ outcome, stats, difficultyId, stars = 0, fundin
     screen.classList.remove('outcome-win', 'outcome-loss', 'outcome-timeout');
     screen.classList.add(outcome === 'contained' ? 'outcome-win' : outcome === 'overwhelmed' ? 'outcome-loss' : 'outcome-timeout');
 
-    const badge = document.createElement('span');
-    badge.className = `difficulty-badge ${difficultyId}`;
-    badge.textContent = difficultyId;
-    document.getElementById('final-difficulty-badge').innerHTML = outcome === 'contained' ? 'Completed on ' : 'Played on ';
-    document.getElementById('final-difficulty-badge').appendChild(badge);
+    const badgeEl = document.getElementById('final-difficulty-badge');
+    const played = outcome === 'contained' ? 'Completed' : 'Played';
+    if (threatPips != null) {
+        badgeEl.innerHTML = `${played} at threat ${threatPips} of 5 <span class="threat-badge">${threatPipsHtml(threatPips)}</span>`;
+    } else {
+        const badge = document.createElement('span');
+        badge.className = `difficulty-badge ${difficultyId}`;
+        badge.textContent = difficultyId;
+        badgeEl.innerHTML = `${played} on `;
+        badgeEl.appendChild(badge);
+    }
 }
 
 // Network legend: one badge per node state, using the same sprites as the

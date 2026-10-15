@@ -63,6 +63,7 @@
 import { createStorage, loadSave, writeSave } from './save.js';
 import { levelRecord } from './progress.js';
 import { LEVELS } from './config/levels.js';
+import { CHESTS } from './config/chests.js';
 
 export const POWER_UPS = {
     eureka: {
@@ -162,19 +163,11 @@ export function setChestConfig(config) {
     chestConfigOverride = config;
 }
 
+// Fix (round 5): the old dynamic import used a runtime string, which the
+// bundler could not see, so the built game asked the server for
+// assets/config/chests.js, got a 404, and every prize box stayed locked.
 async function loadChestConfig() {
-    if (chestConfigOverride) return chestConfigOverride;
-    try {
-        // The specifier is a variable (not a literal) so the bundler leaves
-        // this import fully dynamic: chests.js is owned by the globe lane
-        // and may not exist in every checkout. A missing module rejects at
-        // runtime and we fail closed below.
-        const specifier = './config/chests.js';
-        const mod = await import(/* @vite-ignore */ specifier);
-        return mod.CHESTS ?? mod.default ?? {};
-    } catch {
-        return {};
-    }
+    return chestConfigOverride || CHESTS;
 }
 
 function chestDefFor(config, chestId) {
