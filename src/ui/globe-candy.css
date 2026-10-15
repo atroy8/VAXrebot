@@ -1,0 +1,91 @@
+/* Candy planet home screen (nightly round 5). Loaded with globe-view.js. */
+.globe-home.candy {
+    background:
+        radial-gradient(circle at 20% 15%, rgba(255, 255, 255, 0.35) 0 2px, transparent 3px) 0 0 / 46px 46px,
+        radial-gradient(circle at 70% 60%, rgba(255, 255, 255, 0.25) 0 1.5px, transparent 2.5px) 0 0 / 31px 31px,
+        linear-gradient(180deg, #6d5dfc 0%, #b06bff 38%, #ff7ac8 72%, #ffb86b 100%);
+}
+.candy .globe-loading { color: #fff; text-shadow: 0 2px 0 #b0459a; }
+.candy .globe-title {
+    font-size: 2.3rem;
+    color: #fff;
+    -webkit-text-stroke: 2px #c2185b;
+    paint-order: stroke fill;
+    text-shadow: 0 4px 0 #8e24aa, 0 8px 18px rgba(80, 0, 80, 0.35);
+    animation: titleBob 3s ease-in-out infinite;
+}
+@keyframes titleBob { 0%, 100% { transform: translateY(0) rotate(-1deg); } 50% { transform: translateY(-4px) rotate(1deg); } }
+.candy .globe-stat {
+    background: linear-gradient(180deg, #ffffff 0%, #ffe9f6 100%);
+    color: #7b1fa2;
+    border: 2px solid #fff;
+    box-shadow: 0 3px 0 #d16ba5, 0 8px 18px rgba(120, 0, 120, 0.25);
+}
+.candy .globe-stat.stat-stars { color: #b8860b; }
+.candy .globe-stat.stat-funding { color: #0b7a5a; }
+.candy .globe-label-num {
+    gap: 3px;
+    background: #fff;
+    color: #7b1fa2;
+    border: 3px solid #ff4f9a;
+    box-shadow: 0 3px 0 #c2185b, 0 6px 12px rgba(80, 0, 80, 0.3);
+}
+.candy .globe-marker-label.current .globe-label-num {
+    border-color: #ffc93c;
+    color: #c2185b;
+    animation: labelPulse 1.1s ease-in-out infinite;
+}
+@keyframes labelPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.12); } }
+.candy .globe-marker-label.locked .globe-label-num { border-color: #b9b3cc; color: #8a83a3; background: #f4f1fb; box-shadow: 0 2px 0 #a59fbd; }
+.candy .globe-label-lock { display: inline-flex; color: #8a83a3; }
+.candy .globe-label-stars { color: #ffc93c; text-shadow: 0 2px 0 #b06bff, 0 2px 6px rgba(80, 0, 80, 0.5); font-size: 0.95rem; }
+.candy .globe-label-chest {
+    padding: 3px 9px;
+    border-radius: 999px;
+    background: #fff;
+    color: #c2185b;
+    text-shadow: none;
+    box-shadow: 0 2px 0 #d16ba5;
+}
+.candy .chest-label.ready .globe-label-chest { background: #ffd60a; color: #7b1fa2; animation: labelPulse 0.9s ease-in-out infinite; }
+
+.globe-play {
+    position: absolute;
+    left: 50%;
+    bottom: calc(22px + env(safe-area-inset-bottom, 0px));
+    transform: translateX(-50%);
+    z-index: 4;
+    min-width: 220px;
+    min-height: 60px;
+    padding: 0 28px;
+    border: 3px solid #fff;
+    border-radius: 999px;
+    background: linear-gradient(180deg, #7dff9b 0%, #22c55e 55%, #16a34a 100%);
+    color: #fff;
+    font-family: var(--font-family-base);
+    font-size: 1.35rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-shadow: 0 2px 0 #0f7a3a;
+    box-shadow: 0 6px 0 #0f7a3a, 0 12px 24px rgba(15, 80, 40, 0.35), inset 0 3px 0 rgba(255, 255, 255, 0.5);
+    cursor: pointer;
+    animation: playBreath 1.6s ease-in-out infinite;
+    touch-action: manipulation;
+}
+.globe-play[hidden] { display: none; }
+.globe-play:active { transform: translateX(-50%) translateY(4px) scale(0.98); box-shadow: 0 2px 0 #0f7a3a; animation: none; }
+@keyframes playBreath { 0%, 100% { transform: translateX(-50%) scale(1); } 50% { transform: translateX(-50%) scale(1.05); } }
+
+.candy .globe-sheet { border: 3px solid #ffd1ec; border-radius: 26px; box-shadow: 0 10px 0 #f7a8d6, 0 -4px 30px rgba(80, 0, 80, 0.35); }
+.candy .globe-sheet-sub { color: #c2185b; }
+.candy .globe-sheet-btn {
+    background: linear-gradient(180deg, #7dff9b 0%, #22c55e 60%, #16a34a 100%);
+    box-shadow: 0 5px 0 #0f7a3a;
+    border-radius: 999px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .candy .globe-title, .globe-play, .candy .globe-marker-label.current .globe-label-num, .candy .chest-label.ready .globe-label-chest { animation: none; }
+}
+.candy .globe-marker-label { flex-direction: column; align-items: center; }
+.candy .globe-label-lock { margin-top: 2px; padding: 2px 5px; border-radius: 999px; background: #f4f1fb; color: #8a83a3; }
