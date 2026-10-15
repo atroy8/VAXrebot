@@ -11,6 +11,7 @@ import { CHESTS } from '../config/chests.js';
 import { isLevelUnlocked, lockReason, levelRecord, totalStars } from '../progress.js';
 import { loadSave, createStorage } from '../save.js';
 import { showNotification } from './panels.js';
+import { starRow, levelLabelHtml, clampLabelX } from './globe-labels.js';
 
 // Level marker positions (lat/lng, degrees), spread across the three regions.
 const LEVEL_POSITIONS = [
@@ -167,9 +168,6 @@ function atmosphereMaterial() {
     });
 }
 
-function starRow(stars) {
-    return '★'.repeat(stars) + '☆'.repeat(3 - stars);
-}
 
 function givesText(gives) {
     return Object.entries(gives)
@@ -359,7 +357,7 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
         }
 
         const label = addLabel(
-            `<span class="globe-label-num">${index + 1}</span><span class="globe-label-stars">${done ? starRow(rec.stars) : unlocked ? '' : 'lock'}</span>`,
+            levelLabelHtml(index, { unlocked, completed: done, stars: rec.stars }),
             !unlocked ? 'locked' : ''
         );
         const marker = { kind: 'level', index, level, grp, core, glow, label, anchor, unlocked, done };
@@ -624,7 +622,8 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
             m.core.material.color.setHex(color);
             m.core.material.emissive.setHex(color);
             m.core.material.emissiveIntensity = unlocked ? 0.35 : 0;
-            m.label.innerHTML = `<span class="globe-label-num">${m.index + 1}</span><span class="globe-label-stars">${rec.completed ? starRow(rec.stars) : unlocked ? '' : 'lock'}</span>`;
+            m.label.innerHTML = levelLabelHtml(m.index, { unlocked, completed: rec.completed, stars: rec.stars });
+            m.label.dataset.w = '';
             m.label.classList.toggle('locked', !unlocked);
         }
         refreshChests();
@@ -667,12 +666,17 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
         for (const m of state.levelMarkers.concat(state.chestMarkers)) {
             m.grp.getWorldPosition(tmpV);
             const facing = tmpV.clone().normalize().dot(camDir) > 0.18;
-            if (facing) {
-                tmpV.project(camera);
-                const x = (tmpV.x * 0.5 + 0.5) * renderer.domElement.clientWidth;
-                const y = (-tmpV.y * 0.5 + 0.5) * renderer.domElement.clientHeight;
+            tmpV.project(camera);
+            const x = (tmpV.x * 0.5 + 0.5) * renderer.domElement.clientWidth;
+            const y = (-tmpV.y * 0.5 + 0.5) * renderer.domElement.clientHeight;
+            // Off-screen markers hide their label instead of piling it up at the edge.
+            if (facing && x >= 0 && x <= renderer.domElement.clientWidth) {
                 m.label.style.display = 'block';
-                m.label.style.transform = `translate(-50%, -130%) translate(${x}px, ${y}px)`;
+                // Measure once per content change, then keep the label on screen.
+                if (!m.label.dataset.w) m.label.dataset.w = m.label.offsetWidth ? String(m.label.offsetWidth) : '';
+                const vw = renderer.domElement.clientWidth;
+                const cx = clampLabelX(x, Number(m.label.dataset.w), vw);
+                m.label.style.transform = `translate(-50%, -130%) translate(${cx}px, ${y}px)`;
             } else {
                 m.label.style.display = 'none';
             }
