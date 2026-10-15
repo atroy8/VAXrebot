@@ -134,6 +134,53 @@ export class AudioEngine {
         oscillator.stop(this.audioContext.currentTime + duration);
     }
 
+    // Sever "snip": a crisp scissor click (filtered noise), a bright pitch
+    // drop like a snapped cable, and a soft low thump for weight.
+    playSnip() {
+        if (!this.audioContext || this.masterGain.gain.value === 0) return;
+        const ctx = this.audioContext;
+        if (ctx.state === 'suspended') ctx.resume();
+        const t = ctx.currentTime;
+        const out = this.sfxBus || this.masterGain;
+
+        const len = Math.floor(ctx.sampleRate * 0.05);
+        const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+        const data = buf.getChannelData(0);
+        for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3);
+        const noise = ctx.createBufferSource();
+        noise.buffer = buf;
+        const hp = ctx.createBiquadFilter();
+        hp.type = 'highpass';
+        hp.frequency.value = 3500;
+        const ng = ctx.createGain();
+        ng.gain.value = 0.35;
+        noise.connect(hp).connect(ng).connect(out);
+        noise.start(t);
+
+        const twang = ctx.createOscillator();
+        const tg = ctx.createGain();
+        twang.type = 'triangle';
+        twang.frequency.setValueAtTime(1800, t);
+        twang.frequency.exponentialRampToValueAtTime(420, t + 0.16);
+        tg.gain.setValueAtTime(0.16, t);
+        tg.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+        twang.connect(tg).connect(out);
+        twang.start(t);
+        twang.stop(t + 0.22);
+
+        const thump = ctx.createOscillator();
+        const hg = ctx.createGain();
+        thump.type = 'sine';
+        thump.frequency.setValueAtTime(140, t + 0.02);
+        thump.frequency.exponentialRampToValueAtTime(55, t + 0.18);
+        hg.gain.setValueAtTime(0.0001, t);
+        hg.gain.exponentialRampToValueAtTime(0.22, t + 0.03);
+        hg.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+        thump.connect(hg).connect(out);
+        thump.start(t);
+        thump.stop(t + 0.25);
+    }
+
     // Master volume (0..1). Replaces the old direct masterGain access.
     setVolume(value) {
         if (this.masterGain) {

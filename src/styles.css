@@ -1072,3 +1072,15 @@
     .globe-title { font-size: 1.6rem; }
     .globe-stat { font-size: 0.85rem; padding: 7px 12px; }
 }
+
+/* Round 1 (nightly 2026-10-10): case cap meter, R, auto-advance countdown. */
+.case-meter { position: relative; }
+.case-meter-bar { display: block; height: 4px; margin-top: 4px; border-radius: 2px; background: rgba(127,127,127,.25); overflow: hidden; }
+.case-meter-bar::after { content: ''; display: block; height: 100%; width: calc(var(--fill, 0) * 100%); background: #28a745; transition: width .4s ease, background .4s ease; }
+.case-meter.warn .case-meter-bar::after { background: #dc3545; }
+.case-meter.warn .case-meter-value { color: #dc3545; }
+#r-value.r-up { color: #dc3545; }
+#r-value.r-down { color: #28a745; }
+.next-day-btn { position: relative; overflow: hidden; min-width: 9.5em; }
+.next-day-btn.counting::before { content: ''; position: absolute; inset: 0; transform-origin: left; transform: scaleX(var(--progress, 0)); background: rgba(255,255,255,.28); pointer-events: none; }
+#hold-advance[hidden] { display: none; }

@@ -27,6 +27,7 @@ import {
     livesSavedForRun,
     recordCompletion,
     regionProgress,
+    parDaysFor,
 } from '../src/progress.js';
 
 // A contained win on level 0 (care scenario, duration 18, target 800) with
@@ -175,9 +176,11 @@ describe('points formula', () => {
     });
 
     it('adds a speed bonus for finishing under par days', () => {
-        // care par is 18 days; day 8 finish: 20 * 10 = 200 bonus
-        const fast = calculatePoints('contained', winStats({ daysUsed: 8 }), LEVEL_0);
-        const slow = calculatePoints('contained', winStats({ daysUsed: 18 }), LEVEL_0);
+        // care home tuned par is 12 days; day 2 finish: 20 * 10 = 200 bonus
+        const par = parDaysFor(levelById(LEVEL_0));
+        expect(par).toBe(12);
+        const fast = calculatePoints('contained', winStats({ daysUsed: par - 10 }), LEVEL_0);
+        const slow = calculatePoints('contained', winStats({ daysUsed: par }), LEVEL_0);
         expect(fast - slow).toBe(200);
     });
 
@@ -212,8 +215,8 @@ describe('points-to-stars', () => {
     });
 
     it('awards 3 stars at 160% of target', () => {
-        // 0 dead, 40 recovered, day 8 of 18: 1000 + 80 + 200 = 1280
-        expect(calculateStars('contained', winStats({ totalDead: 0, totalRecovered: 40, daysUsed: 8 }), LEVEL_0)).toBe(3);
+        // 0 dead, 40 recovered, day 2 of par 12: 1000 + 80 + 200 = 1280
+        expect(calculateStars('contained', winStats({ totalDead: 0, totalRecovered: 40, daysUsed: 2 }), LEVEL_0)).toBe(3);
     });
 
     it('awards 0 stars for a messy win below target', () => {

@@ -16,13 +16,18 @@ import { isPowerUp, usePowerUp, getCharges } from './economy.js';
 import { mountShop, renderShop } from './ui/shop.js';
 import { generateNetwork } from './sim/network.js';
 import { initGameState } from './sim/state.js';
+import { checkGameOver as resolveGameOver, canUseTool, canAdvanceDay } from './sim/engine.js';
 import {
-    simulateSpread,
-    updateOutcomes,
-    checkGameOver as resolveGameOver,
-    canUseTool,
-    canAdvanceDay,
-} from './sim/engine.js';
+    applyNodeTool,
+    severLink,
+    advanceDay,
+    allActionsSpent,
+    actionsRemaining,
+    caseCapFor,
+    effectiveR,
+} from './sim/actions.js';
+import { levelRules } from './config/level-rules.js';
+import { createAutoAdvance } from './ui/auto-advance.js';
 import { showScreen as renderScreen } from './ui/screens.js';
 import { NetworkView } from './ui/network-view-3d.js';
 import {
@@ -44,6 +49,9 @@ import { AudioEngine } from './audio.js';
 // - 'win' / 'loss': game ends contained (win) or overwhelmed/timeout (loss)
 const SPIKE_INFECTION_THRESHOLD = 8;
 const MILESTONE_THRESHOLDS = [25, 50, 75];
+// Auto-advance: once every daily action is spent the day ends on its own
+// after this delay (the player can Hold, use power-ups, or tap Next day).
+const AUTO_ADVANCE_MS = 3000;
 
 export class EpidemicSimulator {
     constructor() {
@@ -65,6 +73,14 @@ export class EpidemicSimulator {
 
         this.audio = new AudioEngine(() => this.currentScreen);
         this.view = new NetworkView();
+        this.activeDifficulty = null; // level difficulty with tuning applied
+        this.lastR = null;
+        this.autoAdvance = createAutoAdvance({
+            delayMs: AUTO_ADVANCE_MS,
+            onTick: (left, progress) => this.renderCountdown(left, progress),
+            onFire: () => this.nextDay(),
+            onStop: () => this.renderCountdown(null),
+        });
 
         this.init();
     }
@@ -108,6 +124,7 @@ export class EpidemicSimulator {
         document.getElementById('back-to-menu').addEventListener('click', () => this.showScreen('menu'));
         document.getElementById('start-simulation').addEventListener('click', () => this.startGame());
         document.getElementById('next-day').addEventListener('click', () => this.nextDay());
+        document.getElementById('hold-advance').addEventListener('click', () => this.autoAdvance.hold());
         document.getElementById('pause-game').addEventListener('click', () => this.togglePause());
         // Onboarding re-entry: reopen the How to play overlay on demand.
         // Lazy import keeps it out of the initial bundle path.
@@ -136,6 +153,12 @@ export class EpidemicSimulator {
         });
     }
 
+    // The rules in force: the level's tuned difficulty when a level is
+    // selected, otherwise the shared difficulty config.
+    get difficulty() {
+        return this.activeDifficulty || this.difficulties[this.selectedDifficulty];
+    }
+
     showScreen(screenName) {
         renderScreen(screenName);
         this.currentScreen = screenName;
@@ -154,7 +177,11 @@ export class EpidemicSimulator {
         const level = levelById(levelId);
         if (!level) return;
         this.currentLevel = level;
-        this.currentScenario = this.scenarios[level.scenarioId];
+        // Level tuning (starting cases, spread, case cap, daily caps) is
+        // applied on top of the shared scenario and difficulty configs.
+        const rules = levelRules(level);
+        this.currentScenario = rules.scenario;
+        this.activeDifficulty = rules.difficulty;
         this.selectedDifficulty = level.difficultyId;
         // Briefing shows the mission name; the disease profile still comes
         // from the underlying scenario.
@@ -169,8 +196,11 @@ export class EpidemicSimulator {
         // keeps the math fair at any size.
         const [popMin, popMax] = this.currentScenario.populationRange;
         const population = popMin + Math.floor(Math.random() * (popMax - popMin + 1));
+        this.autoAdvance.cancel();
+        this.lastR = null;
         this.gameState = initGameState(this.tools, population);
         this.createNetwork();
+        this.selectedTool = null;
         this.view.setup({
             onNodeClick: (event, node) => this.handleNodeClick(event, node),
             onLinkClick: (event, link) => this.handleLinkClick(event, link),
@@ -207,7 +237,7 @@ export class EpidemicSimulator {
             this.gameState,
             this.tools,
             this.selectedTool,
-            this.difficulties[this.selectedDifficulty],
+            this.difficulty,
             node
         );
         if (!allowed) {
@@ -223,7 +253,7 @@ export class EpidemicSimulator {
             this.gameState,
             this.tools,
             'severLink',
-            this.difficulties[this.selectedDifficulty]
+            this.difficulty
         );
         if (!allowed) {
             showNotification(reason, 'error');
@@ -233,24 +263,13 @@ export class EpidemicSimulator {
     }
 
     applyToolToNode(toolId, node) {
-        this.gameState.dailyUsage[toolId]++;
-        if (this.tools[toolId].oncePerPerson) this.gameState.usedOnPeople.add(`${toolId}-${node.id}`);
-
         let logMessage = '';
         if (toolId === 'vaccinate' || toolId === 'quarantine') {
-            // Protected nodes stay visible: re-state the node instead of
-            // removing it. The network view renders node.state to its CSS
-            // class, so .node.vaccinated / .node.quarantined styling applies.
-            // Quarantining a sick node is isolation, not a cure: it keeps the
-            // flag so the sim keeps ticking its illness and counts it active.
+            // Shared pure action (src/sim/actions.js): the balance bot runs
+            // the same code. Quarantining a sick node is isolation, not a
+            // cure; it keeps ticking and counts as active until it resolves.
             const prevProtected = this.gameState.stats.totalProtected;
-            if (toolId === 'vaccinate') {
-                node.state = 'vaccinated';
-            } else {
-                node.sickWhileQuarantined = node.state === 'infected';
-                node.state = 'quarantined';
-            }
-            this.gameState.stats.totalProtected++;
+            applyNodeTool(this.gameState, this.tools, toolId, node);
             logMessage =
                 toolId === 'vaccinate'
                     ? `Person ${node.id} has been vaccinated.`
@@ -265,24 +284,51 @@ export class EpidemicSimulator {
 
         this.audio.playSound(800, 0.2, 'sine');
 
-        showNotification(logMessage, 'success');
         addLogEntry(this.gameState.day, logMessage);
         this.updateUI();
         this.view.update(this.network.nodes, this.network.links);
+        this.afterAction();
     }
 
     applyToolToLink(linkToRemove) {
-        this.gameState.dailyUsage.severLink++;
-        this.gameState.stats.linksSevered++;
-
-        this.network.links = this.network.links.filter((l) => l !== linkToRemove);
+        // Snip effect first, while both ends still exist in the view.
+        this.view.animateSever?.(linkToRemove);
+        severLink(this.gameState, this.network, linkToRemove);
 
         const logMessage = `Connection between ${linkToRemove.source.id} and ${linkToRemove.target.id} severed.`;
-        showNotification(logMessage, 'success');
         addLogEntry(this.gameState.day, logMessage);
-        this.audio.playSound(400, 0.15, 'sawtooth');
+        if (this.audio.playSnip) this.audio.playSnip();
+        else this.audio.playSound(400, 0.15, 'sawtooth');
+        // Haptic tick on phones (Capacitor Haptics replaces this natively).
+        if (navigator.vibrate) navigator.vibrate(18);
         this.updateUI();
         this.view.update(this.network.nodes, this.network.links);
+        this.afterAction();
+    }
+
+    // After every action: when no daily actions are left, start the
+    // auto-advance countdown. Power-ups and Next day stay available.
+    afterAction() {
+        if (!this.gameState || this.gameState.gameOver || this.gameState.paused) return;
+        if (allActionsSpent(this.gameState, this.tools, this.difficulty)) this.autoAdvance.start();
+    }
+
+    // Countdown display on the Next day button; null clears it.
+    renderCountdown(leftMs, progress = 0) {
+        const btn = document.getElementById('next-day');
+        const hold = document.getElementById('hold-advance');
+        if (!btn) return;
+        if (leftMs == null) {
+            btn.classList.remove('counting');
+            btn.style.removeProperty('--progress');
+            btn.textContent = 'Next day';
+            if (hold) hold.hidden = true;
+            return;
+        }
+        btn.classList.add('counting');
+        btn.style.setProperty('--progress', String(progress));
+        btn.textContent = `Next day in ${Math.ceil(leftMs / 1000)}`;
+        if (hold) hold.hidden = false;
     }
 
     nextDay() {
@@ -291,12 +337,16 @@ export class EpidemicSimulator {
             showNotification('The game is paused. Resume to advance the day.', 'info');
             return;
         }
-        this.gameState.day++;
-        Object.keys(this.gameState.dailyUsage).forEach((tool) => (this.gameState.dailyUsage[tool] = 0));
-
-        const transmissionRate =
-            this.currentScenario.baseTransmissionRate * this.difficulties[this.selectedDifficulty].transmissionMultiplier;
-        const { events, count } = simulateSpread(this.gameState, this.network, transmissionRate);
+        this.autoAdvance.cancel();
+        const difficulty = this.difficulty;
+        const { spread, outcomes, result, activeBefore } = advanceDay(this.gameState, this.network, {
+            scenario: this.currentScenario,
+            difficulty,
+        });
+        const { events, count } = spread;
+        // Smooth day-to-day noise: blend today's R with yesterday's.
+        const rToday = effectiveR(count, activeBefore, difficulty.recoveryTime);
+        this.lastR = rToday == null ? this.lastR : this.lastR == null ? rToday : 0.5 * rToday + 0.5 * this.lastR;
         for (const { source, target } of events) {
             this.view.animateVirus(source, target);
             this.audio.playSound(150, 0.2, 'triangle');
@@ -307,8 +357,6 @@ export class EpidemicSimulator {
             this.audio.playStinger?.('spike');
         }
 
-        const difficulty = this.difficulties[this.selectedDifficulty];
-        const outcomes = updateOutcomes(this.gameState, this.network, difficulty.recoveryTime, difficulty.fatalityRate);
         for (const { node, outcome } of outcomes) {
             addLogEntry(
                 this.gameState.day,
@@ -319,7 +367,7 @@ export class EpidemicSimulator {
             this.view.update(this.network.nodes, this.network.links);
         }
 
-        this.checkGameOver();
+        if (result) this.finishGame(result);
 
         this.audio.playSound(600, 0.1, 'sine');
         addLogEntry(this.gameState.day, `Day ${this.gameState.day} begins.`, true);
@@ -329,18 +377,28 @@ export class EpidemicSimulator {
         this.audio.updateMood?.(this.gameState.stats);
     }
 
+    // Mid-day check (power-ups can end the outbreak outright).
     checkGameOver() {
-        const result = resolveGameOver(this.gameState, this.network, this.currentScenario.duration);
-        if (result) {
-            this.gameState.gameOver = true;
-            this.gameState.outcome = result;
-            this.audio.playSound(261, 1.0, 'sine');
-            // Music hook: 'win' for contained, 'loss' for everything else
-            // (overwhelmed, timeout, burnout: none of them are victories).
-            this.audio.playStinger?.(result === 'contained' ? 'win' : 'loss');
-            this.audio.stopGameMusic?.();
-            setTimeout(() => this.showGameOver(), 1000);
-        }
+        const result = resolveGameOver(
+            this.gameState,
+            this.network,
+            this.currentScenario.duration,
+            caseCapFor(this.gameState, this.currentScenario)
+        );
+        if (result) this.finishGame(result);
+    }
+
+    finishGame(result) {
+        if (this.gameState.gameOver) return;
+        this.autoAdvance.cancel();
+        this.gameState.gameOver = true;
+        this.gameState.outcome = result;
+        this.audio.playSound(261, 1.0, 'sine');
+        // Music hook: 'win' for contained, 'loss' for everything else
+        // (overwhelmed, timeout, burnout: none of them are victories).
+        this.audio.playStinger?.(result === 'contained' ? 'win' : 'loss');
+        this.audio.stopGameMusic?.();
+        setTimeout(() => this.showGameOver(), 1000);
     }
 
     showGameOver() {
@@ -370,6 +428,7 @@ export class EpidemicSimulator {
 
     selectTool(toolId) {
         this.selectedTool = this.selectedTool === toolId ? null : toolId;
+        this.view.setToolMode?.(this.selectedTool);
         document.querySelectorAll('.tool-item').forEach((item) => {
             item.classList.toggle('selected', item.dataset.tool === this.selectedTool);
         });
@@ -420,7 +479,7 @@ export class EpidemicSimulator {
     }
 
     updateUI() {
-        const difficulty = this.difficulties[this.selectedDifficulty];
+        const difficulty = this.difficulty;
         renderHeader({
             scenarioName: this.currentLevel ? this.currentLevel.name : this.currentScenario.name,
             difficultyName: difficulty.name,
@@ -430,6 +489,10 @@ export class EpidemicSimulator {
             protected: this.gameState.stats.totalProtected,
             population: this.network.nodes.length,
             paused: this.gameState.paused,
+            cases: this.gameState.stats.totalInfected,
+            caseCap: caseCapFor(this.gameState, this.currentScenario),
+            r: this.lastR,
+            actionsLeft: actionsRemaining(this.gameState, this.tools, this.difficulty),
         });
         renderTools(this.tools, difficulty, this.gameState.day, this.gameState.dailyUsage);
         this.renderPowerUpCharges();
@@ -446,6 +509,8 @@ export class EpidemicSimulator {
         // D3 side: NetworkView exposes its force simulation through
         // setPaused(), which calls .stop() / .restart() internally.
         this.view.setPaused(this.gameState.paused);
+        if (this.gameState.paused) this.autoAdvance.cancel();
+        else this.afterAction();
         this.updateUI();
     }
 }

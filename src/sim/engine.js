@@ -92,7 +92,11 @@ export const OVERWHELMED_DEATH_FLOOR = 5;
 // Passivity rule: if the virus dies out with zero player intervention
 // (no vaccinations, quarantines, or severed links), the verdict is
 // 'burnout', not 'contained'. Doing nothing is not a victory.
-export function checkGameOver(state, network, durationDays) {
+// Case cap (optional 4th arg): when total cases reach `caseCap` the outbreak
+// is out of control and the verdict is 'overwhelmed'. Without it, a fast
+// epidemic that infected nearly everyone and then burned out would score
+// as a containment win. Callers pass Infinity (the default) to disable it.
+export function checkGameOver(state, network, durationDays, caseCap = Infinity) {
     const activeInfected = network.nodes.filter(
         (n) => n.state === 'infected' || (n.state === 'quarantined' && n.sickWhileQuarantined)
     ).length;
@@ -103,6 +107,7 @@ export function checkGameOver(state, network, durationDays) {
     const initial = state.stats.initialPopulation;
     const deathLine = Math.max(initial * OVERWHELMED_DEATH_FRACTION, OVERWHELMED_DEATH_FLOOR);
     if (initial > 0 && state.stats.totalDead >= deathLine) return 'overwhelmed';
+    if (state.stats.totalInfected >= caseCap) return 'overwhelmed';
     if (state.day >= durationDays) return 'timeout';
     return null;
 }
@@ -113,8 +118,12 @@ export function canAdvanceDay(state) {
     return !state.gameOver && !state.paused;
 }
 
-// Daily usage cap for a tool under a difficulty: floor(base * multiplier).
-export function toolDailyLimit(tool, difficulty) {
+// Daily usage cap for a tool under a difficulty. A level can pin exact caps
+// through difficulty.dailyLimits[toolId] (see src/config/level-rules.js);
+// otherwise the cap is floor(base * multiplier).
+export function toolDailyLimit(tool, difficulty, toolId = null) {
+    const pinned = toolId && difficulty.dailyLimits ? difficulty.dailyLimits[toolId] : undefined;
+    if (pinned != null) return pinned;
     return Math.floor(tool.baseDailyLimit * difficulty.toolLimitMultiplier);
 }
 
@@ -122,7 +131,7 @@ export function toolDailyLimit(tool, difficulty) {
 // Returns { allowed: true } or { allowed: false, reason }.
 export function canUseTool(state, tools, toolId, difficulty, target = null) {
     const tool = tools[toolId];
-    const limit = toolDailyLimit(tool, difficulty);
+    const limit = toolDailyLimit(tool, difficulty, toolId);
 
     if (state.day < tool.availableDay) {
         return { allowed: false, reason: `${tool.name} available on Day ${tool.availableDay}.` };
