@@ -47,8 +47,11 @@ export const LEVELS = [
         difficultyId: 'easy',
         blurb: 'A nursing home reports respiratory symptoms. Protect the vulnerable.',
         target: 800, // per-capita score target: 1 star >= 800, 2 stars >= 1040, 3 stars >= 1280
-        // Tuned by scripts/tune.mjs (smart bot win 89%, random bot 18%).
-        tuning: { initialInfected: 2, transmissionMultiplier: 1.2, caseCapFraction: 0.45, parDays: 12, dailyLimits: { vaccinate: 3, quarantine: 2, severLink: 2 } },
+        // Tuned by scripts/tune.mjs (smart bot win 89%, random bot 18%), then
+        // eased by hand in round 6 (spread 1.2 to 1.1): the beginner bot now
+        // wins about 67% instead of 58%, smart 90%, random 25%. The first
+        // level is where new players learn the tools.
+        tuning: { initialInfected: 2, transmissionMultiplier: 1.1, caseCapFraction: 0.45, parDays: 12, dailyLimits: { vaccinate: 3, quarantine: 2, severLink: 2 } },
     },
     {
         id: 'r1-elementary',
