@@ -13,7 +13,7 @@
 //   smart   - a reasonable player: isolate the sick, cut their links to
 //             healthy people, vaccinate the people next in line, then the
 //             best-connected healthy people. Not optimal, just sensible.
-import { levelRules } from '../config/level-rules.js';
+import { rollLevelRules } from '../config/difficulty-roll.js';
 import { tools } from '../config/tools.js';
 import { LEVELS } from '../config/levels.js';
 import { generateNetwork } from './network.js';
@@ -35,7 +35,8 @@ export function mulberry32(seed) {
 
 // Build a level exactly the way game.js does, but with an injected rng.
 export function buildRun(level, rng) {
-    const { scenario, difficulty } = levelRules(level);
+    // Same per-play roll as the game: no picker, threat rises toward each prize box.
+    const { scenario, difficulty } = rollLevelRules(level, rng);
     const [lo, hi] = scenario.populationRange;
     const population = lo + Math.floor(rng() * (hi - lo + 1));
     const state = initGameState(tools, population);
