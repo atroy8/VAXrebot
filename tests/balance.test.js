@@ -20,6 +20,9 @@ describe('difficulty ramp', () => {
     it('a sensible player usually wins the first level', () => {
         expect(s1.winRate).toBeGreaterThanOrEqual(0.75);
     });
+    it('a new player who just does the obvious things usually wins the first level', () => {
+        expect(summarize(first, 'beginner', RUNS, 11).winRate).toBeGreaterThanOrEqual(0.6);
+    });
     it('the final level is a real challenge but winnable', () => {
         expect(s9.winRate).toBeGreaterThanOrEqual(0.25);
         expect(s9.winRate).toBeLessThanOrEqual(0.7);
