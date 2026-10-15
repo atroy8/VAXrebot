@@ -37,6 +37,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { fitCamera } from './game-screen-model.js';
 import { pickTapTarget } from './tap-target.js';
 import { layoutStep as forceStep, settleLayout, nextAlpha, LAYOUT } from './force-layout.js';
+import { isBoxed } from './care-box-model.js';
 
 // Bundle every face frame at build time so the game works fully offline.
 // Map ends up as: textures[state][frame] -> THREE.Texture
@@ -170,8 +171,9 @@ export class NetworkView {
         this.lastTime = 0;
     }
 
-    setup({ onNodeClick, onLinkClick }) {
+    setup({ onNodeClick, onLinkClick, onBoxed = null }) {
         this.onNodeClick = onNodeClick;
+        this.onBoxed = onBoxed;
         this.onLinkClick = onLinkClick;
         this.teardown();
 
@@ -346,6 +348,8 @@ export class NetworkView {
             sunflowerDisc(nodes.length, 3 + Math.sqrt(nodes.length) * 1.2, starts);
         }
         let i = 0;
+        const leaving = [];
+        let boxChanged = false;
         for (const node of nodes) {
             seen.add(node.id);
             let obj = this.nodeObjs.get(node.id);
@@ -369,7 +373,19 @@ export class NetworkView {
                 }
                 obj.prevState = node.state;
             }
+
+            // Isolated, in treatment or cured: the person leaves the network
+            // and flies to the care box on the right (game.js animates it).
+            const boxed = isBoxed(node);
+            if (obj.boxed !== boxed) {
+                const wasShown = obj.boxed === false;
+                obj.boxed = boxed;
+                obj.group.visible = !boxed;
+                if (boxed && wasShown && !isInitial) leaving.push({ node, from: this.screenPoint(obj.pos) });
+                if (!isInitial) boxChanged = true;
+            }
         }
+        if (leaving.length && this.onBoxed) this.onBoxed(leaving);
         // Remove nodes that left the network.
         for (const [id, obj] of this.nodeObjs) {
             if (!seen.has(id)) {
@@ -409,16 +425,20 @@ export class NetworkView {
         const linkKey = this.links.length;
         if (countChanged || isInitial) {
             this.controls.target.set(0, 0, 0);
-            settleLayout([...this.nodeObjs.values()], this.layoutPairs(), { maxSteps: WARMUP_STEPS });
+            settleLayout(this.layoutObjs(), this.layoutPairs(), { maxSteps: WARMUP_STEPS });
             this.alpha = 0;
             for (const o of this.nodeObjs.values()) o.vel.set(0, 0, 0);
             this.frameNetwork();
             this.autoFit = true;
             this.physicsSettled = true;
         } else if (linkKey !== this.lastLinkKey) {
-            // A link was severed: let the network relax gently. Vaccinate and
-            // quarantine change no links, so the people you are tapping stay put.
+            // A link was severed: let the network relax gently. Vaccinate
+            // changes no links, so the people you are tapping stay put.
             this.alpha = Math.max(this.alpha || 0, LAYOUT.reheatAlpha);
+            this.physicsSettled = false;
+        } else if (boxChanged) {
+            // Someone left for the care box: close the gap very gently.
+            this.alpha = Math.max(this.alpha || 0, LAYOUT.reheatAlpha * 0.5);
             this.physicsSettled = false;
         }
         this.lastLinkKey = linkKey;
@@ -481,7 +501,8 @@ export class NetworkView {
             const pa = a ? a.pos : _tmp.set(0, 0, 0);
             const pb = b ? b.pos : _tmp2.set(0, 0, 0);
             const kind = this.linkKind(link);
-            const w = (severing ? LINK_W_SEVER : kind === 'risk' ? LINK_W_RISK : LINK_W) / 2;
+            const hidden = (a && a.boxed) || (b && b.boxed);
+            const w = hidden ? 0 : (severing ? LINK_W_SEVER : kind === 'risk' ? LINK_W_RISK : LINK_W) / 2;
             let dx = pb.x - pa.x;
             let dy = pb.y - pa.y;
             const len = Math.hypot(dx, dy) || 1;
@@ -501,11 +522,19 @@ export class NetworkView {
         this.linkMesh.geometry.attributes.color.needsUpdate = true;
     }
 
+    // Client (CSS pixel) position of a world point, for DOM effects.
+    screenPoint(pos) {
+        if (!this.renderer || !this.camera) return null;
+        const v = new THREE.Vector3(pos.x, pos.y, 0).project(this.camera);
+        const rect = this.renderer.domElement.getBoundingClientRect();
+        return { x: rect.left + ((v.x + 1) / 2) * rect.width, y: rect.top + ((1 - v.y) / 2) * rect.height };
+    }
+
     // Fit the whole network on screen (portrait phones included).
     // Uses the network's bounding box, so a lopsided layout is centred too.
     fitTarget() {
         const pts = [];
-        for (const o of this.nodeObjs.values()) pts.push(o.pos);
+        for (const o of this.nodeObjs.values()) if (!o.boxed) pts.push(o.pos);
         return fitCamera(pts, { fovDeg: this.camera.fov, aspect: this.camera.aspect, pad: 1.9 });
     }
 
@@ -535,19 +564,24 @@ export class NetworkView {
 
     // ---- Layout ------------------------------------------------------------
 
+    // People in the care box are out of the network and out of the layout.
+    layoutObjs() {
+        return [...this.nodeObjs.values()].filter((o) => !o.boxed);
+    }
+
     layoutPairs() {
         const pairs = [];
         for (const link of this.links) {
             const a = this.nodeObjs.get(link.source && link.source.id);
             const b = this.nodeObjs.get(link.target && link.target.id);
-            if (a && b && a !== b) pairs.push([a, b]);
+            if (a && b && a !== b && !a.boxed && !b.boxed) pairs.push([a, b]);
         }
         return pairs;
     }
 
     // One cooled step; returns the fastest node speed.
     layoutStep() {
-        const speed = forceStep([...this.nodeObjs.values()], this.layoutPairs(), this.alpha);
+        const speed = forceStep(this.layoutObjs(), this.layoutPairs(), this.alpha);
         this.alpha = nextAlpha(this.alpha);
         return speed;
     }
@@ -576,6 +610,8 @@ export class NetworkView {
 
     tick() {
         if (!this.renderer) return;
+        // Off screen (results, map): skip all work so the phone stays cool.
+        if (!this.container || !this.container.offsetParent) return;
         const now = performance.now();
 
         if (!this.paused && !this.physicsSettled) {
@@ -791,7 +827,7 @@ export class NetworkView {
         const nodes = [];
         const screenOf = new Map();
         for (const obj of this.nodeObjs.values()) {
-            if (obj.node.removed) continue;
+            if (obj.node.removed || obj.boxed) continue;
             const c = toScreen(obj.pos);
             const edge = toScreen(_tmp.copy(obj.pos).setX(obj.pos.x + NODE_RADIUS));
             screenOf.set(obj, c);

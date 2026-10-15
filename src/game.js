@@ -18,6 +18,7 @@ import {
 import { isPowerUp, usePowerUp, getCharges, getFunding } from './economy.js';
 import './ui/game-screen.css';
 import { toolHint, dayBanner } from './ui/game-screen-model.js';
+import { renderCareBox, flyToCareBox } from './ui/care-box.js';
 import { mountShop, renderShop } from './ui/shop.js';
 import { generateNetwork } from './sim/network.js';
 import { initGameState } from './sim/state.js';
@@ -31,9 +32,9 @@ import {
     caseCapFor,
     effectiveR,
 } from './sim/actions.js';
-import { levelRules } from './config/level-rules.js';
+import { rollLevelRules, threatLine } from './config/difficulty-roll.js';
 import { createAutoAdvance } from './ui/auto-advance.js';
-import { showScreen as renderScreen } from './ui/screens.js';
+import { showScreen as renderScreen, refreshGlobeHome } from './ui/screens.js';
 import { createViewLoader } from './ui/view-loader.js';
 import { lessonFor, debriefLine } from './config/lessons.js';
 import {
@@ -46,7 +47,7 @@ import {
     showDayBanner,
     renderGameOver,
 } from './ui/panels.js';
-import { populateDifficulties, fillBriefing, setFixedDifficulty, fillLessonCard } from './ui/briefing.js';
+import { fillBriefing, showThreat, fillLessonCard } from './ui/briefing.js';
 import { renderLevelSelect } from './ui/level-select.js';
 import { AudioEngine } from './audio.js';
 
@@ -105,7 +106,6 @@ export class EpidemicSimulator {
 
     init() {
         this.audio.initAudio();
-        populateDifficulties(this.difficulties);
         this.refreshLevelSelect();
         this.bindEvents();
         this.setupIntro();
@@ -147,7 +147,7 @@ export class EpidemicSimulator {
             if (card && !card.classList.contains('locked')) this.selectLevel(card.dataset.level);
         });
 
-        document.getElementById('back-to-menu').addEventListener('click', () => this.showScreen('menu'));
+        document.getElementById('back-to-menu').addEventListener('click', () => this.showScreen('welcome'));
         document.getElementById('start-simulation').addEventListener('click', () => this.startGame());
         document.getElementById('next-day').addEventListener('click', () => this.nextDay());
         document.getElementById('hold-advance').addEventListener('click', () => this.autoAdvance.hold());
@@ -189,10 +189,15 @@ export class EpidemicSimulator {
             }
         });
         // Leaving the results screen is the only place an ad may show.
-        document.getElementById('play-again').addEventListener('click', () => this.leaveResults(() => this.startGame()));
+        document.getElementById('play-again').addEventListener('click', () =>
+            this.leaveResults(() => {
+                if (this.currentLevel) this.rollThreat(); // a replay rolls a fresh threat
+                this.startGame();
+            })
+        );
         document
             .getElementById('try-different-scenario')
-            .addEventListener('click', () => this.leaveResults(() => this.showScreen('menu')));
+            .addEventListener('click', () => this.leaveResults(() => this.showScreen('welcome')));
 
         // Volume control
         document.getElementById('master-volume').addEventListener('input', (e) => {
@@ -210,6 +215,7 @@ export class EpidemicSimulator {
         renderScreen(screenName);
         this.currentScreen = screenName;
 
+        if (screenName === 'welcome') refreshGlobeHome(); // back on the candy planet
         if (screenName === 'menu') {
             this.refreshLevelSelect();
             this.audio.stopGameMusic(); // intro ambient loop yields to the menu theme
@@ -224,21 +230,26 @@ export class EpidemicSimulator {
         const level = levelById(levelId);
         if (!level) return;
         this.currentLevel = level;
-        // Level tuning (starting cases, spread, case cap, daily caps) is
-        // applied on top of the shared scenario and difficulty configs.
-        const rules = levelRules(level);
-        this.currentScenario = rules.scenario;
-        this.activeDifficulty = rules.difficulty;
         this.selectedDifficulty = level.difficultyId;
+        this.rollThreat();
         // Briefing shows the mission name; the disease profile still comes
         // from the underlying scenario.
         fillBriefing({ ...this.currentScenario, name: level.name, description: level.blurb });
-        setFixedDifficulty(level.difficultyId, this.difficulties);
+        showThreat({ pips: this.threat.pips, line: threatLine(this.threat.value), r0: this.difficulties[level.difficultyId]?.R0 });
         const lesson = lessonFor(level.id);
         fillLessonCard('briefing-lesson', lesson?.title, lesson?.brief);
         // Start fetching the network view while the player reads the briefing.
         this.viewLoader.prefetch();
         this.showScreen('briefing');
+    }
+
+    // No difficulty picker: every play rolls its own threat, rising toward
+    // the next prize box (src/config/difficulty-roll.js).
+    rollThreat() {
+        const rules = rollLevelRules(this.currentLevel);
+        this.currentScenario = rules.scenario;
+        this.activeDifficulty = rules.difficulty;
+        this.threat = { value: rules.threat, pips: rules.pips };
     }
 
     async startGame() {
@@ -272,6 +283,10 @@ export class EpidemicSimulator {
         this.view.setup({
             onNodeClick: (event, node) => this.handleNodeClick(event, node),
             onLinkClick: (event, link) => this.handleLinkClick(event, link),
+            // Isolated, in treatment or cured: faces fly to the care box.
+            onBoxed: (leaving) => {
+                flyToCareBox(leaving, { onLand: () => this.audio.playSound(1046, 0.08, 'sine') });
+            },
         });
         this.view.update(this.network.nodes, this.network.links, true);
         this.updateUI();
@@ -508,6 +523,7 @@ export class EpidemicSimulator {
             outcome,
             stats,
             difficultyId: this.selectedDifficulty,
+            threatPips: this.threat?.pips ?? null,
             stars,
             fundingEarned,
             livesSaved,
@@ -579,6 +595,7 @@ export class EpidemicSimulator {
             scenarioName: this.currentLevel ? this.currentLevel.name : this.currentScenario.name,
             difficultyName: difficulty.name,
             difficultyId: this.selectedDifficulty,
+            threatPips: this.threat?.pips ?? null,
             day: this.gameState.day,
             infected: this.network.nodes.filter((n) => n.state === 'infected').length,
             protected: this.gameState.stats.totalProtected,
@@ -589,6 +606,7 @@ export class EpidemicSimulator {
             r: this.lastR,
             actionsLeft: actionsRemaining(this.gameState, this.tools, this.difficulty),
         });
+        renderCareBox(this.network.nodes);
         renderTools(this.tools, difficulty, this.gameState.day, this.gameState.dailyUsage, {
             charges: getCharges(),
             funding: getFunding(),
