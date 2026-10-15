@@ -13,10 +13,19 @@ export function showScreen(screenName) {
 // unlocked level node calls onPlayLevel, which main.js wires to
 // game.selectLevel, so levels start through the existing briefing flow.
 let globeMounted = false;
+let globeApi = null;
 export function mountGlobeHome({ onPlayLevel } = {}) {
     const screen = document.getElementById('welcome-screen');
     if (!screen || globeMounted) return Promise.resolve();
     globeMounted = true;
     // Lazy import: keeps three.js out of the initial bundle path.
-    return import('./globe-view.js').then((m) => m.initGlobeView(screen, { onPlayLevel }));
+    return import('./globe-view.js').then((m) => {
+        globeApi = m.initGlobeView(screen, { onPlayLevel });
+        return globeApi;
+    });
+}
+
+// Re-read the save so stars, the road and prize boxes show new progress.
+export function refreshGlobeHome() {
+    globeApi?.refresh?.();
 }

@@ -64,14 +64,13 @@
                         <div><strong>Est. R₀:</strong> <span id="briefing-r0"></span></div>
                     </div>
                 </div>
-                <div class="difficulty-selection">
-                    <strong id="difficulty-label">Select Difficulty:</strong>
-                    <div class="difficulty-grid">
-                        <!-- Difficulty cards will be dynamically generated here -->
-                    </div>
+                <div class="threat-box">
+                    <strong>Threat</strong>
+                    <div class="threat-meter" id="threat-meter" role="img" aria-label="Threat"></div>
+                    <p class="threat-line" id="threat-line"></p>
                 </div>
                 <div class="briefing-actions">
-                    <button class="btn btn--secondary" id="back-to-menu">Back to Levels</button>
+                    <button class="btn btn--secondary" id="back-to-menu">Back to map</button>
                     <button class="btn btn--primary" id="start-simulation">Begin Containment</button>
                 </div>
             </div>
@@ -129,10 +128,13 @@
                     </div>
                 </div>
 
-                <div class="panel network-container">
-                    <svg id="network-svg"></svg>
-                    <div class="tool-hint" id="tool-hint" aria-live="polite" hidden></div>
-                    <div class="day-banner" id="day-banner" aria-live="polite" hidden></div>
+                <div class="play-area">
+                    <div class="panel network-container">
+                        <svg id="network-svg"></svg>
+                        <div class="tool-hint" id="tool-hint" aria-live="polite" hidden></div>
+                        <div class="day-banner" id="day-banner" aria-live="polite" hidden></div>
+                    </div>
+                    <aside class="care-box" id="care-box" aria-label="People out of the network"></aside>
                 </div>
 
                 <div class="panel tools-panel" id="tool-tray">
@@ -203,7 +205,7 @@
                     </div>
                     <div class="game-over-actions">
                         <button class="btn btn--secondary" id="play-again">Replay Level</button>
-                        <button class="btn btn--primary" id="try-different-scenario">Choose Level</button>
+                        <button class="btn btn--primary" id="try-different-scenario">Back to map</button>
                     </div>
                 </div>
         </div>

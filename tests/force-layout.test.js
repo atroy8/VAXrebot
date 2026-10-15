@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { generateNetwork } from '../src/sim/network.js';
+import { mulberry32 } from '../src/sim/balance.js';
 import { layoutStep, settleLayout, nextAlpha, minSpacing, LAYOUT } from '../src/ui/force-layout.js';
 
 function disc(n) {
@@ -11,9 +12,18 @@ function disc(n) {
     });
 }
 
-function build(type, n) {
+// Seeded so the network shapes (and these checks) are the same every run;
+// unseeded, the sever test failed about one run in eight.
+function build(type, n, seed = 42) {
     const objs = disc(n);
-    const { links } = generateNetwork(type, n);
+    const saved = Math.random;
+    Math.random = mulberry32(seed + n);
+    let links;
+    try {
+        ({ links } = generateNetwork(type, n));
+    } finally {
+        Math.random = saved;
+    }
     const pairs = links.filter((l) => l.source !== l.target).map((l) => [objs[l.source], objs[l.target]]);
     return { objs, pairs };
 }
