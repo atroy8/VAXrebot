@@ -35,6 +35,8 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { fitCamera } from './game-screen-model.js';
+import { pickTapTarget } from './tap-target.js';
+import { layoutStep as forceStep, settleLayout, nextAlpha, LAYOUT } from './force-layout.js';
 
 // Bundle every face frame at build time so the game works fully offline.
 // Map ends up as: textures[state][frame] -> THREE.Texture
@@ -69,8 +71,6 @@ const STATE_COLORS = {
 
 const NODE_RADIUS = 0.55;
 const FACE_SCALE = 1.15;
-// Link tap tolerance in world units.
-const LINK_TAP_TOLERANCE = 0.55;
 // Link ribbon widths (world units).
 const LINK_W = 0.09;
 const LINK_W_RISK = 0.15;
@@ -82,19 +82,12 @@ const LINK_COLORS = {
     sever: new THREE.Color(0xffb03a),
 };
 
-// Physics tuning (world units, per-frame integration).
-const REST_LENGTH = 3.0;
-const SPRING_K = 0.08;
-const REPEL_DIST = 3.0;
-const REPEL_K = 1.6;
-const GRAVITY = 0.015;
-const DAMPING = 0.85;
-const MAX_SPEED = 1.5;
-const WARMUP_STEPS = 160;
+// Physics lives in force-layout.js (stable, cools to rest).
+const WARMUP_STEPS = 400;
 
 const _tmp = new THREE.Vector3();
 const _tmp2 = new THREE.Vector3();
-const _ray = new THREE.Ray();
+const _proj = new THREE.Vector3();
 
 const sphereGeometry = new THREE.SphereGeometry(NODE_RADIUS, 14, 10);
 const sphereMaterials = {};
@@ -172,7 +165,8 @@ export class NetworkView {
         this.shakeUntil = 0;
         this.paused = false;
         this.physicsSettled = true;
-        this.settleCalmFrames = 0;
+        this.alpha = 0;
+        this.lastLinkKey = -1;
         this.lastTime = 0;
     }
 
@@ -412,14 +406,22 @@ export class NetworkView {
         this.rebuildLinks();
 
         // Frame the network and (re)run the layout when the population changes.
+        const linkKey = this.links.length;
         if (countChanged || isInitial) {
             this.controls.target.set(0, 0, 0);
-            for (let s = 0; s < WARMUP_STEPS; s++) this.layoutStep();
+            settleLayout([...this.nodeObjs.values()], this.layoutPairs(), { maxSteps: WARMUP_STEPS });
+            this.alpha = 0;
+            for (const o of this.nodeObjs.values()) o.vel.set(0, 0, 0);
             this.frameNetwork();
             this.autoFit = true;
+            this.physicsSettled = true;
+        } else if (linkKey !== this.lastLinkKey) {
+            // A link was severed: let the network relax gently. Vaccinate and
+            // quarantine change no links, so the people you are tapping stay put.
+            this.alpha = Math.max(this.alpha || 0, LAYOUT.reheatAlpha);
+            this.physicsSettled = false;
         }
-        this.physicsSettled = false;
-        this.settleCalmFrames = 0;
+        this.lastLinkKey = linkKey;
     }
 
     // Links are flat ribbons (two triangles each) in one mesh, so width and
@@ -533,49 +535,21 @@ export class NetworkView {
 
     // ---- Layout ------------------------------------------------------------
 
-    layoutStep() {
-        const objs = [...this.nodeObjs.values()];
-        const n = objs.length;
-        // Pairwise repulsion (n <= 60, so O(n^2) is trivial).
-        for (let i = 0; i < n; i++) {
-            const a = objs[i];
-            for (let j = i + 1; j < n; j++) {
-                const b = objs[j];
-                _tmp.subVectors(a.pos, b.pos);
-                const d2 = _tmp.lengthSq();
-                if (d2 < REPEL_DIST * REPEL_DIST && d2 > 1e-6) {
-                    const d = Math.sqrt(d2);
-                    _tmp.multiplyScalar(((REPEL_DIST - d) * REPEL_K) / d);
-                    a.vel.add(_tmp);
-                    b.vel.sub(_tmp);
-                }
-            }
-        }
-        // Link springs.
+    layoutPairs() {
+        const pairs = [];
         for (const link of this.links) {
             const a = this.nodeObjs.get(link.source && link.source.id);
             const b = this.nodeObjs.get(link.target && link.target.id);
-            if (!a || !b) continue;
-            _tmp.subVectors(b.pos, a.pos);
-            const d = _tmp.length() || 0.001;
-            _tmp.multiplyScalar(((d - REST_LENGTH) * SPRING_K) / d);
-            a.vel.add(_tmp);
-            b.vel.sub(_tmp);
+            if (a && b && a !== b) pairs.push([a, b]);
         }
-        // Integrate with centering gravity and damping.
-        let maxSpeed = 0;
-        for (const o of objs) {
-            o.vel.addScaledVector(o.pos, -GRAVITY);
-            o.vel.z = 0; // flat network: everything stays on the z = 0 plane
-            o.pos.z = 0;
-            const sp = o.vel.length();
-            if (sp > MAX_SPEED) o.vel.multiplyScalar(MAX_SPEED / sp);
-            o.vel.multiplyScalar(DAMPING);
-            o.pos.add(o.vel);
-            if (o.pos.length() > 15) o.pos.setLength(15);
-            if (sp > maxSpeed) maxSpeed = sp;
-        }
-        return maxSpeed;
+        return pairs;
+    }
+
+    // One cooled step; returns the fastest node speed.
+    layoutStep() {
+        const speed = forceStep([...this.nodeObjs.values()], this.layoutPairs(), this.alpha);
+        this.alpha = nextAlpha(this.alpha);
+        return speed;
     }
 
     // ---- Per-frame ----------------------------------------------------------
@@ -606,12 +580,8 @@ export class NetworkView {
 
         if (!this.paused && !this.physicsSettled) {
             const maxSpeed = this.layoutStep();
-            if (maxSpeed < 0.01) {
-                this.settleCalmFrames++;
-                if (this.settleCalmFrames > 30) this.physicsSettled = true;
-            } else {
-                this.settleCalmFrames = 0;
-            }
+            // Cooled (alpha 0) and still: stop stepping until the next reheat.
+            if (this.alpha === 0 && maxSpeed < 0.002) this.physicsSettled = true;
         }
 
         // Camera-facing direction, reused to float each face sprite just off
@@ -780,14 +750,13 @@ export class NetworkView {
         b.vel.add(away);
         a.vel.sub(away);
         this.physicsSettled = false;
-        this.settleCalmFrames = 0;
+        this.alpha = Math.max(this.alpha || 0, LAYOUT.reheatAlpha);
         this.shakeUntil = start + 140;
     }
 
     // ---- Tool hookup: tap to select / apply ---------------------------------
 
     bindTap(canvas) {
-        const ndc = new THREE.Vector2();
         let downX = 0, downY = 0, downT = 0;
 
         const down = new Set();
@@ -807,45 +776,45 @@ export class NetworkView {
             down.delete(e.pointerId);
             const moved = Math.hypot(e.clientX - downX, e.clientY - downY);
             if (moved > 10 || performance.now() - downT > 600) return; // it was a drag
-            this.handleTap(e, ndc);
+            this.handleTap(e);
         });
     }
 
-    handleTap(event, ndc) {
+    // Screen-space, tool-aware picking (see tap-target.js): Sever snaps to
+    // the nearest link, person tools snap to the nearest person.
+    handleTap(event) {
         const rect = this.renderer.domElement.getBoundingClientRect();
-        ndc.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-        ndc.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-
-        const raycaster = new THREE.Raycaster();
-        raycaster.setFromCamera(ndc, this.camera);
-
-        // Nodes first (same priority as the D3 view's circle hit targets).
-        const hits = raycaster.intersectObjects(this.nodePickMeshes, false);
-        if (hits.length > 0) {
-            const obj = this.nodeObjs.get(hits[0].object.userData.nodeId);
-            if (obj && this.onNodeClick) this.onNodeClick(event, obj.node);
-            return;
+        const toScreen = (v) => {
+            _proj.copy(v).project(this.camera);
+            return { x: rect.left + (_proj.x * 0.5 + 0.5) * rect.width, y: rect.top + (-_proj.y * 0.5 + 0.5) * rect.height };
+        };
+        const nodes = [];
+        const screenOf = new Map();
+        for (const obj of this.nodeObjs.values()) {
+            if (obj.node.removed) continue;
+            const c = toScreen(obj.pos);
+            const edge = toScreen(_tmp.copy(obj.pos).setX(obj.pos.x + NODE_RADIUS));
+            screenOf.set(obj, c);
+            nodes.push({ x: c.x, y: c.y, r: Math.abs(edge.x - c.x), node: obj.node });
         }
-
-        // Then links, for the sever tool: manual ray-to-segment test keeps
-        // this independent of Line raycast internals.
-        _ray.copy(raycaster.ray);
-        let best = null;
-        let bestDist = Infinity;
-        for (const link of this.links) {
-            const a = this.nodeObjs.get(link.source && link.source.id);
-            const b = this.nodeObjs.get(link.target && link.target.id);
-            if (!a || !b) continue;
-            const distSq = _ray.distanceSqToSegment(a.pos, b.pos, null, _tmp);
-            if (distSq < LINK_TAP_TOLERANCE * LINK_TAP_TOLERANCE) {
-                const along = _tmp.distanceToSquared(_ray.origin);
-                if (along < bestDist) {
-                    bestDist = along;
-                    best = link;
-                }
+        const links = [];
+        const tool = this.toolMode;
+        if (!tool || tool === 'severLink') {
+            for (const link of this.links) {
+                const a = this.nodeObjs.get(link.source && link.source.id);
+                const b = this.nodeObjs.get(link.target && link.target.id);
+                const sa = a && screenOf.get(a);
+                const sb = b && screenOf.get(b);
+                if (!sa || !sb) continue;
+                const kind = this.linkKind(link);
+                links.push({ ax: sa.x, ay: sa.y, bx: sb.x, by: sb.y, link, atRisk: kind === 'risk' || kind === 'sever' });
             }
         }
-        if (best && this.onLinkClick) this.onLinkClick(event, best);
+        const mode = tool === 'severLink' ? 'link' : tool ? 'node' : null;
+        const hit = pickTapTarget({ x: event.clientX, y: event.clientY, mode, nodes, links });
+        if (!hit) return;
+        if (hit.kind === 'node' && this.onNodeClick) this.onNodeClick(event, hit.node.node);
+        else if (hit.kind === 'link' && this.onLinkClick) this.onLinkClick(event, hit.link.link);
     }
 
     // ---- Same supporting API as the D3 view ----------------------------------
@@ -865,9 +834,6 @@ export class NetworkView {
         // Pause halts the force layout only; face animations and rendering
         // keep running so the network stays alive while the sim is paused.
         this.paused = paused;
-        if (!paused) {
-            this.physicsSettled = false;
-            this.settleCalmFrames = 0;
-        }
+        if (!paused) this.physicsSettled = false;
     }
 }
