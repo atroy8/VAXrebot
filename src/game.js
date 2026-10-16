@@ -8,6 +8,9 @@ import { createStorage, loadSave, writeSave, resetSave } from './save.js';
 import { createMonetization } from './monetization/monetization.js';
 import { createWebAdProvider } from './monetization/ad-provider-web.js';
 import { pickAdProvider } from './monetization/ad-provider-admob.js';
+import { careBonus, newlyUnlockedChests } from './rewards.js';
+import { playResultsTally } from './ui/results-tally.js';
+import { CHESTS } from './config/chests.js';
 import { mountSettings } from './ui/settings.js';
 import {
     isLevelUnlocked,
@@ -23,7 +26,7 @@ import { renderCareBox, flyToCareBox } from './ui/care-box.js';
 import { mountShop, renderShop } from './ui/shop.js';
 import { generateNetwork } from './sim/network.js';
 import { initGameState } from './sim/state.js';
-import { checkGameOver as resolveGameOver, canUseTool, canAdvanceDay } from './sim/engine.js';
+import { checkGameOver as resolveGameOver, canUseTool, canAdvanceDay, spreadIsOver } from './sim/engine.js';
 import {
     applyNodeTool,
     severLink,
@@ -62,6 +65,10 @@ const MILESTONE_THRESHOLDS = [25, 50, 75];
 // Auto-advance: once every daily action is spent the day ends on its own
 // after this delay (the player can Hold, use power-ups, or tap Next day).
 const AUTO_ADVANCE_MS = 3000;
+// Wrap-up: once the outbreak cannot spread, a pause to read why, then
+// one day every WRAP_UP_DAY_MS until the last patients resolve.
+const WRAP_UP_FIRST_MS = 2200;
+const WRAP_UP_DAY_MS = 700;
 
 export class EpidemicSimulator {
     constructor() {
@@ -278,6 +285,7 @@ export class EpidemicSimulator {
         const [popMin, popMax] = this.currentScenario.populationRange;
         const population = popMin + Math.floor(Math.random() * (popMax - popMin + 1));
         this.autoAdvance.cancel();
+        this.endWrapUp();
         this.lastR = null;
         this.gameState = initGameState(this.tools, population);
         this.createNetwork();
@@ -398,7 +406,9 @@ export class EpidemicSimulator {
     // After every action: when no daily actions are left, start the
     // auto-advance countdown. Power-ups and Next day stay available.
     afterAction() {
-        if (!this.gameState || this.gameState.gameOver || this.gameState.paused) return;
+        if (!this.gameState || this.gameState.gameOver) return;
+        this.maybeWrapUp();
+        if (this.wrapUp || this.gameState.paused) return;
         if (allActionsSpent(this.gameState, this.tools, this.difficulty)) this.autoAdvance.start();
     }
 
@@ -468,6 +478,50 @@ export class EpidemicSimulator {
         this.view.update(this.network.nodes, this.network.links);
         // Music hook: let the audio track adjust the mood after each day.
         this.audio.updateMood?.(this.gameState.stats);
+        this.maybeWrapUp();
+    }
+
+    // When no sick person is in contact with anyone who could still catch
+    // it, no move can change the outcome. Say so, then fast-forward the last
+    // days while the remaining patients recover (or not), and end the round.
+    maybeWrapUp() {
+        if (!this.gameState || this.gameState.gameOver || this.wrapUp) return;
+        if (!spreadIsOver(this.network)) return;
+        // Nobody sick at all: that is already a result.
+        this.checkGameOver();
+        if (this.gameState.gameOver) return;
+        this.autoAdvance.cancel();
+        if (this.selectedTool) this.selectTool(this.selectedTool); // deselect
+        this.closeShop();
+        const screen = document.getElementById('game-screen');
+        screen.classList.add('wrapping-up');
+        const card = document.createElement('div');
+        card.className = 'wrapup-card';
+        card.setAttribute('role', 'status');
+        card.innerHTML = `
+            <strong class="wrapup-title">Spread stopped!</strong>
+            <span class="wrapup-text">No sick person is in contact with anyone who can catch it. Fast-forwarding while the last patients recover.</span>`;
+        document.querySelector('.network-container')?.appendChild(card);
+        this.audio.playStinger?.('milestone');
+        const step = () => {
+            if (!this.wrapUp || !this.gameState || this.gameState.gameOver) return this.endWrapUp();
+            if (!this.gameState.paused) this.nextDay();
+            if (this.gameState.gameOver) return this.endWrapUp();
+            this.wrapUp.timer = setTimeout(step, WRAP_UP_DAY_MS);
+        };
+        this.wrapUp = { card, timer: setTimeout(step, WRAP_UP_FIRST_MS) };
+    }
+
+    endWrapUp() {
+        if (!this.wrapUp) return;
+        clearTimeout(this.wrapUp.timer);
+        const card = this.wrapUp.card;
+        this.wrapUp = null;
+        // Leave the card up until the results slide in.
+        setTimeout(() => card?.remove(), 1200);
+        setTimeout(() => {
+            if (!this.wrapUp) document.getElementById('game-screen')?.classList.remove('wrapping-up');
+        }, 1200);
     }
 
     // Mid-day check (power-ups can end the outbreak outright).
@@ -517,10 +571,17 @@ export class EpidemicSimulator {
         const stars = calculateStars(outcome, stats, this.currentLevel);
         const fundingEarned = fundingAward(stars);
         const livesSaved = livesSavedForRun(outcome, stats);
+        // Care bonus for the people looked after (wins only), paid on top.
+        const bonus = careBonus(outcome, stats, this.currentLevel);
+        let chests = [];
         if (this.currentLevel) {
+            const before = this.save;
             this.save = recordCompletion(this.save, this.currentLevel.id, outcome, stats);
+            this.save = { ...this.save, funding: this.save.funding + bonus.total };
+            chests = newlyUnlockedChests({ chests: CHESTS, levels: LEVELS, levelId: this.currentLevel.id, saveBefore: before, saveAfter: this.save });
             writeSave(this.storage, this.save);
         }
+        const showTally = outcome === 'contained';
         // Toasts from the last day should not cover the results.
         document.getElementById('notification-container')?.replaceChildren();
         showToolHint('');
@@ -534,10 +595,31 @@ export class EpidemicSimulator {
             fundingEarned,
             livesSaved,
             caseCap: caseCapFor(this.gameState, this.currentScenario),
+            tally: showTally,
         });
+        if (showTally) {
+            playResultsTally(document.getElementById('results-tally'), {
+                bins: { treatment: stats.treated || 0, isolated: stats.isolated || 0, cured: stats.totalRecovered || 0 },
+                bonus,
+                stars,
+                baseFunding: fundingEarned,
+                chests,
+                sound: (kind, i = 0) => this.playTallySound(kind, i),
+            });
+        }
         const lesson = this.currentLevel ? lessonFor(this.currentLevel.id) : null;
         fillLessonCard('game-over-lesson', lesson?.title, debriefLine(lesson, outcome));
         this.showScreen('game-over');
+    }
+
+    // Little rising blips for the tally; pitch climbs as a bin fills.
+    playTallySound(kind, i = 0) {
+        const a = this.audio;
+        if (kind === 'tick') a.playSound(660 + Math.min(i, 20) * 30, 0.06, 'sine');
+        else if (kind === 'line') a.playSound(880, 0.1, 'triangle');
+        else if (kind === 'star') a.playSound(1046 + i * 262, 0.25, 'sine');
+        else if (kind === 'coin') a.playSound(1568, 0.05, 'square');
+        else if (kind === 'prize') a.playStinger ? a.playStinger('milestone') : a.playSound(1318, 0.4, 'sine');
     }
 
     selectTool(toolId) {
@@ -567,6 +649,7 @@ export class EpidemicSimulator {
         const result = usePowerUp(powerUpId, gameApi);
         if (result.save) this.save = result.save;
         this.updateUI();
+        this.maybeWrapUp();
     }
 
     // Power-up shop: a bottom sheet opened from the Shop chip, or by tapping

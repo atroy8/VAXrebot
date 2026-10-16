@@ -1,10 +1,12 @@
 // Care box UI: three bins on the right of the network with live counts and
 // a little stack of faces. People fly in from the network when they are
 // isolated or cured (see NetworkView onBoxed and game.js).
-import { spriteFor } from '../sprites.js';
+import { faceTokenHtml } from './face-token.js';
 import { BINS, careCounts, binFor } from './care-box-model.js';
 
-const MAX_FACES = 6;
+// Faces shown per bin before a "+N" chip; the bins are tall on phones, so
+// two columns of five fit.
+const MAX_FACES = 10;
 
 export function mountCareBox() {
     const el = document.getElementById('care-box');
@@ -14,7 +16,6 @@ export function mountCareBox() {
         (b) => `
         <div class="care-bin care-bin--${b.id}" data-bin="${b.id}" title="${b.tip}">
             <div class="care-bin-head">
-                <img src="${spriteFor(b.sprite)}" alt="" width="26" height="26">
                 <span class="care-count" data-count>0</span>
             </div>
             <div class="care-faces" data-faces aria-hidden="true"></div>
@@ -34,12 +35,16 @@ export function renderCareBox(nodes) {
         const n = counts[b.id];
         if (countEl.textContent !== String(n)) countEl.textContent = String(n);
         const faces = bin.querySelector('[data-faces]');
-        const shown = Math.min(n, MAX_FACES);
-        if (faces.childElementCount !== shown + (n > MAX_FACES ? 1 : 0)) {
+        const shown = n > MAX_FACES ? MAX_FACES - 1 : n;
+        const key = `${shown}:${n}`;
+        if (faces.dataset.key !== key) {
+            const before = faces.querySelectorAll('.face-token').length;
+            faces.dataset.key = key;
             faces.innerHTML =
-                Array.from({ length: shown }, () => `<img src="${spriteFor(b.sprite)}" alt="">`).join('') +
-                (n > MAX_FACES ? `<span class="care-more">+${n - MAX_FACES}</span>` : '');
+                Array.from({ length: shown }, (_, i) => faceTokenHtml(b.face, { i, cls: i >= before ? 'face-pop' : '' })).join('') +
+                (n > shown ? `<span class="care-more">+${n - shown}</span>` : '');
         }
+        bin.classList.toggle('empty', n === 0);
         bin.setAttribute('aria-label', `${b.label}: ${n}`);
     }
 }
@@ -53,11 +58,10 @@ export function flyToCareBox(leaving, { onLand } = {}) {
         const binId = binFor(node);
         const bin = binId && el.querySelector(`[data-bin="${binId}"]`);
         if (!bin || !from) return;
-        const to = bin.querySelector('.care-bin-head img').getBoundingClientRect();
-        const face = document.createElement('img');
+        const to = (bin.querySelector('.care-faces .face-token:last-of-type') || bin.querySelector('.care-faces')).getBoundingClientRect();
+        const face = document.createElement('span');
         face.className = 'care-flyer';
-        face.src = spriteFor(BINS.find((b) => b.id === binId).sprite);
-        face.alt = '';
+        face.innerHTML = faceTokenHtml(BINS.find((b) => b.id === binId).face);
         face.style.left = `${from.x - 20}px`;
         face.style.top = `${from.y - 20}px`;
         document.body.appendChild(face);
