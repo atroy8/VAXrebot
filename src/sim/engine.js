@@ -78,6 +78,25 @@ export function updateOutcomes(state, network, recoveryTime, fatalityRate, rng =
     return outcomes;
 }
 
+// True when the outbreak can no longer grow: no infectious person (sick and
+// not isolated) shares a link with anyone who can still catch it (healthy).
+// Nothing the player does can change the outcome after this point, except
+// waiting for the sick to recover, so the game fast-forwards to the end.
+// People never become healthy again and links only ever disappear, so once
+// this is true it stays true for the rest of the run.
+export function spreadIsOver(network) {
+    const byId = new Map(network.nodes.map((n) => [n.id, n]));
+    for (const link of network.links) {
+        const a = byId.get(nodeId(link.source));
+        const b = byId.get(nodeId(link.target));
+        if (!a || !b || a.removed || b.removed) continue;
+        if ((a.state === 'infected' && b.state === 'healthy') || (b.state === 'infected' && a.state === 'healthy')) {
+            return false;
+        }
+    }
+    return true;
+}
+
 // Loss threshold: deaths at or above 8% of the initial population, with a
 // floor of 5 deaths so small populations do not swing on a single case.
 export const OVERWHELMED_DEATH_FRACTION = 0.08;
@@ -85,7 +104,8 @@ export const OVERWHELMED_DEATH_FLOOR = 5;
 
 // End-of-day check. Returns 'contained' (win), 'overwhelmed' (loss),
 // 'timeout' or 'burnout' (neutral), or null.
-// Precedence: contained > overwhelmed > timeout.
+// Precedence: contained > overwhelmed > timeout. No timeout once spread is
+// over (see spreadIsOver): the remaining sick resolve in a few days.
 // Quarantined nodes that were sick when isolated still count as active
 // infected until they resolve (recover/die), so quarantining the sick is
 // isolation, not a cure.
@@ -108,7 +128,9 @@ export function checkGameOver(state, network, durationDays, caseCap = Infinity) 
     const deathLine = Math.max(initial * OVERWHELMED_DEATH_FRACTION, OVERWHELMED_DEATH_FLOOR);
     if (initial > 0 && state.stats.totalDead >= deathLine) return 'overwhelmed';
     if (state.stats.totalInfected >= caseCap) return 'overwhelmed';
-    if (state.day >= durationDays) return 'timeout';
+    // Out of time, unless the outbreak can no longer grow: then the last sick
+    // people are just recovering, and the run plays on until they do.
+    if (state.day >= durationDays && !spreadIsOver(network)) return 'timeout';
     return null;
 }
 
