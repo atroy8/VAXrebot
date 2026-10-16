@@ -7,6 +7,7 @@ import { LEVELS, REGIONS, levelById } from './config/levels.js';
 import { createStorage, loadSave, writeSave, resetSave } from './save.js';
 import { createMonetization } from './monetization/monetization.js';
 import { createWebAdProvider } from './monetization/ad-provider-web.js';
+import { pickAdProvider } from './monetization/ad-provider-admob.js';
 import { mountSettings } from './ui/settings.js';
 import {
     isLevelUnlocked,
@@ -83,10 +84,15 @@ export class EpidemicSimulator {
         // Monetization: Remove Ads entitlement plus between-level ad pacing.
         // The web build uses a labeled sample ad; the App Store build swaps
         // in AdMob behind the same provider contract.
+        this.adProvider = pickAdProvider({
+            capacitor: typeof window !== 'undefined' ? window.Capacitor : undefined,
+            web: createWebAdProvider({ onRemoveAds: () => this.settings?.open() }),
+        });
         this.monetization = createMonetization({
             storage: this.storage,
-            provider: createWebAdProvider({ onRemoveAds: () => this.settings?.open() }),
+            provider: this.adProvider,
         });
+        if (!this.monetization.adsRemoved) this.adProvider.init?.();
 
         this.audio = new AudioEngine(() => this.currentScreen);
         // The 3D network view (and three.js) loads on demand: see view-loader.js.
