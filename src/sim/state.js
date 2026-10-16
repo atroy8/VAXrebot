@@ -13,6 +13,10 @@ export function initGameState(tools, population = 100) {
             initialPopulation: population,
             totalDead: 0,
             totalRecovered: 0,
+            // Care box totals for the results tally: people isolated while
+            // sick (treated) or while healthy (isolated) during the run.
+            treated: 0,
+            isolated: 0,
         },
         dailyUsage: Object.keys(tools).reduce((acc, tool) => ({ ...acc, [tool]: 0 }), {}),
         usedOnPeople: new Set(),
