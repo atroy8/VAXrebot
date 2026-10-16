@@ -36,7 +36,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { fitCamera } from './game-screen-model.js';
 import { pickTapTarget } from './tap-target.js';
-import { layoutStep as forceStep, settleLayout, nextAlpha, LAYOUT } from './force-layout.js';
+import { layoutStep as forceStep, settleLayout, nextAlpha, layoutForAspect, LAYOUT } from './force-layout.js';
 import { isBoxed } from './care-box-model.js';
 
 // Bundle every face frame at build time so the game works fully offline.
@@ -72,6 +72,10 @@ const STATE_COLORS = {
 
 const NODE_RADIUS = 0.55;
 const FACE_SCALE = 1.15;
+// World units kept free around the network when framing it. People are 1.1
+// wide, so 1.2 keeps the outer ring clear of the edges without wasting space.
+const FIT_PAD = 1.2;
+
 // Link ribbon widths (world units).
 const LINK_W = 0.09;
 const LINK_W_RISK = 0.15;
@@ -280,6 +284,14 @@ export class NetworkView {
         this.renderer.setSize(w, h, false);
         this.camera.aspect = w / h;
         this.camera.updateProjectionMatrix();
+        // The view changed shape (rotation, browser bar): reshape gently.
+        const before = this._layoutAspect;
+        this.layoutParams();
+        if (before !== undefined && Math.abs(this._layoutAspect - before) >= 0.1) {
+            this.alpha = Math.max(this.alpha || 0, LAYOUT.reheatAlpha);
+            this.physicsSettled = false;
+            this.autoFit = true;
+        }
         if (this.nodeObjs.size) this.frameNetwork();
     }
 
@@ -425,7 +437,7 @@ export class NetworkView {
         const linkKey = this.links.length;
         if (countChanged || isInitial) {
             this.controls.target.set(0, 0, 0);
-            settleLayout(this.layoutObjs(), this.layoutPairs(), { maxSteps: WARMUP_STEPS });
+            settleLayout(this.layoutObjs(), this.layoutPairs(), { maxSteps: WARMUP_STEPS, P: this.layoutParams() });
             this.alpha = 0;
             for (const o of this.nodeObjs.values()) o.vel.set(0, 0, 0);
             this.frameNetwork();
@@ -535,7 +547,7 @@ export class NetworkView {
     fitTarget() {
         const pts = [];
         for (const o of this.nodeObjs.values()) if (!o.boxed) pts.push(o.pos);
-        return fitCamera(pts, { fovDeg: this.camera.fov, aspect: this.camera.aspect, pad: 1.9 });
+        return fitCamera(pts, { fovDeg: this.camera.fov, aspect: this.camera.aspect, pad: FIT_PAD });
     }
 
     frameNetwork() {
@@ -565,6 +577,23 @@ export class NetworkView {
     // ---- Layout ------------------------------------------------------------
 
     // People in the care box are out of the network and out of the layout.
+    // Layout tuned to the view's shape, so a tall phone gets a tall network
+    // (bigger people) instead of a small circle. See layoutForAspect.
+    viewAspect() {
+        const w = this.container?.clientWidth || 0;
+        const h = this.container?.clientHeight || 0;
+        return w > 0 && h > 0 ? w / h : 1;
+    }
+
+    layoutParams() {
+        const aspect = Math.round(this.viewAspect() * 20) / 20; // ignore tiny resizes
+        if (!this._layoutParams || this._layoutAspect !== aspect) {
+            this._layoutAspect = aspect;
+            this._layoutParams = layoutForAspect(aspect);
+        }
+        return this._layoutParams;
+    }
+
     layoutObjs() {
         return [...this.nodeObjs.values()].filter((o) => !o.boxed);
     }
@@ -581,7 +610,7 @@ export class NetworkView {
 
     // One cooled step; returns the fastest node speed.
     layoutStep() {
-        const speed = forceStep(this.layoutObjs(), this.layoutPairs(), this.alpha);
+        const speed = forceStep(this.layoutObjs(), this.layoutPairs(), this.alpha, this.layoutParams());
         this.alpha = nextAlpha(this.alpha);
         return speed;
     }

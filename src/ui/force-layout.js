@@ -33,12 +33,16 @@ export const LAYOUT = Object.freeze({
 export function layoutStep(objs, pairs, alpha = 1, P = LAYOUT) {
     const n = objs.length;
     const rd2 = P.repelDist * P.repelDist;
+    // Springs and repulsion measure distance in a stretched space (see
+    // layoutForAspect), so the network settles into the screen's shape.
+    const sx = P.scaleX ?? 1;
+    const sy = P.scaleY ?? 1;
     for (let i = 0; i < n; i++) {
         const a = objs[i];
         for (let j = i + 1; j < n; j++) {
             const b = objs[j];
-            let dx = a.pos.x - b.pos.x;
-            let dy = a.pos.y - b.pos.y;
+            let dx = (a.pos.x - b.pos.x) * sx;
+            let dy = (a.pos.y - b.pos.y) * sy;
             let d2 = dx * dx + dy * dy;
             if (d2 >= rd2) continue;
             if (d2 < 1e-6) {
@@ -49,27 +53,29 @@ export function layoutStep(objs, pairs, alpha = 1, P = LAYOUT) {
             }
             const d = Math.sqrt(d2);
             const f = ((P.repelDist - d) * P.repelK * alpha) / d;
-            a.vel.x += dx * f;
-            a.vel.y += dy * f;
-            b.vel.x -= dx * f;
-            b.vel.y -= dy * f;
+            a.vel.x += (dx * f) / sx;
+            a.vel.y += (dy * f) / sy;
+            b.vel.x -= (dx * f) / sx;
+            b.vel.y -= (dy * f) / sy;
         }
     }
     for (const [a, b] of pairs) {
-        const dx = b.pos.x - a.pos.x;
-        const dy = b.pos.y - a.pos.y;
+        const dx = (b.pos.x - a.pos.x) * sx;
+        const dy = (b.pos.y - a.pos.y) * sy;
         const d = Math.sqrt(dx * dx + dy * dy) || 0.001;
         const f = ((d - P.restLength) * P.springK * alpha) / d;
-        a.vel.x += dx * f;
-        a.vel.y += dy * f;
-        b.vel.x -= dx * f;
-        b.vel.y -= dy * f;
+        a.vel.x += (dx * f) / sx;
+        a.vel.y += (dy * f) / sy;
+        b.vel.x -= (dx * f) / sx;
+        b.vel.y -= (dy * f) / sy;
     }
     let maxSpeed = 0;
     // Collision: a direct position correction (like d3.forceCollide), which
     // stays stable however crowded a hub gets. Runs even at alpha 0 only if
     // something overlaps, so a cooled layout never drifts.
     resolveOverlaps(objs, P);
+    const rx = P.maxRadius / sx;
+    const ry = P.maxRadius / sy;
     for (const o of objs) {
         o.vel.x -= o.pos.x * P.gravity * alpha;
         o.vel.y -= o.pos.y * P.gravity * alpha;
@@ -84,10 +90,11 @@ export function layoutStep(objs, pairs, alpha = 1, P = LAYOUT) {
         o.vel.y *= P.damping;
         o.pos.x += o.vel.x;
         o.pos.y += o.vel.y;
-        const r = Math.hypot(o.pos.x, o.pos.y);
-        if (r > P.maxRadius) {
-            o.pos.x *= P.maxRadius / r;
-            o.pos.y *= P.maxRadius / r;
+        // Keep everyone inside an ellipse shaped like the screen.
+        const r = Math.hypot(o.pos.x / rx, o.pos.y / ry);
+        if (r > 1) {
+            o.pos.x /= r;
+            o.pos.y /= r;
             o.vel.x = 0;
             o.vel.y = 0;
         }
@@ -95,6 +102,20 @@ export function layoutStep(objs, pairs, alpha = 1, P = LAYOUT) {
         if (sp > maxSpeed) maxSpeed = sp;
     }
     return maxSpeed;
+}
+
+// Shape the layout to the screen. Left alone the network settles into a
+// circle, so on a tall phone it was only as big as the screen is wide, with
+// empty space above and below and small, crowded people. Measuring distance
+// in a stretched space makes it settle into an ellipse shaped like the view,
+// so the camera zooms in and every person is bigger and easier to tap.
+// Collisions still use real distance, so people never overlap.
+// aspect = view width / view height (about 0.6 on a portrait phone).
+export const ASPECT_STRETCH = 0.5;
+
+export function layoutForAspect(aspect, P = LAYOUT) {
+    const a = Math.min(2.2, Math.max(0.45, Number.isFinite(aspect) && aspect > 0 ? aspect : 1));
+    return { ...P, scaleX: a ** -ASPECT_STRETCH, scaleY: a ** ASPECT_STRETCH };
 }
 
 export function resolveOverlaps(objs, P = LAYOUT) {
