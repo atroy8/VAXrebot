@@ -143,7 +143,7 @@ export function showNotification(message, type = 'info') {
     }, 3000);
 }
 
-export function renderGameOver({ outcome, stats, difficultyId, threatPips = null, stars = 0, fundingEarned = 0, livesSaved = 0, caseCap = Infinity }) {
+export function renderGameOver({ outcome, stats, difficultyId, threatPips = null, stars = 0, fundingEarned = 0, livesSaved = 0, caseCap = Infinity, tally = false }) {
     const attackRate = stats.initialPopulation > 0 ? (stats.totalInfected / stats.initialPopulation) * 100 : 0;
     const caseFatalityRate = stats.totalInfected > 0 ? (stats.totalDead / stats.totalInfected) * 100 : 0;
 
@@ -182,7 +182,17 @@ export function renderGameOver({ outcome, stats, difficultyId, threatPips = null
     // Rendered only when provided so the pre-progression callers keep working.
     const existing = document.getElementById('game-over-rewards');
     if (existing) existing.remove();
-    if (stars > 0) {
+    // A win shows the animated tally (results-tally.js) instead, with the
+    // outbreak numbers folded away under a summary the player can open.
+    document.getElementById('game-over-screen').classList.toggle('has-tally', !!tally);
+    const statsWrap = document.getElementById('final-stats-wrap');
+    if (statsWrap) statsWrap.open = !tally;
+    const tallyEl = document.getElementById('results-tally');
+    if (tallyEl && !tally) {
+        tallyEl.hidden = true;
+        tallyEl.innerHTML = '';
+    }
+    if (stars > 0 && !tally) {
         const rewards = document.createElement('div');
         rewards.id = 'game-over-rewards';
         rewards.className = 'game-over-rewards';

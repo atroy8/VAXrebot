@@ -129,8 +129,11 @@ export const LEVELS = [
         difficultyId: 'hard',
         blurb: 'A mega-festival seeding outbreaks worldwide. Your hardest test yet.',
         target: 800, // per-capita score target: 1 star >= 800, 2 stars >= 1040, 3 stars >= 1280
-        // Tuned by scripts/tune.mjs (smart bot win 52%, random bot 0%).
-        tuning: { initialInfected: 3, transmissionMultiplier: 0.6, caseCapFraction: 0.32, parDays: 11, dailyLimits: { vaccinate: 2, quarantine: 1, severLink: 2 } },
+        // Tuned by scripts/tune.mjs (smart bot win 52%, random bot 0%), then
+        // retuned in round 10: most of its losses had been timeouts after the
+        // outbreak could no longer spread, which now play on to a win. Spread
+        // 0.6 to 1.8 and 4 starting cases bring the smart bot back to about 50%.
+        tuning: { initialInfected: 4, transmissionMultiplier: 1.8, caseCapFraction: 0.32, parDays: 11, dailyLimits: { vaccinate: 2, quarantine: 1, severLink: 2 } },
     },
     {
         id: 'r3-hub',

@@ -16,6 +16,8 @@ export function applyNodeTool(state, tools, toolId, node) {
     } else if (toolId === 'quarantine') {
         node.sickWhileQuarantined = node.state === 'infected';
         node.state = 'quarantined';
+        if (node.sickWhileQuarantined) state.stats.treated = (state.stats.treated || 0) + 1;
+        else state.stats.isolated = (state.stats.isolated || 0) + 1;
     }
     state.stats.totalProtected++;
 }
