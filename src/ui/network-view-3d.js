@@ -17,7 +17,7 @@
 //
 // Round 1 (nightly 2026-10-10): the network is now FLAT and abstract.
 // Nodes sit on one plane (z = 0) viewed head-on, so the graph reads like a
-// clear diagram: one finger pans, pinch zooms, nothing rotates. Links are
+// clear diagram you can drag, pinch and twist. Links are
 // thick color-coded ribbons (red pulse = live transmission route, faded =
 // protected end), infected nodes pulse, and severing a link plays a snap:
 // the two halves whip back to their nodes, sparks fly, a ring flashes and
@@ -25,7 +25,8 @@
 //
 // Layout: a small custom force simulation (repulsion + link springs +
 // centering gravity) warmed up synchronously on layout, then settled
-// per-frame. Touch: OrbitControls (rotate / pinch zoom); a quick tap
+// per-frame. Touch: see network-gestures.js (drag a person, pan, pinch to
+// zoom, twist to rotate); a quick tap
 // (not a drag) raycasts nodes first, then links, and fires the same
 // onNodeClick / onLinkClick callbacks game.js wires to tool application.
 //
@@ -33,7 +34,17 @@
 // Perf: pixel ratio capped at 2, shared geometry/materials, one
 // LineSegments draw for all links, per-node work is O(1) per frame.
 import * as THREE from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import {
+    cameraUp,
+    panView,
+    twoFingerView,
+    zoomAt,
+    rotateAt,
+    pickGrab,
+    isDrag,
+    isOffFit,
+    screenToWorld,
+} from './network-gestures.js';
 import { fitCamera } from './game-screen-model.js';
 import { pickTapTarget } from './tap-target.js';
 import { layoutStep as forceStep, settleLayout, nextAlpha, layoutForAspect, LAYOUT } from './force-layout.js';
@@ -148,7 +159,11 @@ export class NetworkView {
         this.renderer = null;
         this.scene = null;
         this.camera = null;
-        this.controls = null;
+        // Camera view (see network-gestures.js) and the view that fits the
+        // whole network, for the Fit button and zoom limits.
+        this.cam = { cx: 0, cy: 0, distance: 24, roll: 0 };
+        this.fitView = null;
+        this.grabbed = null;
         this.container = null;
         this.resizeObserver = null;
         this.rafId = 0;
@@ -208,18 +223,6 @@ export class NetworkView {
         dir.position.set(5, 10, 7);
         this.scene.add(dir);
 
-        this.controls = new OrbitControls(this.camera, canvas);
-        this.controls.enableDamping = true;
-        this.controls.dampingFactor = 0.12;
-        this.controls.minDistance = 4;
-        this.controls.maxDistance = 45;
-        // Flat diagram: no rotation. One finger / left mouse pans, pinch or
-        // wheel zooms. Taps are still told apart from drags in bindTap().
-        this.controls.enableRotate = false;
-        this.controls.enablePan = true;
-        this.controls.screenSpacePanning = true;
-        this.controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
-        this.controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_PAN };
 
         this.nodeGroup = new THREE.Group();
         this.scene.add(this.nodeGroup);
@@ -228,7 +231,8 @@ export class NetworkView {
         this.resizeObserver = new ResizeObserver(() => this.resize());
         this.resizeObserver.observe(this.container);
 
-        this.bindTap(canvas);
+        this.bindGestures(canvas);
+        this.mountFitButton();
 
         this.lastTime = performance.now();
         const loop = () => {
@@ -245,10 +249,10 @@ export class NetworkView {
             this.resizeObserver.disconnect();
             this.resizeObserver = null;
         }
-        if (this.controls) {
-            this.controls.dispose();
-            this.controls = null;
-        }
+        this.gestureCleanup?.();
+        this.gestureCleanup = null;
+        this.fitBtn?.remove();
+        this.fitBtn = null;
         if (this.renderer) {
             // Per-node sprite materials are per-setup; shared geometry and
             // state materials live at module level and are not disposed.
@@ -436,7 +440,6 @@ export class NetworkView {
         // Frame the network and (re)run the layout when the population changes.
         const linkKey = this.links.length;
         if (countChanged || isInitial) {
-            this.controls.target.set(0, 0, 0);
             settleLayout(this.layoutObjs(), this.layoutPairs(), { maxSteps: WARMUP_STEPS, P: this.layoutParams() });
             this.alpha = 0;
             for (const o of this.nodeObjs.values()) o.vel.set(0, 0, 0);
@@ -552,21 +555,46 @@ export class NetworkView {
 
     frameNetwork() {
         const { cx, cy, distance } = this.fitTarget();
+        this.fitView = { cx, cy, distance, roll: 0 };
+        this.cam = { ...this.fitView };
+        this.applyCamera();
+    }
+
+    // Point the three.js camera at the current view: straight down, turned
+    // by roll. Matches worldToScreen in network-gestures.js.
+    applyCamera() {
+        const { cx, cy, distance, roll } = this.cam;
+        const up = cameraUp(roll);
         this.camera.position.set(cx, cy, distance);
-        this.controls.target.set(cx, cy, 0);
-        this.controls.maxDistance = distance * 1.6;
+        this.camera.up.set(up.x, up.y, 0);
+        this.camera.lookAt(cx, cy, 0);
+    }
+
+    viewBox() {
+        const rect = this.renderer.domElement.getBoundingClientRect();
+        return { rect, widthPx: rect.width || 1, heightPx: rect.height || 1, fovDeg: this.camera.fov };
+    }
+
+    // Back to the fitted, upright view (Fit button), easing there.
+    resetView() {
+        this.autoFit = true;
     }
 
     // While the layout is still spreading out, keep easing the camera so the
     // whole network stays on screen. Stops as soon as the player pans or zooms.
     easeToFit(rate = 0.15) {
         const { cx, cy, distance } = this.fitTarget();
-        const p = this.camera.position;
-        p.x += (cx - p.x) * rate;
-        p.y += (cy - p.y) * rate;
-        p.z += (distance - p.z) * rate;
-        this.controls.target.set(p.x, p.y, 0);
-        this.controls.maxDistance = Math.max(this.controls.maxDistance, distance * 1.6);
+        this.fitView = { cx, cy, distance, roll: 0 };
+        const c = this.cam;
+        let dr = -c.roll;
+        if (dr > Math.PI) dr -= 2 * Math.PI;
+        if (dr < -Math.PI) dr += 2 * Math.PI;
+        this.cam = {
+            cx: c.cx + (cx - c.cx) * rate,
+            cy: c.cy + (cy - c.cy) * rate,
+            distance: c.distance + (distance - c.distance) * rate,
+            roll: Math.abs(dr) < 0.002 ? 0 : c.roll + dr * rate,
+        };
     }
 
     // Highlight every severable link while the Sever tool is selected.
@@ -651,7 +679,7 @@ export class NetworkView {
 
         // Camera-facing direction, reused to float each face sprite just off
         // the sphere surface so faces stay readable and occlude correctly.
-        _tmp2.subVectors(this.camera.position, this.controls.target).normalize();
+        _tmp2.set(0, 0, 1); // the camera always looks straight down
         const faceOffset = NODE_RADIUS + 0.08;
 
         for (const obj of this.nodeObjs.values()) {
@@ -699,7 +727,8 @@ export class NetworkView {
         }
 
         if (this.autoFit && this.nodeObjs.size) this.easeToFit();
-        this.controls.update();
+        this.applyCamera();
+        this.updateFitButton();
         // Tiny camera shake on a sever, restored right after the render.
         let sx = 0;
         let sy = 0;
@@ -821,28 +850,160 @@ export class NetworkView {
 
     // ---- Tool hookup: tap to select / apply ---------------------------------
 
-    bindTap(canvas) {
-        let downX = 0, downY = 0, downT = 0;
+    bindGestures(canvas) {
+        const pts = new Map(); // pointerId -> { x, y } (client px)
+        let press = null; // the single-finger press being tracked
+        let twoPrev = null;
 
-        const down = new Set();
-        canvas.addEventListener('pointerdown', (e) => {
-            downX = e.clientX; downY = e.clientY; downT = performance.now();
-            down.add(e.pointerId);
-            if (down.size > 1) this.autoFit = false; // pinch zoom
-        });
-        canvas.addEventListener('pointermove', (e) => {
-            if (down.has(e.pointerId) && Math.hypot(e.clientX - downX, e.clientY - downY) > 10) this.autoFit = false;
-        });
-        const lift = (e) => down.delete(e.pointerId);
-        canvas.addEventListener('pointercancel', lift);
-        canvas.addEventListener('pointerleave', lift);
-        canvas.addEventListener('wheel', () => { this.autoFit = false; }, { passive: true });
-        canvas.addEventListener('pointerup', (e) => {
-            down.delete(e.pointerId);
-            const moved = Math.hypot(e.clientX - downX, e.clientY - downY);
-            if (moved > 10 || performance.now() - downT > 600) return; // it was a drag
-            this.handleTap(e);
-        });
+        const local = (e) => {
+            const r = canvas.getBoundingClientRect();
+            return { x: e.clientX - r.left, y: e.clientY - r.top };
+        };
+        const limits = () => ({ fitDistance: this.fitView?.distance });
+        const userMoved = () => {
+            this.autoFit = false;
+        };
+
+        const grabNodeAt = (pt) => {
+            const box = this.viewBox();
+            const nodes = [];
+            for (const obj of this.nodeObjs.values()) {
+                if (obj.node.removed || obj.boxed) continue;
+                const p = this.screenPoint(obj.pos);
+                nodes.push({ x: p.x - box.rect.left, y: p.y - box.rect.top, r: 0, obj });
+            }
+            return pickGrab(pt, nodes)?.obj || null;
+        };
+
+        const release = () => {
+            if (this.grabbed) {
+                this.grabbed.pinned = false;
+                this.grabbed.vel.set(0, 0, 0);
+                // Let the stretched network spring back into shape.
+                this.alpha = Math.max(this.alpha || 0, LAYOUT.reheatAlpha);
+                this.physicsSettled = false;
+                this.grabbed = null;
+            }
+        };
+
+        const onDown = (e) => {
+            canvas.setPointerCapture?.(e.pointerId);
+            const pt = local(e);
+            pts.set(e.pointerId, pt);
+            if (pts.size === 1) {
+                const rotate = e.pointerType === 'mouse' && (e.button === 2 || e.shiftKey);
+                press = { id: e.pointerId, start: pt, last: pt, t: performance.now(), dragging: false, rotate, grab: rotate ? null : grabNodeAt(pt) };
+            } else {
+                // A second finger turns any press into a pinch or twist.
+                release();
+                if (press) press.cancelled = true;
+                const [a, b] = [...pts.values()];
+                twoPrev = [a, b];
+            }
+        };
+
+        const onMove = (e) => {
+            if (!pts.has(e.pointerId)) return;
+            const pt = local(e);
+            pts.set(e.pointerId, pt);
+            const box = this.viewBox();
+            if (pts.size >= 2 && twoPrev) {
+                const [a, b] = [...pts.values()];
+                this.cam = twoFingerView(this.cam, twoPrev[0], twoPrev[1], a, b, box, limits());
+                twoPrev = [a, b];
+                userMoved();
+                return;
+            }
+            if (!press || press.cancelled || press.id !== e.pointerId) return;
+            if (!press.dragging && isDrag(press.start, pt)) press.dragging = true;
+            if (!press.dragging) return;
+            if (press.rotate) {
+                const cx = box.widthPx / 2;
+                const cy = box.heightPx / 2;
+                const a0 = Math.atan2(press.last.y - cy, press.last.x - cx);
+                const a1 = Math.atan2(pt.y - cy, pt.x - cx);
+                this.cam = rotateAt(this.cam, { x: cx, y: cy }, a1 - a0, box);
+                userMoved();
+            } else if (press.grab) {
+                const obj = press.grab;
+                if (!this.grabbed) {
+                    this.grabbed = obj;
+                    obj.pinned = true;
+                }
+                const w = screenToWorld(pt, this.cam, box);
+                obj.pos.set(w.x, w.y, 0);
+                // Keep the layout warm while dragging so contacts follow.
+                this.alpha = Math.max(this.alpha || 0, LAYOUT.reheatAlpha);
+                this.physicsSettled = false;
+                // A held person no longer counts as a reason to re-frame.
+                this.autoFit = false;
+            } else {
+                this.cam = panView(this.cam, press.last, pt, box);
+                userMoved();
+            }
+            press.last = pt;
+        };
+
+        const onUp = (e) => {
+            if (!pts.has(e.pointerId)) return;
+            pts.delete(e.pointerId);
+            if (pts.size < 2) twoPrev = null;
+            if (pts.size === 1) {
+                // One finger left after a pinch: keep panning from here, no tap.
+                const [id, p] = [...pts.entries()][0];
+                press = { id, start: p, last: p, t: performance.now(), dragging: true, grab: null, cancelled: false };
+                return;
+            }
+            if (!press || press.id !== e.pointerId) return;
+            const wasTap = !press.dragging && !press.cancelled && performance.now() - press.t <= 600;
+            release();
+            press = null;
+            if (wasTap && e.type === 'pointerup') this.handleTap(e);
+        };
+
+        const onWheel = (e) => {
+            e.preventDefault();
+            const pt = local(e);
+            const factor = Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0015));
+            this.cam = zoomAt(this.cam, pt, factor, this.viewBox(), limits());
+            userMoved();
+        };
+        const noMenu = (e) => e.preventDefault();
+
+        canvas.addEventListener('pointerdown', onDown);
+        canvas.addEventListener('pointermove', onMove);
+        canvas.addEventListener('pointerup', onUp);
+        canvas.addEventListener('pointercancel', onUp);
+        canvas.addEventListener('wheel', onWheel, { passive: false });
+        canvas.addEventListener('contextmenu', noMenu);
+        this.gestureCleanup = () => {
+            canvas.removeEventListener('pointerdown', onDown);
+            canvas.removeEventListener('pointermove', onMove);
+            canvas.removeEventListener('pointerup', onUp);
+            canvas.removeEventListener('pointercancel', onUp);
+            canvas.removeEventListener('wheel', onWheel);
+            canvas.removeEventListener('contextmenu', noMenu);
+        };
+    }
+
+    // A small Fit button appears once the player has moved, zoomed or turned
+    // the network; tapping it eases back to the whole network, upright.
+    mountFitButton() {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'network-fit-btn';
+        btn.textContent = 'Fit';
+        btn.setAttribute('aria-label', 'Show the whole network');
+        btn.hidden = true;
+        btn.addEventListener('click', () => this.resetView());
+        this.container.appendChild(btn);
+        this.fitBtn = btn;
+    }
+
+    updateFitButton() {
+        if (!this.fitBtn) return;
+        const show = !this.autoFit && isOffFit(this.cam, this.fitView);
+        if (this.fitBtn.hidden === show) this.fitBtn.hidden = !show;
     }
 
     // Screen-space, tool-aware picking (see tap-target.js): Sever snaps to

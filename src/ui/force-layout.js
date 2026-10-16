@@ -77,6 +77,15 @@ export function layoutStep(objs, pairs, alpha = 1, P = LAYOUT) {
     const rx = P.maxRadius / sx;
     const ry = P.maxRadius / sy;
     for (const o of objs) {
+        // A person held under the player's finger stays exactly there; the
+        // springs pull their contacts along, so the network stretches.
+        if (o.pinned) {
+            o.vel.x = 0;
+            o.vel.y = 0;
+            o.vel.z = 0;
+            o.pos.z = 0;
+            continue;
+        }
         o.vel.x -= o.pos.x * P.gravity * alpha;
         o.vel.y -= o.pos.y * P.gravity * alpha;
         o.vel.z = 0;
@@ -135,11 +144,15 @@ export function resolveOverlaps(objs, P = LAYOUT) {
                 dy = ((i + j) % 2 ? 0.3 : -0.3);
                 d = Math.hypot(dx, dy);
             }
+            if (a.pinned && b.pinned) continue;
             const push = ((c - d) / d) * 0.5 * P.collideStrength;
-            a.pos.x -= dx * push;
-            a.pos.y -= dy * push;
-            b.pos.x += dx * push;
-            b.pos.y += dy * push;
+            // A held person does not get pushed; the other one moves twice as far.
+            const ka = a.pinned ? 0 : b.pinned ? 2 : 1;
+            const kb = b.pinned ? 0 : a.pinned ? 2 : 1;
+            a.pos.x -= dx * push * ka;
+            a.pos.y -= dy * push * ka;
+            b.pos.x += dx * push * kb;
+            b.pos.y += dy * push * kb;
             moved++;
         }
     }
