@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { generateNetwork } from '../src/sim/network.js';
 import { mulberry32 } from '../src/sim/balance.js';
-import { layoutStep, settleLayout, nextAlpha, minSpacing, LAYOUT } from '../src/ui/force-layout.js';
+import { layoutStep, settleLayout, nextAlpha, minSpacing, layoutForAspect, LAYOUT } from '../src/ui/force-layout.js';
+import { fitCamera } from '../src/ui/game-screen-model.js';
 
 function disc(n) {
     const g = Math.PI * (3 - Math.sqrt(5));
@@ -89,5 +90,59 @@ describe('force layout', () => {
         ];
         settleLayout(objs, []);
         expect(minSpacing(objs)).toBeGreaterThan(1.3);
+    });
+});
+
+// The in-level view on a 390 px phone is about 300 x 515 px (aspect 0.58).
+const PHONE = 0.58;
+const box = (objs) => {
+    const xs = objs.map((o) => o.pos.x);
+    const ys = objs.map((o) => o.pos.y);
+    return { w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
+};
+// Camera distance needed to frame the network: smaller = people look bigger.
+const frameDistance = (objs, aspect, pad) => fitCamera(objs.map((o) => o.pos), { aspect, pad }).distance;
+
+describe('layout shaped to the screen', () => {
+    it('a square view keeps the original layout exactly', () => {
+        const a = build('scale-free', 45);
+        const b = build('scale-free', 45);
+        settleLayout(a.objs, a.pairs);
+        settleLayout(b.objs, b.pairs, { P: layoutForAspect(1) });
+        a.objs.forEach((o, i) => {
+            expect(b.objs[i].pos.x).toBeCloseTo(o.pos.x, 9);
+            expect(b.objs[i].pos.y).toBeCloseTo(o.pos.y, 9);
+        });
+    });
+
+    it('clamps silly aspects', () => {
+        expect(layoutForAspect(0).scaleX).toBe(1);
+        expect(layoutForAspect(NaN).scaleY).toBe(1);
+        expect(layoutForAspect(0.01).scaleX).toBeCloseTo(layoutForAspect(0.45).scaleX, 9);
+        expect(layoutForAspect(99).scaleX).toBeCloseTo(layoutForAspect(2.2).scaleX, 9);
+    });
+
+    it.each(CASES)('%s network of %i is taller than wide on a phone, rests, and never overlaps', (type, n) => {
+        const { objs, pairs } = build(type, n);
+        const res = settleLayout(objs, pairs, { maxSteps: 2000, P: layoutForAspect(PHONE) });
+        expect(res.alpha).toBe(0);
+        expect(res.steps).toBeLessThan(400);
+        const { w, h } = box(objs);
+        expect(h / w).toBeGreaterThan(1.2);
+        expect(minSpacing(objs)).toBeGreaterThan(1.3);
+        let speed = 1;
+        for (let i = 0; i < 30; i++) speed = layoutStep(objs, pairs, 0, layoutForAspect(PHONE));
+        expect(speed).toBeLessThan(0.002);
+    });
+
+    it.each(CASES)('%s network of %i: people are at least 20%% bigger on a phone', (type, n) => {
+        const round = build(type, n);
+        settleLayout(round.objs, round.pairs);
+        const before = frameDistance(round.objs, PHONE, 1.9); // round layout, old padding
+        const tall = build(type, n);
+        settleLayout(tall.objs, tall.pairs, { P: layoutForAspect(PHONE) });
+        const after = frameDistance(tall.objs, PHONE, 1.2);
+        // On-screen size is inversely proportional to camera distance.
+        expect(before / after).toBeGreaterThan(1.2);
     });
 });
