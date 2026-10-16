@@ -1,6 +1,7 @@
-// Candy planet home screen (3D): glossy candy world, a candy-cane road
-// through the levels, bouncy level buttons, wobbling prize boxes, candy HUD. Procedurally generated texture, fully
-// offline. Mounted by screens.js onto #welcome-screen, replacing the video
+// Candy solar system home screen (3D): three glossy candy planets circle a
+// candy sun, one per region. Tap a planet to fly in and see its three
+// levels on a candy-cane road, with bouncy level buttons and wobbling prize
+// boxes. Procedurally generated textures, fully offline. Mounted by screens.js onto #welcome-screen, replacing the video
 // intro. Reads progression state (read-only) from src/progress.js and
 // src/save.js; opens crates through src/economy.js when it exists.
 
@@ -12,30 +13,12 @@ import { isLevelUnlocked, lockReason, levelRecord, totalStars } from '../progres
 import { loadSave, createStorage } from '../save.js';
 import { showNotification } from './panels.js';
 import './globe-candy.css';
-import { starRow, levelLabelHtml, clampLabelX } from './globe-labels.js';
-import { latLngToXYZ, windingPath, chestStop, globeFitDistance, faceRotation, angleDelta } from './globe-math.js';
+import { starRow, levelLabelHtml, clampLabelX, LOCK_ICON as LOCK_SVG } from './globe-labels.js';
+import { latLngToXYZ, windingPath, chestStop, globeFitDistance, faceRotation, angleDelta, slerp } from './globe-math.js';
+import { PLANETS, PLANET_RADIUS, PLANET_LEVEL_POSITIONS, SUN_RADIUS } from '../config/solar-system.js';
+import { orbitAngle, orbitPosition, systemCamera, planetStatus } from './solar-math.js';
 
-// Level marker positions (lat/lng, degrees), spread across the three regions.
-const LEVEL_POSITIONS = [
-    // A road that winds once around the planet, about 35 degrees per hop,
-    // so every level button has room on a phone screen.
-    { lat: 18, lng: -90 }, // r1-care-home
-    { lat: 34, lng: -52 }, // r1-elementary
-    { lat: 12, lng: -20 }, // r1-old-town
-    { lat: 30, lng: 14 }, // r2-festival
-    { lat: 4, lng: 44 }, // r2-high-school
-    { lat: 24, lng: 78 }, // r2-airport
-    { lat: -2, lng: 110 }, // r3-metro
-    { lat: 18, lng: 146 }, // r3-harbor
-    { lat: -6, lng: -176 }, // r3-hub
-];
-
-// Candy button colors per region; gold once a level is beaten.
-const REGION_COLORS = {
-    hometown: 0x2ee59d,
-    national: 0x3ab0ff,
-    global: 0xff4f9a,
-};
+// Level buttons: the planet's color while open, gold once beaten.
 const LOCKED_COLOR = 0xb9b3cc;
 const COMPLETED_COLOR = 0xffc93c;
 
@@ -46,16 +29,6 @@ const POWERUP_NAMES = {
 };
 
 const GLOBE_RADIUS = 1;
-
-function latLngToVec3(lat, lng, radius) {
-    const phi = ((90 - lat) * Math.PI) / 180;
-    const theta = ((lng + 180) * Math.PI) / 180;
-    return new THREE.Vector3(
-        -radius * Math.sin(phi) * Math.cos(theta),
-        radius * Math.cos(phi),
-        radius * Math.sin(phi) * Math.sin(theta)
-    );
-}
 
 // Seeded RNG so the generated texture is stable between sessions.
 function mulberry32(seed) {
@@ -75,7 +48,7 @@ function mulberry32(seed) {
 const CANDY = ['#7ae582', '#ff9ad5', '#ffe66d', '#c3a6ff', '#ffb38a', '#8be9fd'];
 const SPRINKLES = ['#ff4d6d', '#ffd60a', '#4cc9f0', '#80ed99', '#b388ff', '#ffffff'];
 
-function makeWorldTexture() {
+function makeWorldTexture({ seed = 20261015, ocean = ['#4fd1ff', '#2bb3f3'], land = CANDY } = {}) {
     const w = 1024;
     const h = 512;
     const canvas = document.createElement('canvas');
@@ -83,11 +56,11 @@ function makeWorldTexture() {
     canvas.height = h;
     const ctx = canvas.getContext('2d');
 
-    const ocean = ctx.createLinearGradient(0, 0, 0, h);
-    ocean.addColorStop(0, '#4fd1ff');
-    ocean.addColorStop(0.5, '#2bb3f3');
-    ocean.addColorStop(1, '#4fd1ff');
-    ctx.fillStyle = ocean;
+    const sea = ctx.createLinearGradient(0, 0, 0, h);
+    sea.addColorStop(0, ocean[0]);
+    sea.addColorStop(0.5, ocean[1]);
+    sea.addColorStop(1, ocean[0]);
+    ctx.fillStyle = sea;
     ctx.fillRect(0, 0, w, h);
     // Soft wave stripes on the water.
     ctx.strokeStyle = 'rgba(255,255,255,0.18)';
@@ -102,13 +75,13 @@ function makeWorldTexture() {
         ctx.stroke();
     }
 
-    const rand = mulberry32(20261015);
+    const rand = mulberry32(seed);
     const blobs = [];
     for (let c = 0; c < 9; c++) {
         const cx = rand() * w;
         const cy = h * 0.2 + rand() * h * 0.6;
         const base = 34 + rand() * 52;
-        const color = CANDY[c % CANDY.length];
+        const color = land[c % land.length];
         const parts = [];
         for (let b = 0; b < 18; b++) {
             const ang = rand() * Math.PI * 2;
@@ -233,10 +206,10 @@ function makeGlowSprite(color) {
     return new THREE.Sprite(mat);
 }
 
-function atmosphereMaterial() {
+function atmosphereMaterial(color = 0xffc6ec) {
     return new THREE.ShaderMaterial({
         uniforms: {
-            glowColor: { value: new THREE.Color(0xffc6ec) },
+            glowColor: { value: new THREE.Color(color) },
             intensity: { value: 1.1 },
         },
         vertexShader: `
@@ -314,6 +287,9 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
         levelMarkers: [],
         chestMarkers: [],
         nextIndex: 0,
+        // 'system': the whole solar system. 'planet': flown in to one planet.
+        mode: 'system',
+        planet: 0,
     };
     const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
@@ -325,12 +301,16 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
             <div class="globe-labels" id="globe-labels"></div>
             <div class="globe-hud">
                 <div class="globe-title">VAXrebot</div>
+                <div class="globe-planet-title" id="globe-planet-title" hidden></div>
                 <div class="globe-stats">
                     <span class="globe-stat stat-stars" id="globe-hud-stars">0 stars</span>
                     <span class="globe-stat stat-funding" id="globe-hud-funding">0 funding</span>
                     <span class="globe-stat stat-lives" id="globe-hud-lives">0 lives saved</span>
                 </div>
             </div>
+            <button type="button" class="globe-back" id="globe-back" hidden aria-label="Back to the solar system">
+                <span aria-hidden="true">&#8249;</span> Planets
+            </button>
             <button type="button" class="globe-play" id="globe-play">Play</button>
             <div class="globe-sheet" id="globe-sheet" hidden>
                 <button class="globe-sheet-close" id="globe-sheet-close" aria-label="Close">&times;</button>
@@ -345,6 +325,8 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
     const labelLayer = mountEl.querySelector('#globe-labels');
     const sheet = mountEl.querySelector('#globe-sheet');
     const playBtn = mountEl.querySelector('#globe-play');
+    const backBtn = mountEl.querySelector('#globe-back');
+    const planetTitle = mountEl.querySelector('#globe-planet-title');
 
     // ---- Renderer / scene ------------------------------------------------
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
@@ -353,50 +335,160 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
     renderer.toneMappingExposure = 1.05;
 
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 100);
-    let fitDistance = 3.2;
-    camera.position.set(0, 0, fitDistance);
+    const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 200);
+    let fitDistance = 3.2; // camera distance that frames one planet
+    let systemCam = { distance: 20, position: { x: 0, y: 14, z: 14 }, target: { x: 0, y: 0, z: 0 } };
+    camera.position.set(0, 14, 14);
 
     scene.add(new THREE.HemisphereLight(0xfff1fb, 0x7a5cff, 1.25));
-    const sun = new THREE.DirectionalLight(0xffffff, 1.9);
-    sun.position.set(3, 4, 5);
-    scene.add(sun);
+    const keyLight = new THREE.DirectionalLight(0xffffff, 1.9);
+    keyLight.position.set(3, 4, 5);
+    scene.add(keyLight);
     const rim = new THREE.DirectionalLight(0xffb3e6, 1.2);
     rim.position.set(-4, -2, -3);
     scene.add(rim);
 
-    // Twinkling sugar sparkles in the sky.
+    // Twinkling sugar sparkles in the sky, all around.
     const sparkles = [];
     {
         const rand = mulberry32(7);
         const colors = [0xffffff, 0xfff3a8, 0xffc6ec, 0xb9f6ff];
         for (let layer = 0; layer < 2; layer++) {
             const pts = [];
-            for (let i = 0; i < 160; i++) {
-                const v = new THREE.Vector3(rand() * 2 - 1, rand() * 2 - 1, -rand()).normalize().multiplyScalar(12 + rand() * 10);
+            for (let i = 0; i < 260; i++) {
+                const v = new THREE.Vector3(rand() * 2 - 1, rand() * 2 - 1, rand() * 2 - 1).normalize().multiplyScalar(40 + rand() * 30);
                 pts.push(v.x, v.y, v.z);
             }
             const g = new THREE.BufferGeometry();
             g.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
-            const m = new THREE.PointsMaterial({ color: colors[layer * 2], size: 0.16, transparent: true, opacity: 0.8, depthWrite: false });
+            const m = new THREE.PointsMaterial({ color: colors[layer * 2], size: 0.35, transparent: true, opacity: 0.8, depthWrite: false });
             const p = new THREE.Points(g, m);
             scene.add(p);
             sparkles.push(p);
         }
     }
 
-    const world = new THREE.Group();
-    scene.add(world);
-
-    const globe = new THREE.Mesh(
-        new THREE.SphereGeometry(GLOBE_RADIUS, 64, 48),
-        new THREE.MeshPhysicalMaterial({ map: makeWorldTexture(), roughness: 0.42, clearcoat: 1, clearcoatRoughness: 0.18 })
+    // ---- Sun and orbits -------------------------------------------------
+    const sunGroup = new THREE.Group();
+    scene.add(sunGroup);
+    const sunMesh = new THREE.Mesh(
+        new THREE.SphereGeometry(SUN_RADIUS, 48, 32),
+        new THREE.MeshBasicMaterial({ map: makeStripeTexture('#ffe66d', '#ffb347') })
     );
-    world.add(globe);
+    sunMesh.material.map.repeat.set(6, 3);
+    sunGroup.add(sunMesh);
+    const sunGlow = makeGlowSprite('#fff3a8');
+    sunGlow.scale.set(SUN_RADIUS * 5, SUN_RADIUS * 5, 1);
+    sunGroup.add(sunGlow);
 
-    const atmosphere = new THREE.Mesh(new THREE.SphereGeometry(GLOBE_RADIUS * 1.16, 48, 32), atmosphereMaterial());
-    scene.add(atmosphere);
+    const orbitStripe = makeStripeTexture('#ffffff', '#ffc6ec');
+    const orbitMeshes = PLANETS.map((p) => {
+        const pts = [];
+        for (let i = 0; i <= 96; i++) {
+            const th = (i / 96) * Math.PI * 2;
+            pts.push(new THREE.Vector3(p.orbit.a * Math.cos(th), 0, p.orbit.b * Math.sin(th)));
+        }
+        const curve = new THREE.CatmullRomCurve3(pts, true);
+        const tex = orbitStripe.clone();
+        tex.needsUpdate = true;
+        tex.repeat.set(Math.round(curve.getLength() * 6), 1);
+        const mesh = new THREE.Mesh(
+            new THREE.TubeGeometry(curve, 160, 0.025, 8, true),
+            new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: 0.55, depthWrite: false })
+        );
+        scene.add(mesh);
+        return mesh;
+    });
 
+    // ---- Planets -----------------------------------------------------------
+    // Each planet: an orbit group (position on the orbit) holding a scaled
+    // group (the planet at radius 1, scaled to PLANET_RADIUS) whose `world`
+    // child spins to face a level, plus its glow and its system-view hit area.
+    const pickables = [];
+    const tmpV = new THREE.Vector3();
+    const tmpC = new THREE.Vector3();
+    const v3 = (p) => new THREE.Vector3(p.x, p.y, p.z);
+    const PER_LEG = 28;
+    const brightStripe = makeStripeTexture('#ffffff', '#ff4f8b');
+    const paleStripe = makeStripeTexture('#ffffff', '#d9c8ff');
+
+    const planets = PLANETS.map((def, pi) => {
+        const orbitGroup = new THREE.Group();
+        scene.add(orbitGroup);
+        const scaled = new THREE.Group();
+        scaled.scale.setScalar(PLANET_RADIUS);
+        orbitGroup.add(scaled);
+        const world = new THREE.Group();
+        scaled.add(world);
+        const globe = new THREE.Mesh(
+            new THREE.SphereGeometry(GLOBE_RADIUS, 64, 48),
+            new THREE.MeshPhysicalMaterial({ map: makeWorldTexture(def), roughness: 0.42, clearcoat: 1, clearcoatRoughness: 0.18 })
+        );
+        world.add(globe);
+        const atmosphere = new THREE.Mesh(new THREE.SphereGeometry(GLOBE_RADIUS * 1.16, 48, 32), atmosphereMaterial(def.glow));
+        scaled.add(atmosphere);
+
+        // Big invisible ball so planets are easy to tap from far away.
+        const hit = new THREE.Mesh(new THREE.SphereGeometry(GLOBE_RADIUS * 1.5, 12, 12), new THREE.MeshBasicMaterial({ visible: false }));
+        hit.userData = { kind: 'planet', planet: pi };
+        scaled.add(hit);
+
+        // Pulsing ring around the planet with the next mission.
+        const halo = new THREE.Mesh(
+            new THREE.RingGeometry(1.32, 1.45, 64),
+            new THREE.MeshBasicMaterial({ color: 0xffd60a, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false })
+        );
+        halo.rotation.x = -Math.PI / 2;
+        scaled.add(halo);
+
+        const label = document.createElement('div');
+        label.className = 'globe-planet-label';
+        labelLayer.appendChild(label);
+
+        const levelIdx = [];
+        LEVELS.forEach((l, i) => {
+            if (l.regionId === def.regionId) levelIdx.push(i);
+        });
+        const stops = levelIdx.map((_, k) => {
+            const pos = PLANET_LEVEL_POSITIONS[k % PLANET_LEVEL_POSITIONS.length];
+            return latLngToXYZ(pos.lat, pos.lng, 1);
+        });
+        return {
+            def,
+            index: pi,
+            orbitGroup,
+            scaled,
+            world,
+            atmosphere,
+            hit,
+            halo,
+            label,
+            levelIdx,
+            stops,
+            pathPoints: stops.length > 1 ? windingPath(stops, { perLeg: PER_LEG, wiggle: 0.07, radius: 1.008 }).map(v3) : [],
+            doneTube: null,
+            todoTube: null,
+            status: null,
+            spin: { from: { x: 0, y: 0 }, to: { x: 0, y: 0 }, start: 0, dur: 0 },
+        };
+    });
+
+    function planetOfLevelIndex(i) {
+        return planets.findIndex((p) => p.levelIdx.includes(i));
+    }
+
+    // Orbit clock: runs in the system view, holds still while flown in.
+    let orbitT = 0;
+    function placePlanets() {
+        const ang = orbitAngle(orbitT);
+        for (const p of planets) {
+            const pos = orbitPosition(p.def, ang);
+            p.orbitGroup.position.set(pos.x, pos.y, pos.z);
+        }
+    }
+    placePlanets();
+
+    // ---- Controls (planet view only) --------------------------------------
     const controls = new OrbitControls(camera, canvas);
     controls.enableDamping = true;
     controls.dampingFactor = 0.08;
@@ -404,33 +496,32 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
     controls.enableZoom = true;
     controls.rotateSpeed = 0.6;
     controls.autoRotate = false;
+    controls.enabled = false;
     let userTurning = false;
     controls.addEventListener('start', () => {
         userTurning = true;
     });
 
-    // ---- Path and markers ---------------------------------------------------
-    const pickables = [];
-    const tmpV = new THREE.Vector3();
-    const levelStops = LEVEL_POSITIONS.map((p) => latLngToXYZ(p.lat, p.lng, 1));
-    const v3 = (p) => new THREE.Vector3(p.x, p.y, p.z);
-
-    // Candy-cane road through every level. Two tubes: the bright part up to
-    // the next mission, a pale part for what is still ahead.
-    const pathPoints = windingPath(levelStops, { perLeg: 28, wiggle: 0.07, radius: 1.008 }).map(v3);
-    const PER_LEG = 28;
-    let doneTube = null;
-    let todoTube = null;
-    const brightStripe = makeStripeTexture('#ffffff', '#ff4f8b');
-    const paleStripe = makeStripeTexture('#ffffff', '#d9c8ff');
-    function buildPath() {
-        for (const t of [doneTube, todoTube]) {
+    // ---- Paths and markers --------------------------------------------------
+    function buildPath(p) {
+        for (const t of [p.doneTube, p.todoTube]) {
             if (t) {
-                world.remove(t);
+                p.world.remove(t);
                 t.geometry.dispose();
             }
         }
-        const split = Math.min(pathPoints.length - 1, Math.max(1, state.nextIndex * PER_LEG));
+        p.doneTube = null;
+        p.todoTube = null;
+        if (p.pathPoints.length < 2) return;
+        // Bright up to the next mission on this planet, pale beyond it.
+        const first = p.levelIdx[0];
+        const last = p.levelIdx[p.levelIdx.length - 1];
+        let localNext;
+        if (state.nextIndex < first) localNext = 0;
+        else if (state.nextIndex > last) localNext = p.levelIdx.length - 1;
+        else localNext = state.nextIndex - first;
+        const allDone = state.nextIndex > last || (p.status && p.status.done);
+        const split = allDone ? p.pathPoints.length - 1 : Math.min(p.pathPoints.length - 1, Math.max(0, localNext * PER_LEG));
         const make = (pts, tex, opacity) => {
             if (pts.length < 2) return null;
             const curve = new THREE.CatmullRomCurve3(pts);
@@ -442,11 +533,11 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
                 new THREE.TubeGeometry(curve, Math.max(8, pts.length * 3), 0.022, 10, false),
                 new THREE.MeshPhysicalMaterial({ map: t, roughness: 0.3, clearcoat: 1, transparent: opacity < 1, opacity })
             );
-            world.add(mesh);
+            p.world.add(mesh);
             return mesh;
         };
-        doneTube = make(pathPoints.slice(0, split + 1), brightStripe, 1);
-        todoTube = make(pathPoints.slice(split), paleStripe, 0.8);
+        p.doneTube = make(p.pathPoints.slice(0, split + 1), brightStripe, 1);
+        p.todoTube = make(p.pathPoints.slice(split), paleStripe, 0.8);
     }
 
     function addLabel(html, cls) {
@@ -465,12 +556,15 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
     function markerColor(m) {
         if (!m.unlocked) return LOCKED_COLOR;
         if (m.done) return COMPLETED_COLOR;
-        return REGION_COLORS[m.level.regionId] || 0xffffff;
+        return planets[m.planet].def.button;
     }
 
     function makeLevelMarker(level, index) {
-        const pos = LEVEL_POSITIONS[index];
-        const anchor = latLngToVec3(pos.lat, pos.lng, GLOBE_RADIUS * 1.0);
+        const pi = planetOfLevelIndex(index);
+        const planet = planets[pi];
+        const local = planet.levelIdx.indexOf(index);
+        const stop = planet.stops[local];
+        const anchor = v3(stop).multiplyScalar(GLOBE_RADIUS);
         const grp = new THREE.Group();
         grp.position.copy(anchor);
         grp.lookAt(anchor.clone().multiplyScalar(2));
@@ -491,15 +585,15 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
         ring.position.y = 0.004;
         grp.add(ring);
 
-        const hit = new THREE.Mesh(new THREE.SphereGeometry(0.13, 8, 8), new THREE.MeshBasicMaterial({ visible: false }));
+        const hit = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 8), new THREE.MeshBasicMaterial({ visible: false }));
         hit.userData = { kind: 'level', levelId: level.id };
         grp.add(hit);
         pickables.push(hit);
 
         const label = addLabel('', '');
-        const marker = { kind: 'level', index, level, grp, body, mat, ring, label, anchor, unlocked: false, done: false, squishAt: -1 };
+        const marker = { kind: 'level', index, planet: pi, stop, level, grp, body, mat, ring, label, unlocked: false, done: false, squishAt: -1 };
         state.levelMarkers.push(marker);
-        world.add(grp);
+        planet.world.add(grp);
         return marker;
     }
 
@@ -516,10 +610,28 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
         m.label.classList.toggle('current', m.index === state.nextIndex && m.unlocked && !m.done);
     }
 
-    // Prize box: a wrapped gift with a ribbon and bow.
+    function paintPlanet(p) {
+        p.status = planetStatus(state.save, LEVELS, REGIONS, p.def);
+        const region = regionById(p.def.regionId);
+        const st = p.status;
+        const lock = st.unlocked ? '' : `<span class="globe-label-lock" aria-label="Locked">${LOCK_SVG}</span>`;
+        p.label.innerHTML = `<span class="globe-planet-name">${p.def.name}</span>` +
+            `<span class="globe-planet-region">${region ? region.name : ''}</span>` +
+            (st.unlocked ? `<span class="globe-planet-stars">&#9733; ${st.stars}/${st.maxStars}</span>` : lock);
+        p.label.classList.toggle('locked', !st.unlocked);
+        p.label.dataset.w = '';
+        // Locked planets look sugar-frosted (paler) until you reach them.
+        p.world.children[0].material.color.setHex(st.unlocked ? 0xffffff : 0xb9b3cc);
+    }
+
+    // Prize box: a wrapped gift with a ribbon and bow, on its planet's road.
     function makeChestMarker(chest) {
-        const stop = chestStop(levelStops, chest.afterLevelIndex);
-        const anchor = v3(stop).multiplyScalar(GLOBE_RADIUS * 1.0);
+        const pi = planetOfLevelIndex(chest.afterLevelIndex);
+        if (pi < 0) return null;
+        const planet = planets[pi];
+        const local = planet.levelIdx.indexOf(chest.afterLevelIndex);
+        const stop = chestStop(planet.stops, local);
+        const anchor = v3(stop).multiplyScalar(GLOBE_RADIUS);
         const grp = new THREE.Group();
         grp.position.copy(anchor);
         grp.lookAt(anchor.clone().multiplyScalar(2));
@@ -561,10 +673,10 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
         hit.userData = { kind: 'chest', chestId: chest.id };
         grp.add(hit);
         pickables.push(hit);
-        world.add(grp);
+        planet.world.add(grp);
 
         const label = addLabel('<span class="globe-label-chest">Prize box</span>', 'chest-label');
-        const marker = { kind: 'chest', chest, grp, gift, lidGroup, wrap, glow, label, anchor, chestState: 'locked' };
+        const marker = { kind: 'chest', chest, planet: pi, grp, gift, lidGroup, wrap, glow, label, chestState: 'locked' };
         state.chestMarkers.push(marker);
         return marker;
     }
@@ -583,7 +695,7 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
         marker.label.hidden = chestState !== 'openable';
     }
 
-    // ---- Confetti and taps ----------------------------------------------------
+    // ---- Confetti --------------------------------------------------------------
     const bursts = [];
     const confettiGeo = new THREE.BoxGeometry(0.018, 0.006, 0.01);
     function confetti(at, count = 36) {
@@ -591,12 +703,14 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
         const colors = [0xff4d6d, 0xffd60a, 0x4cc9f0, 0x80ed99, 0xb388ff, 0xffffff];
         const origin = new THREE.Vector3();
         at.getWorldPosition(origin);
-        const out = origin.clone().normalize();
+        const centre = new THREE.Vector3();
+        planets[state.planet].orbitGroup.getWorldPosition(centre);
+        const out = origin.clone().sub(centre).normalize();
         const pieces = [];
         for (let i = 0; i < count; i++) {
             const m = new THREE.Mesh(confettiGeo, new THREE.MeshBasicMaterial({ color: colors[i % colors.length], transparent: true }));
             m.position.copy(origin);
-            const v = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(0.03).addScaledVector(out, 0.025 + Math.random() * 0.02);
+            const v = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(0.02).addScaledVector(out, 0.018 + Math.random() * 0.015);
             m.userData = { v, spin: new THREE.Vector3(Math.random(), Math.random(), Math.random()).multiplyScalar(0.4) };
             scene.add(m);
             pieces.push(m);
@@ -677,6 +791,20 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
         });
     }
 
+    function showLockedPlanetSheet(p) {
+        const region = regionById(p.def.regionId);
+        openSheet({
+            title: `Planet ${p.def.name}`,
+            sub: `${region ? region.name : ''}: locked`,
+            desc: `${region ? region.tagline + ' ' : ''}${p.status?.reason || 'Beat the planet before it to fly here.'}`,
+            actionLabel: 'Take a look',
+            onAction: () => {
+                closeSheet();
+                flyToPlanet(p.index);
+            },
+        });
+    }
+
     async function showChestSheet(marker) {
         const chest = marker.chest;
         const level = LEVELS[chest.afterLevelIndex];
@@ -735,19 +863,94 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
         showNotification(`Prize box opened: ${givesText(loot)}!`, 'success');
     }
 
-    // ---- Focus: spin the planet so a level faces you -----------------------
-    const spin = { from: { x: 0, y: 0 }, to: { x: 0, y: 0 }, start: 0, dur: 0 };
-    function focusOn(stop, dur = 900) {
-        const target = faceRotation(stop, 0.7);
-        spin.from = { x: world.rotation.x, y: world.rotation.y };
-        spin.to = { x: target.x, y: world.rotation.y + angleDelta(world.rotation.y, target.y) };
-        spin.start = performance.now();
-        spin.dur = reduceMotion ? 1 : dur;
-        // Bring the camera back to the front so the facing math holds.
-        camFrom.copy(camera.position);
-        userTurning = false;
+    // ---- Camera flights ------------------------------------------------------
+    // One tween moves the camera position and what it looks at, between the
+    // system view and a planet (or planet to planet).
+    const flight = { fromPos: new THREE.Vector3(), toPos: new THREE.Vector3(), fromLook: new THREE.Vector3(), toLook: new THREE.Vector3(), start: 0, dur: 0 };
+    const look = new THREE.Vector3(); // where the camera is looking right now
+
+    function planetCentre(pi, out = new THREE.Vector3()) {
+        return planets[pi].orbitGroup.getWorldPosition(out);
     }
-    const camFrom = new THREE.Vector3();
+
+    function startFlight(toPos, toLook, dur) {
+        flight.fromPos.copy(camera.position);
+        flight.fromLook.copy(look);
+        flight.toPos.copy(toPos);
+        flight.toLook.copy(toLook);
+        flight.start = performance.now();
+        flight.dur = reduceMotion ? 1 : dur;
+    }
+
+    function flyToPlanet(pi, { focusIndex = null, dur = 1100 } = {}) {
+        const p = planets[pi];
+        state.mode = 'planet';
+        state.planet = pi;
+        const c = planetCentre(pi);
+        // Spin the planet so the chosen (or next) level faces the camera.
+        spinPlanet(p, facingStop(p, focusIndex), dur * 0.8);
+        controls.enabled = false;
+        userTurning = false;
+        startFlight(c.clone().add(new THREE.Vector3(0, 0, fitDistance)), c, dur);
+        updateChrome();
+    }
+
+    function flyToSystem(dur = 1000) {
+        state.mode = 'system';
+        controls.enabled = false;
+        userTurning = false;
+        const sc = systemCam;
+        startFlight(new THREE.Vector3(sc.position.x, sc.position.y, sc.position.z), new THREE.Vector3(0, 0, 0), dur);
+        closeSheet();
+        updateChrome();
+    }
+
+    // What to turn toward you: the middle of the planet's road, nudged a
+    // little toward the chosen level, so all three levels stay on screen.
+    function facingStop(p, levelIndex) {
+        const mid = p.stops[Math.floor(p.stops.length / 2)];
+        const local = levelIndex != null ? p.levelIdx.indexOf(levelIndex) : -1;
+        if (local < 0) return mid;
+        return slerp(mid, p.stops[local], 0.25);
+    }
+
+    // Spin one planet so a surface point faces you.
+    function spinPlanet(p, stop, dur = 900) {
+        const target = faceRotation(stop, 0.7);
+        p.spin.from = { x: p.world.rotation.x, y: p.world.rotation.y };
+        p.spin.to = { x: target.x, y: p.world.rotation.y + angleDelta(p.world.rotation.y, target.y) };
+        p.spin.start = performance.now();
+        p.spin.dur = reduceMotion ? 1 : dur;
+    }
+
+    // Planet view: spin to a level and re-centre the camera in front.
+    function focusOn(levelIndex, dur = 900) {
+        const pi = planetOfLevelIndex(levelIndex);
+        if (pi < 0) return;
+        if (state.mode !== 'planet' || state.planet !== pi) {
+            flyToPlanet(pi, { focusIndex: levelIndex, dur: Math.max(dur, 900) });
+            return;
+        }
+        const p = planets[pi];
+        spinPlanet(p, facingStop(p, levelIndex), dur);
+        const c = planetCentre(pi);
+        controls.enabled = false;
+        userTurning = false;
+        startFlight(c.clone().add(new THREE.Vector3(0, 0, fitDistance)), c, dur);
+    }
+
+    function updateChrome() {
+        const inPlanet = state.mode === 'planet';
+        backBtn.hidden = !inPlanet;
+        planetTitle.hidden = !inPlanet;
+        mountEl.querySelector('.globe-home').classList.toggle('in-planet', inPlanet);
+        if (inPlanet) {
+            const p = planets[state.planet];
+            const region = regionById(p.def.regionId);
+            planetTitle.innerHTML = `<span class="globe-planet-title-name">${p.def.name}</span><span class="globe-planet-title-region">${region ? region.name : ''}</span>`;
+        }
+    }
+    backBtn.addEventListener('click', () => flyToSystem());
 
     // ---- Tap handling ---------------------------------------------------------
     const raycaster = new THREE.Raycaster();
@@ -767,10 +970,35 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
         pointerNDC.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
         pointerNDC.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
         raycaster.setFromCamera(pointerNDC, camera);
-        const hits = raycaster.intersectObjects(pickables, false).filter((h) => {
+
+        if (state.mode === 'system') {
+            const hits = raycaster.intersectObjects(planets.map((p) => p.hit), false);
+            if (!hits.length) {
+                closeSheet();
+                return;
+            }
+            const p = planets[hits[0].object.userData.planet];
+            if (p.status && !p.status.unlocked) {
+                showLockedPlanetSheet(p);
+                return;
+            }
+            closeSheet();
+            const next = p.levelIdx.includes(state.nextIndex) ? state.nextIndex : null;
+            flyToPlanet(p.index, { focusIndex: next });
+            return;
+        }
+
+        const centre = planetCentre(state.planet, tmpC);
+        const onPlanet = pickables.filter((h) => {
+            const m = h.userData.kind === 'level'
+                ? state.levelMarkers.find((x) => x.level.id === h.userData.levelId)
+                : state.chestMarkers.find((x) => x.chest.id === h.userData.chestId);
+            return m && m.planet === state.planet;
+        });
+        const hits = raycaster.intersectObjects(onPlanet, false).filter((h) => {
             // Ignore markers on the far side of the planet.
             h.object.getWorldPosition(tmpV);
-            return tmpV.dot(camera.position) > 0;
+            return tmpV.sub(centre).dot(tmpC.copy(camera.position).sub(centre)) > 0;
         });
         if (!hits.length) {
             closeSheet();
@@ -781,7 +1009,7 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
             const marker = state.levelMarkers.find((m) => m.level.id === ud.levelId);
             if (marker) {
                 marker.squishAt = performance.now();
-                focusOn(levelStops[marker.index], 600);
+                focusOn(marker.index, 600);
                 showLevelSheet(marker);
             }
         } else if (ud.kind === 'chest') {
@@ -827,13 +1055,27 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
         state.save = loadSave(createStorage());
         refreshHUD();
         const prevNext = state.nextIndex;
+        const prevPlanet = planetOfLevelIndex(prevNext);
         state.nextIndex = findNextIndex();
+        for (const p of planets) paintPlanet(p);
         for (const m of state.levelMarkers) paintLevelMarker(m);
-        buildPath();
+        for (const p of planets) buildPath(p);
         refreshChests();
         const next = state.levelMarkers[state.nextIndex];
         playBtn.textContent = next && next.done ? `Play level ${state.nextIndex + 1} again` : `Play level ${state.nextIndex + 1}`;
-        if (prevNext !== state.nextIndex || !refresh.ran) focusOn(levelStops[state.nextIndex], refresh.ran ? 1200 : 1);
+        const nextPlanet = planetOfLevelIndex(state.nextIndex);
+        if (!refresh.ran) {
+            // First visit: start on the whole solar system.
+            flyToSystem(1);
+        } else if (prevNext !== state.nextIndex) {
+            if (nextPlanet !== prevPlanet) {
+                // A new planet just opened: show it off, then fly there.
+                showNotification(`New planet unlocked: ${planets[nextPlanet].def.name}!`, 'success');
+                flyToPlanet(nextPlanet, { focusIndex: state.nextIndex, dur: 1600 });
+            } else {
+                focusOn(state.nextIndex, 1200);
+            }
+        }
         refresh.ran = true;
     }
 
@@ -846,39 +1088,78 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
         camera.aspect = w / h;
         camera.updateProjectionMatrix();
         // Leave room for the title bar and the Play button on tall phones.
-        fitDistance = globeFitDistance({ radius: 1.06, fovDeg: camera.fov, aspect: camera.aspect, margin: 1.0 });
+        fitDistance = globeFitDistance({ radius: 1.06 * PLANET_RADIUS, fovDeg: camera.fov, aspect: camera.aspect, margin: 1.0 });
         controls.minDistance = fitDistance * 0.6;
         controls.maxDistance = fitDistance * 1.4;
-        if (!userTurning) camera.position.setLength(fitDistance);
+        systemCam = systemCamera({ fovDeg: camera.fov, aspect: camera.aspect });
+        if (flight.dur === 0 && state.mode === 'system') {
+            camera.position.set(systemCam.position.x, systemCam.position.y, systemCam.position.z);
+            look.set(0, 0, 0);
+        }
     }
     new ResizeObserver(resize).observe(mountEl);
     resize();
 
-    const ease = (t) => 1 - Math.pow(1 - t, 3);
-    const camDir = new THREE.Vector3();
+    const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
     let firstFrame = true;
+    let lastFrame = performance.now();
     function animate() {
         requestAnimationFrame(animate);
         // Only draw while the map is on screen; levels get the whole phone.
-        if (!mountEl.classList.contains('active')) return;
+        if (!mountEl.classList.contains('active')) {
+            lastFrame = performance.now();
+            return;
+        }
         const t = clock.getElapsedTime();
         const now = performance.now();
+        const dt = Math.min(0.1, (now - lastFrame) / 1000);
+        lastFrame = now;
 
-        // Planet spin toward the focused level.
-        if (spin.dur > 0) {
-            const k = Math.min(1, (now - spin.start) / spin.dur);
-            const e = ease(k);
-            world.rotation.x = spin.from.x + (spin.to.x - spin.from.x) * e;
-            world.rotation.y = spin.from.y + (spin.to.y - spin.from.y) * e;
-            if (!userTurning) camera.position.lerpVectors(camFrom, tmpV.set(0, 0, fitDistance), e);
-            if (k >= 1) spin.dur = 0;
-        } else if (!userTurning && !reduceMotion) {
-            // Idle: a slow, gentle sway so the planet feels alive.
-            world.rotation.y += Math.sin(t * 0.4) * 0.0004;
+        // Planets orbit only in the system view, so a flown-to planet holds still.
+        if (state.mode === 'system' && !reduceMotion && flight.dur === 0) {
+            orbitT += dt;
+            placePlanets();
         }
-        // Floating planet.
-        world.position.y = reduceMotion ? 0 : Math.sin(t * 1.2) * 0.015;
-        atmosphere.position.y = world.position.y;
+
+        // Planet spins toward a focused level.
+        for (const p of planets) {
+            if (p.spin.dur > 0) {
+                const k = Math.min(1, (now - p.spin.start) / p.spin.dur);
+                const e = ease(k);
+                p.world.rotation.x = p.spin.from.x + (p.spin.to.x - p.spin.from.x) * e;
+                p.world.rotation.y = p.spin.from.y + (p.spin.to.y - p.spin.from.y) * e;
+                if (k >= 1) p.spin.dur = 0;
+            } else if (!reduceMotion && !(state.mode === 'planet' && state.planet === p.index && userTurning)) {
+                // Idle: planets turn slowly in the system view, sway when close.
+                p.world.rotation.y += state.mode === 'system' ? dt * 0.15 : Math.sin(t * 0.4) * 0.0004;
+            }
+            // The planet with the next mission wears a pulsing gold ring.
+            const isNext = p.index === planetOfLevelIndex(state.nextIndex) && state.mode === 'system';
+            p.halo.material.opacity = isNext && !reduceMotion ? 0.55 + 0.35 * Math.sin(t * 3) : isNext ? 0.7 : 0;
+        }
+        sunMesh.rotation.y += dt * 0.2;
+        for (const m of orbitMeshes) m.visible = state.mode === 'system' || flight.dur > 0;
+
+        // Camera flight.
+        if (flight.dur > 0) {
+            const k = Math.min(1, (now - flight.start) / flight.dur);
+            const e = ease(k);
+            camera.position.lerpVectors(flight.fromPos, flight.toPos, e);
+            look.lerpVectors(flight.fromLook, flight.toLook, e);
+            camera.lookAt(look);
+            if (k >= 1) {
+                flight.dur = 0;
+                if (state.mode === 'planet') {
+                    controls.target.copy(look);
+                    controls.enabled = true;
+                    controls.update();
+                }
+            }
+        } else if (state.mode === 'planet') {
+            controls.update();
+        } else {
+            camera.lookAt(look);
+        }
 
         // Level buttons: the next one bounces with squash and stretch and a
         // pulsing ring; a tapped one squishes.
@@ -935,7 +1216,7 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
             for (const p of b.pieces) {
                 p.position.add(p.userData.v);
                 p.userData.v.multiplyScalar(0.95);
-                p.userData.v.y -= 0.0009;
+                p.userData.v.y -= 0.0006;
                 p.rotation.x += p.userData.spin.x;
                 p.rotation.y += p.userData.spin.y;
                 p.material.opacity = Math.max(0, 1 - age);
@@ -949,28 +1230,8 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
             }
         }
 
-        controls.update();
         renderer.render(scene, camera);
-
-        // Project labels; hide markers facing away from the camera.
-        camDir.copy(camera.position).normalize();
-        for (const m of state.levelMarkers.concat(state.chestMarkers)) {
-            m.grp.getWorldPosition(tmpV);
-            const facing = tmpV.clone().normalize().dot(camDir) > 0.2;
-            tmpV.project(camera);
-            const vw = renderer.domElement.clientWidth;
-            const x = (tmpV.x * 0.5 + 0.5) * vw;
-            const y = (-tmpV.y * 0.5 + 0.5) * renderer.domElement.clientHeight;
-            if (facing && !m.label.hidden && x >= 0 && x <= vw) {
-                m.label.style.display = 'flex';
-                // Measure once per content change, then keep the label on screen.
-                if (!m.label.dataset.w) m.label.dataset.w = m.label.offsetWidth ? String(m.label.offsetWidth) : '';
-                const cx = clampLabelX(x, Number(m.label.dataset.w) || 40, vw);
-                m.label.style.transform = `translate(-50%, -125%) translate(${cx}px, ${y}px)`;
-            } else {
-                m.label.style.display = 'none';
-            }
-        }
+        projectLabels();
 
         if (firstFrame) {
             firstFrame = false;
@@ -982,12 +1243,57 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
         }
     }
 
+    // HTML labels: planet names in the system view, level numbers and prize
+    // boxes on the planet you flew to. Hidden on the far side of a planet.
+    function placeLabel(el, world, extraUp = 0) {
+        tmpV.copy(world).project(camera);
+        const vw = renderer.domElement.clientWidth;
+        const vh = renderer.domElement.clientHeight;
+        const x = (tmpV.x * 0.5 + 0.5) * vw;
+        const y = (-tmpV.y * 0.5 + 0.5) * vh - extraUp;
+        if (tmpV.z > 1 || x < 0 || x > vw) return false;
+        el.style.display = 'flex';
+        if (!el.dataset.w) el.dataset.w = el.offsetWidth ? String(el.offsetWidth) : '';
+        const cx = clampLabelX(x, Number(el.dataset.w) || 40, vw);
+        el.style.transform = `translate(-50%, -125%) translate(${cx}px, ${y}px)`;
+        return true;
+    }
+
+    function projectLabels() {
+        const flying = flight.dur > 0;
+        const systemView = state.mode === 'system' && !flying;
+        // Planet labels sit just above each planet.
+        const vh = renderer.domElement.clientHeight;
+        for (const p of planets) {
+            if (!systemView) {
+                p.label.style.display = 'none';
+                continue;
+            }
+            p.orbitGroup.getWorldPosition(tmpC);
+            // Screen radius of the planet, to lift the label above it.
+            const d = tmpC.distanceTo(camera.position);
+            const rPx = (PLANET_RADIUS / (d * Math.tan((camera.fov * Math.PI) / 360))) * (vh / 2);
+            if (!placeLabel(p.label, tmpC, rPx * 0.9)) p.label.style.display = 'none';
+        }
+        const centre = state.mode === 'planet' ? planetCentre(state.planet, new THREE.Vector3()) : null;
+        const toCam = centre ? camera.position.clone().sub(centre).normalize() : null;
+        for (const m of state.levelMarkers.concat(state.chestMarkers)) {
+            if (state.mode !== 'planet' || flying || m.planet !== state.planet || m.label.hidden) {
+                m.label.style.display = 'none';
+                continue;
+            }
+            m.grp.getWorldPosition(tmpC);
+            const facing = tmpC.clone().sub(centre).normalize().dot(toCam) > 0.2;
+            if (!facing || !placeLabel(m.label, tmpC)) m.label.style.display = 'none';
+        }
+    }
+
     LEVELS.forEach((level, i) => makeLevelMarker(level, i));
     CHESTS.forEach(makeChestMarker);
     refresh();
     animate();
 
     // Expose for playtests.
-    mountEl.__globe = { focusOn, state };
+    mountEl.__globe = { focusOn, flyToPlanet, flyToSystem, refresh, state, planets, camera };
     return { refresh };
 }
