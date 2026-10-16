@@ -89,3 +89,83 @@
 }
 .candy .globe-marker-label { flex-direction: column; align-items: center; }
 .candy .globe-label-lock { margin-top: 2px; padding: 2px 5px; border-radius: 999px; background: #f4f1fb; color: #8a83a3; }
+
+/* Solar system (round 9): planet labels, back button, planet title. */
+.globe-planet-label {
+    position: absolute;
+    top: 0;
+    left: 0;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    gap: 1px;
+    padding: 4px 10px 5px;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.92);
+    border: 2px solid #fff;
+    box-shadow: 0 3px 0 #d16ba5, 0 6px 14px rgba(80, 0, 80, 0.3);
+    color: #7b1fa2;
+    font-family: var(--font-family-base);
+    line-height: 1.1;
+    white-space: nowrap;
+    pointer-events: none;
+}
+.globe-planet-name { font-weight: 700; font-size: 0.95rem; }
+.globe-planet-region { font-size: 0.72rem; color: #a0479a; }
+.globe-planet-stars { font-size: 0.8rem; color: #b8860b; font-weight: 700; }
+.globe-planet-label.locked { background: rgba(244, 241, 251, 0.9); color: #8a83a3; box-shadow: 0 2px 0 #a59fbd; }
+.globe-planet-label.locked .globe-planet-region { color: #8a83a3; }
+.globe-planet-label .globe-label-lock { margin-top: 2px; }
+
+.globe-back {
+    position: absolute;
+    top: calc(max(12px, env(safe-area-inset-top)) + 4px);
+    left: 10px;
+    z-index: 5;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    min-height: 44px;
+    padding: 0 14px 0 10px;
+    border: 2px solid #fff;
+    border-radius: 999px;
+    background: linear-gradient(180deg, #ffffff 0%, #ffe9f6 100%);
+    color: #7b1fa2;
+    font-family: var(--font-family-base);
+    font-size: 0.95rem;
+    font-weight: 700;
+    box-shadow: 0 3px 0 #d16ba5, 0 8px 18px rgba(120, 0, 120, 0.25);
+    cursor: pointer;
+    touch-action: manipulation;
+}
+.globe-back span { font-size: 1.5rem; line-height: 1; margin-top: -3px; }
+.globe-back[hidden] { display: none; }
+.globe-back:active { transform: translateY(2px); box-shadow: 0 1px 0 #d16ba5; }
+
+.candy.in-planet .globe-title { display: none; }
+.globe-planet-title {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 56px;
+    justify-content: center;
+    color: #fff;
+    line-height: 1.05;
+}
+.globe-planet-title-name {
+    font-size: 1.9rem;
+    font-weight: 700;
+    -webkit-text-stroke: 2px #c2185b;
+    paint-order: stroke fill;
+    text-shadow: 0 3px 0 #8e24aa;
+}
+.globe-planet-title-region {
+    margin-top: 2px;
+    font-size: 0.85rem;
+    font-weight: 700;
+    text-shadow: 0 1px 2px rgba(80, 0, 80, 0.6);
+}
+.globe-planet-title[hidden] { display: none; }
+@media (max-width: 420px) {
+    .globe-planet-title-name { font-size: 1.45rem; }
+}
