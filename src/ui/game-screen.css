@@ -356,10 +356,15 @@
 .care-bin--isolated { --bin-bg: #fff7d6; --bin-edge: #ffe08a; --bin-ink: #a16207; }
 .care-bin--cured { --bin-bg: #e6fbef; --bin-edge: #a7ecc5; --bin-ink: #15803d; }
 .care-bin-head { display: flex; align-items: center; gap: 4px; }
-.care-bin-head img { width: 26px; height: 26px; border-radius: 50%; }
 .care-count { font-size: 1.35rem; font-weight: 700; color: var(--bin-ink); font-variant-numeric: tabular-nums; }
-.care-faces { display: flex; flex-wrap: wrap; justify-content: center; gap: 2px; min-height: 0; overflow: hidden; }
-.care-faces img { width: 18px; height: 18px; border-radius: 50%; }
+.care-faces { display: flex; flex-wrap: wrap; justify-content: center; align-content: flex-start; gap: 3px; min-height: 0; overflow: hidden; --face: 30px; }
+.care-bin.empty .care-faces::before {
+    content: '';
+    width: var(--face);
+    height: var(--face);
+    border-radius: 50%;
+    border: 2px dashed var(--bin-edge);
+}
 .care-more { font-size: 0.7rem; font-weight: 700; color: var(--bin-ink); align-self: center; }
 .care-label { margin-top: auto; font-size: 0.78rem; font-weight: 700; color: var(--bin-ink); }
 .care-bin.care-bump { animation: careBump 0.35s cubic-bezier(.3, 1.8, .5, 1); }
@@ -369,9 +374,9 @@
     z-index: 60;
     width: 40px;
     height: 40px;
-    border-radius: 50%;
     pointer-events: none;
     filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.25));
+    --face: 40px;
 }
 
 @media (max-width: 768px) {
@@ -379,9 +384,8 @@
     .care-box { flex-basis: 64px; gap: 6px; }
     .care-bin { padding: 6px 2px; border-radius: 14px; }
     .care-bin-head { flex-direction: column; gap: 0; }
-    .care-bin-head img { width: 24px; height: 24px; }
     .care-count { font-size: 1.15rem; line-height: 1.1; }
-    .care-faces img { width: 14px; height: 14px; }
+    .care-faces { --face: 24px; gap: 2px; }
     .care-label { font-size: 0.68rem; }
 }
 
@@ -404,3 +408,167 @@
     cursor: pointer;
 }
 .network-fit-btn[hidden] { display: none; }
+
+/* Wrap-up: the outbreak can no longer spread, the last days fast-forward. */
+.wrapup-card {
+    position: absolute;
+    left: 50%;
+    bottom: 12px;
+    transform: translateX(-50%);
+    z-index: 8;
+    width: min(92%, 320px);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 10px 14px;
+    border-radius: 18px;
+    background: #dcfce7;
+    border: 2px solid #86efac;
+    color: #166534;
+    text-align: center;
+    box-shadow: 0 6px 18px rgba(22, 101, 52, 0.25);
+    pointer-events: none;
+    animation: wrapupIn 0.5s cubic-bezier(.3, 1.6, .5, 1) both;
+}
+.wrapup-title { font-size: 1.1rem; }
+.wrapup-text { font-size: 0.85rem; line-height: 1.3; }
+@keyframes wrapupIn { from { opacity: 0; transform: translate(-50%, 16px) scale(0.9); } to { opacity: 1; transform: translate(-50%, 0) scale(1); } }
+.wrapping-up .tools-panel { opacity: 0.45; pointer-events: none; transition: opacity 0.3s; }
+
+/* Face tokens: the network's faces on a glossy ball (face-token.js). */
+.face-token {
+    position: relative;
+    display: inline-block;
+    flex: 0 0 auto;
+    width: var(--face, 30px);
+    height: var(--face, 30px);
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.75) 0 12%, transparent 40%), var(--ball);
+    box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.18), 0 2px 3px rgba(0, 0, 0, 0.18);
+}
+.face-token img { position: absolute; inset: 4%; width: 92%; height: 92%; }
+.face-token .face-blink { opacity: 0; animation: faceBlink 4s steps(1, end) infinite; animation-delay: var(--blink-delay, 0s); }
+@keyframes faceBlink { 0%, 91% { opacity: 0; } 92%, 97% { opacity: 1; } 98%, 100% { opacity: 0; } }
+.face-token.face-pop { animation: facePop 0.45s cubic-bezier(.3, 1.8, .5, 1) both; }
+@keyframes facePop { from { transform: scale(0.2); } to { transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) {
+    .face-token .face-blink, .face-token.face-pop { animation: none; }
+}
+
+/* ---- Results tally (results-tally.js) ---- */
+.tally { margin: 10px 0 4px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.tally[hidden] { display: none; }
+.tally-bins { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.tally-bin {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 8px 4px 6px;
+    border-radius: 16px;
+    border: 2px solid var(--bin-edge);
+    background: var(--bin-bg);
+    transition: transform 0.2s;
+}
+.tally-bin--treatment { --bin-bg: #fff1e6; --bin-edge: #ffc9a3; --bin-ink: #c2410c; }
+.tally-bin--isolated { --bin-bg: #fff7d6; --bin-edge: #ffe08a; --bin-ink: #a16207; }
+.tally-bin--cured { --bin-bg: #e6fbef; --bin-edge: #a7ecc5; --bin-ink: #15803d; }
+.tally-bin.active { transform: scale(1.06); box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12); }
+.tally-faces {
+    --face: 22px;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-content: flex-start;
+    gap: 2px;
+    min-height: 46px;
+    width: 100%;
+}
+.tally-bin.empty .tally-faces { opacity: 0.4; }
+.tally-more { font-size: 0.72rem; font-weight: 700; color: var(--bin-ink); align-self: center; }
+.tally-count { font-size: 1.6rem; font-weight: 700; line-height: 1; color: var(--bin-ink); font-variant-numeric: tabular-nums; }
+.tally-label { font-size: 0.78rem; font-weight: 700; color: var(--bin-ink); }
+.tally-pts { font-size: 0.7rem; color: var(--bin-ink); opacity: 0.8; }
+.tally-lines { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.tally-line {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+    padding: 3px 10px;
+    border-radius: 10px;
+    background: #f5f3ff;
+    font-size: 0.82rem;
+    animation: tallyLineIn 0.35s cubic-bezier(.3, 1.4, .5, 1) both;
+}
+.tally-line strong { color: #0b7a5a; font-variant-numeric: tabular-nums; }
+.tally-x { color: #6b7280; font-size: 0.78rem; white-space: nowrap; }
+.tally.done .tally-line { animation: none; }
+@keyframes tallyLineIn { from { opacity: 0; transform: translateX(-18px); } to { opacity: 1; transform: none; } }
+.tally-stars { display: flex; justify-content: center; gap: 10px; margin: 8px 0 2px; font-size: 2.3rem; line-height: 1; }
+.tally-star { color: #e5e7eb; text-shadow: 0 2px 0 #cbd5e1; }
+.tally-star.on { color: #ffc93c; text-shadow: 0 3px 0 #e09b00, 0 0 14px rgba(255, 201, 60, 0.6); }
+.tally-star.pop { animation: starPop 0.5s cubic-bezier(.3, 2, .5, 1) both; }
+@keyframes starPop { 0% { transform: scale(0.2) rotate(-40deg); } 100% { transform: scale(1) rotate(0); } }
+.tally-total { display: flex; justify-content: center; align-items: center; gap: 6px; font-size: 1.15rem; font-weight: 700; color: #0b7a5a; }
+.tally-total [data-total] { font-variant-numeric: tabular-nums; }
+.tally-coin { width: 20px; height: 20px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff6c2 0 18%, #ffd60a 45%, #e09b00 100%); box-shadow: 0 2px 0 #b07800; }
+.tally-prizes { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.tally-prize {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    border-radius: 18px;
+    background: linear-gradient(180deg, #fff 0%, #ffe9f6 100%);
+    border: 2px solid #ffd1ec;
+    box-shadow: 0 4px 0 #f7a8d6;
+    animation: prizeDrop 0.6s cubic-bezier(.3, 1.6, .5, 1) both;
+}
+.tally.done .tally-prize { animation: none; }
+@keyframes prizeDrop { 0% { opacity: 0; transform: translateY(-40px) scale(0.6); } 100% { opacity: 1; transform: none; } }
+.tally-prize-text { display: flex; flex-direction: column; text-align: left; color: #7b1fa2; font-size: 0.85rem; }
+.tally-prize-text strong { color: #c2185b; font-size: 1rem; }
+.tally-gift { position: relative; width: 40px; height: 40px; flex: 0 0 auto; animation: giftWobble 1.2s ease-in-out infinite; }
+.gift-box { position: absolute; left: 4px; right: 4px; bottom: 0; height: 26px; border-radius: 4px; background: linear-gradient(90deg, #ff5fa2 0 42%, #ffd60a 42% 58%, #ff5fa2 58%); }
+.gift-lid { position: absolute; left: 0; right: 0; top: 6px; height: 10px; border-radius: 4px; background: linear-gradient(90deg, #ff7ab5 0 42%, #ffd60a 42% 58%, #ff7ab5 58%); }
+.gift-lid::before, .gift-lid::after { content: ''; position: absolute; top: -8px; width: 12px; height: 10px; border: 3px solid #ffd60a; border-radius: 50% 50% 0 50%; }
+.gift-lid::before { left: 6px; transform: rotate(20deg); }
+.gift-lid::after { right: 6px; transform: scaleX(-1) rotate(20deg); }
+@keyframes giftWobble { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-8deg); } 75% { transform: rotate(8deg); } }
+.tally-confetti { position: absolute; left: 32px; top: 20px; pointer-events: none; }
+.tally-confetti i {
+    position: absolute;
+    width: 7px;
+    height: 4px;
+    border-radius: 1px;
+    background: hsl(calc(var(--i) * 47deg), 90%, 60%);
+    animation: confettiBurst 1.1s ease-out both;
+    --a: calc(var(--i) * 25.7deg);
+}
+.tally.done .tally-confetti { display: none; }
+@keyframes confettiBurst {
+    0% { transform: rotate(var(--a)) translateX(0); opacity: 1; }
+    100% { transform: rotate(var(--a)) translateX(70px) rotate(220deg); opacity: 0; }
+}
+.tally-lines--award { margin: 0 0 4px; }
+.tally-lines--award .tally-line { background: #fff8db; }
+/* With the tally up, the win line is redundant, and the buttons stay in reach. */
+#game-over-screen.has-tally .game-over-message { display: none; }
+#game-over-screen.has-tally .game-over-actions {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    margin-left: -8px;
+    margin-right: -8px;
+    padding: 10px 8px calc(10px + env(safe-area-inset-bottom, 0px));
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0) 0, #fff 14px);
+}
+.tally-skip { margin-top: 4px; font-size: 0.72rem; color: #9ca3af; text-align: center; }
+.tally.done .tally-skip { visibility: hidden; }
+.final-stats-wrap { margin-top: 6px; }
+.final-stats-summary { cursor: pointer; font-size: 0.85rem; font-weight: 700; color: #6b7280; text-align: center; padding: 6px; min-height: 32px; }
+@media (prefers-reduced-motion: reduce) {
+    .tally-line, .tally-star.pop, .tally-prize, .tally-gift, .tally-confetti i { animation: none; }
+}
