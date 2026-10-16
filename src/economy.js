@@ -254,6 +254,7 @@ function applyPay(gameApi) {
         sent++;
     }
     gameApi.gameState.stats.totalProtected += sent;
+    gameApi.gameState.stats.treated = (gameApi.gameState.stats.treated || 0) + sent;
     return sent;
 }
 
