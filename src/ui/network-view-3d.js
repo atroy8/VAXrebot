@@ -49,6 +49,7 @@ import { fitCamera } from './game-screen-model.js';
 import { pickTapTarget } from './tap-target.js';
 import { layoutStep as forceStep, settleLayout, nextAlpha, layoutForAspect, LAYOUT } from './force-layout.js';
 import { isBoxed } from './care-box-model.js';
+import { linkStyle, LINK_WIDTHS } from './link-style.js';
 
 // Bundle every face frame at build time so the game works fully offline.
 // Map ends up as: textures[state][frame] -> THREE.Texture
@@ -87,15 +88,14 @@ const FACE_SCALE = 1.15;
 // wide, so 1.2 keeps the outer ring clear of the edges without wasting space.
 const FIT_PAD = 1.2;
 
-// Link ribbon widths (world units).
-const LINK_W = 0.09;
-const LINK_W_RISK = 0.15;
-const LINK_W_SEVER = 0.17;
+// Link ribbon widths and colour keys come from link-style.js.
 const LINK_COLORS = {
     normal: new THREE.Color(0x8fa3bf),
     blocked: new THREE.Color(0x56627a),
     risk: new THREE.Color(0xff4d6d),
-    sever: new THREE.Color(0xffb03a),
+    // Plain lines while Sever is selected: a touch deeper than normal so they
+    // read as cuttable without drowning out the red at-risk lines.
+    cuttable: new THREE.Color(0x6f86a8),
 };
 
 // Physics lives in force-layout.js (stable, cools to rest).
@@ -517,7 +517,8 @@ export class NetworkView {
             const pb = b ? b.pos : _tmp2.set(0, 0, 0);
             const kind = this.linkKind(link);
             const hidden = (a && a.boxed) || (b && b.boxed);
-            const w = hidden ? 0 : (severing ? LINK_W_SEVER : kind === 'risk' ? LINK_W_RISK : LINK_W) / 2;
+            const style = linkStyle(kind, severing);
+            const w = hidden ? 0 : style.width / 2;
             let dx = pb.x - pa.x;
             let dy = pb.y - pa.y;
             const len = Math.hypot(dx, dy) || 1;
@@ -527,8 +528,8 @@ export class NetworkView {
             pos[k++] = pa.x - nx; pos[k++] = pa.y - ny; pos[k++] = -0.1;
             pos[k++] = pb.x + nx; pos[k++] = pb.y + ny; pos[k++] = -0.1;
             pos[k++] = pb.x - nx; pos[k++] = pb.y - ny; pos[k++] = -0.1;
-            const base = kind === 'risk' ? LINK_COLORS.risk : severing && kind !== 'blocked' ? LINK_COLORS.sever : LINK_COLORS[kind];
-            const m = kind === 'risk' ? pulse : 1;
+            const base = LINK_COLORS[style.color];
+            const m = style.pulse ? pulse : 1;
             for (let v = 0; v < 4; v++) {
                 col[c++] = base.r * m; col[c++] = base.g * m; col[c++] = base.b * m;
             }
@@ -597,7 +598,7 @@ export class NetworkView {
         };
     }
 
-    // Highlight every severable link while the Sever tool is selected.
+    // While Sever is selected, at-risk links get bolder (see link-style.js).
     setToolMode(toolId) {
         this.toolMode = toolId;
     }
@@ -758,7 +759,7 @@ export class NetworkView {
 
         // 1. Two stubs whip back into their nodes with an elastic overshoot.
         const stubMat = new THREE.MeshBasicMaterial({ color: 0xffb03a, transparent: true, depthWrite: false });
-        const stubGeo = new THREE.PlaneGeometry(1, LINK_W_SEVER);
+        const stubGeo = new THREE.PlaneGeometry(1, LINK_WIDTHS.severRisk);
         const stubs = [a, b].map((end) => {
             const m = new THREE.Mesh(stubGeo, stubMat);
             m.position.z = 0.02;
