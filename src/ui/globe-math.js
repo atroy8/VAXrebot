@@ -87,3 +87,14 @@ export function angleDelta(a, b) {
     if (d <= -Math.PI) d += 2 * Math.PI;
     return d;
 }
+
+// True when a marker sits on the half of the planet facing the camera.
+// Pure and non-mutating on purpose: the old inline version reused one scratch
+// vector for both the planet centre and the camera direction, so the
+// direction collapsed to zero and every tap on a planet (level buttons and
+// prize boxes) was thrown away. Accepts any {x, y, z} objects.
+export function facesCamera(markerPos, centre, cameraPos) {
+    const mx = markerPos.x - centre.x, my = markerPos.y - centre.y, mz = markerPos.z - centre.z;
+    const cx = cameraPos.x - centre.x, cy = cameraPos.y - centre.y, cz = cameraPos.z - centre.z;
+    return mx * cx + my * cy + mz * cz > 0;
+}
