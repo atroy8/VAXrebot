@@ -1,0 +1,111 @@
+/* Start page (round 12): title, bouncing people on a planet, Play. */
+.start-page { position: absolute; inset: 0; z-index: 6; pointer-events: none; }
+.start-page[hidden] { display: none; }
+.start-page.leaving { animation: startOut 0.5s ease-in forwards; }
+@keyframes startOut { to { opacity: 0; } }
+
+.start-top {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: calc(max(18px, env(safe-area-inset-top)) + 28px);
+    text-align: center;
+    padding: 0 16px;
+}
+.start-title {
+    margin: 0;
+    font-family: var(--font-family-base);
+    font-size: clamp(2.8rem, 15vw, 4.2rem);
+    font-weight: 700;
+    line-height: 1;
+    color: var(--kin-300, #ecd27e);
+    -webkit-text-stroke: 3px var(--ai-900, #0b1838);
+    paint-order: stroke fill;
+    text-shadow: 0 5px 0 var(--kin-700, #8a6417), 0 12px 26px rgba(0, 0, 0, 0.5);
+    animation: startTitleBob 3s ease-in-out infinite;
+}
+@keyframes startTitleBob { 0%, 100% { transform: translateY(0) rotate(-1.5deg); } 50% { transform: translateY(-6px) rotate(1.5deg); } }
+.start-tagline {
+    margin: 12px 0 0;
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--ai-100, #e8eef8);
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.6);
+}
+
+.start-people { position: absolute; inset: 0; }
+.start-person {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: var(--size, 52px);
+    height: var(--size, 52px);
+    padding: 0;
+    border: none;
+    background: none;
+    pointer-events: auto;
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    transform-origin: 50% 50%;
+}
+.start-person .face-token {
+    --face: var(--size, 52px);
+    width: 100%;
+    height: 100%;
+    transform-origin: 50% 100%;
+    animation: startBounce 0.9s cubic-bezier(.3, 0, .7, 1) infinite;
+    animation-delay: calc(var(--d, 0s) * -1);
+}
+/* Up and down with a squash on landing, in the person's own (tilted) frame. */
+@keyframes startBounce {
+    0%   { transform: translateY(0) scale(1.18, 0.82); }
+    12%  { transform: translateY(-6%) scale(0.92, 1.1); }
+    50%  { transform: translateY(-48%) scale(1, 1); }
+    88%  { transform: translateY(-6%) scale(0.95, 1.06); }
+    100% { transform: translateY(0) scale(1.18, 0.82); }
+}
+.start-person.leap .face-token { animation: startLeap 0.85s cubic-bezier(.2, .9, .3, 1) both; }
+@keyframes startLeap {
+    0%   { transform: translateY(0) scale(1.25, 0.75) rotate(0); }
+    45%  { transform: translateY(-190%) scale(1, 1) rotate(200deg); }
+    80%  { transform: translateY(-20%) scale(0.95, 1.05) rotate(360deg); }
+    100% { transform: translateY(0) scale(1.15, 0.85) rotate(360deg); }
+}
+
+.start-play {
+    position: absolute;
+    left: 50%;
+    bottom: calc(34px + env(safe-area-inset-bottom, 0px));
+    transform: translateX(-50%);
+    min-width: 240px;
+    min-height: 68px;
+    padding: 0 36px;
+    pointer-events: auto;
+    border: 3px solid #fff6d6;
+    border-radius: 999px;
+    background: var(--gold-leaf, linear-gradient(180deg, #f6e3a1, #ddb94a 45%, #c9a227 70%, #a9801f));
+    color: var(--ai-900, #0b1838);
+    font-family: var(--font-family-base);
+    font-size: 1.6rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-shadow: 0 1px 0 rgba(255, 246, 214, 0.7);
+    box-shadow: 0 7px 0 var(--kin-700, #8a6417), 0 14px 28px rgba(0, 0, 0, 0.45), inset 0 3px 0 rgba(255, 255, 255, 0.55);
+    cursor: pointer;
+    touch-action: manipulation;
+    animation: startPlayBreath 1.6s ease-in-out infinite;
+}
+.start-play:active { transform: translateX(-50%) translateY(5px) scale(0.98); box-shadow: 0 2px 0 var(--kin-700, #8a6417); animation: none; }
+@keyframes startPlayBreath { 0%, 100% { transform: translateX(-50%) scale(1); } 50% { transform: translateX(-50%) scale(1.06); } }
+
+/* While the start page shows, the map chrome stays out of the way. */
+.globe-home.on-start .globe-hud,
+.globe-home.on-start .globe-play,
+.globe-home.on-start .globe-back,
+.globe-home.on-start .globe-labels { display: none; }
+body:has(.globe-home.on-start) .settings-fab { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+    .start-title, .start-play, .start-person .face-token { animation: none; }
+}
