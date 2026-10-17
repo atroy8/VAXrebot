@@ -1,4 +1,4 @@
-// The candy solar system on the home screen: one planet per region, each
+// The solar system on the home screen (candy gloss, indigo and gold colours): one planet per region, each
 // holding that region's three levels. Pure data, shared by the 3D view
 // (src/ui/globe-view.js) and its tests.
 //
@@ -18,30 +18,31 @@ export const PLANETS = [
         regionId: 'hometown',
         name: 'Gumdrop',
         orbit: { a: 1.3, b: 2.3, phase: 0.5 },
-        ocean: ['#4fd1ff', '#2bb3f3'],
-        land: ['#7ae582', '#ff9ad5', '#ffe66d', '#c3a6ff', '#ffb38a', '#8be9fd'],
-        glow: 0xffc6ec,
-        button: 0x2ee59d,
+        // Ai and kin theme (round 12): deep indigo seas, gold leaf and washi land.
+        ocean: ['#234c9c', '#13265a'],
+        land: ['#d4ab3a', '#ecd27e', '#f7f2e4', '#c9a227', '#e2bf5a', '#f3e3b3'],
+        glow: 0xf3d27a,
+        button: 0x2f6fd6,
         seed: 20261015,
     },
     {
         regionId: 'national',
         name: 'Marshmallow',
         orbit: { a: 1.9, b: 3.8, phase: 0.5 + (2 * Math.PI) / 3 },
-        ocean: ['#8ff0d0', '#3fd6a6'],
-        land: ['#ff9ad5', '#ffe66d', '#ffffff', '#ffb38a', '#c3a6ff', '#ff7aa8'],
-        glow: 0xb9fff0,
-        button: 0x3ab0ff,
+        ocean: ['#3565b8', '#1b3a7a'],
+        land: ['#f7f2e4', '#ddb94a', '#f3e3b3', '#c9a227', '#ecd27e', '#ffffff'],
+        glow: 0x9cc4ff,
+        button: 0x3f8fe0,
         seed: 777,
     },
     {
         regionId: 'global',
         name: 'Jawbreaker',
         orbit: { a: 2.5, b: 5.3, phase: 0.5 + (4 * Math.PI) / 3 },
-        ocean: ['#c3a0ff', '#8a5cf5'],
-        land: ['#ffd60a', '#ff6b9a', '#7ae582', '#8be9fd', '#ffb38a', '#ffffff'],
-        glow: 0xffb3c7,
-        button: 0xff4f9a,
+        ocean: ['#1b3a7a', '#0b1838'],
+        land: ['#c9a227', '#f7f2e4', '#ecd27e', '#a9801f', '#ddb94a', '#f3e3b3'],
+        glow: 0xe8c45f,
+        button: 0x5b6fd8,
         seed: 4242,
     },
 ];

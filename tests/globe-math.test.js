@@ -87,3 +87,31 @@ describe('prize boxes open in the built game (bug fix)', () => {
         expect(src).not.toContain('@vite-ignore');
     });
 });
+
+describe('facesCamera (round 12 prize box fix)', () => {
+    it('keeps markers on the near side and drops the far side', async () => {
+        const { facesCamera } = await import('../src/ui/globe-math.js');
+        const centre = { x: 2, y: 0, z: 0 };
+        const cam = { x: 2, y: 0, z: 5 };
+        expect(facesCamera({ x: 2, y: 0, z: 1 }, centre, cam)).toBe(true);
+        expect(facesCamera({ x: 2, y: 0.5, z: 0.8 }, centre, cam)).toBe(true);
+        expect(facesCamera({ x: 2, y: 0, z: -1 }, centre, cam)).toBe(false);
+    });
+
+    it('does not mutate its inputs, even when they are the same object', async () => {
+        const { facesCamera } = await import('../src/ui/globe-math.js');
+        const centre = { x: 1, y: 2, z: 3 };
+        const cam = { x: 1, y: 2, z: 9 };
+        const marker = { x: 1, y: 2, z: 4 };
+        expect(facesCamera(marker, centre, cam)).toBe(true);
+        expect(centre).toEqual({ x: 1, y: 2, z: 3 });
+        expect(cam).toEqual({ x: 1, y: 2, z: 9 });
+        expect(facesCamera(centre, centre, cam)).toBe(false);
+    });
+
+    it('the globe tap handler no longer aliases its scratch vectors', () => {
+        const src = readFileSync(new URL('../src/ui/globe-view.js', import.meta.url), 'utf8');
+        expect(src).not.toMatch(/planetCentre\(state\.planet, tmpC\);\s*const onPlanet/);
+        expect(src).toContain('facesCamera(tmpV, centre, camera.position)');
+    });
+});

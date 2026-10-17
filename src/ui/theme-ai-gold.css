@@ -1,0 +1,271 @@
+/* Ai and kin theme (round 12): classic Japanese indigo and gold leaf, with
+   washi paper surfaces and vermilion only for warnings. Loaded last, so it
+   recolours the earlier candy styles while keeping their glossy layering,
+   chunky 3D shadows and bouncy motion. Palette mirrors src/config/theme.js. */
+
+:root {
+    --ai-900: #0b1838;
+    --ai-800: #13265a;
+    --ai-700: #1b3a7a;
+    --ai-600: #234c9c;
+    --ai-500: #3565b8;
+    --ai-400: #5b82c8;
+    --ai-200: #c7d6f0;
+    --ai-100: #e8eef8;
+    --kin-700: #8a6417;
+    --kin-600: #a9801f;
+    --kin-500: #c9a227;
+    --kin-400: #ddb94a;
+    --kin-300: #ecd27e;
+    --kin-100: #f8eecb;
+    --washi: #f7f2e4;
+    --washi-edge: #e7dcc0;
+    --shu: #c8432f;
+
+    --gold-leaf: linear-gradient(180deg, #f6e3a1 0%, var(--kin-400) 45%, var(--kin-500) 70%, var(--kin-600) 100%);
+    --indigo-lacquer: linear-gradient(180deg, var(--ai-500) 0%, var(--ai-700) 60%, var(--ai-800) 100%);
+    /* Night sky with gold flecks and faint seigaiha waves along the bottom. */
+    --night-sky:
+        radial-gradient(circle at 20% 15%, rgba(236, 210, 126, 0.55) 0 1.5px, transparent 2.5px) 0 0 / 46px 46px,
+        radial-gradient(circle at 70% 60%, rgba(255, 255, 255, 0.28) 0 1px, transparent 2px) 0 0 / 31px 31px,
+        linear-gradient(180deg, var(--ai-900) 0%, var(--ai-800) 45%, var(--ai-700) 100%);
+
+    --color-background: var(--ai-900);
+    --color-surface: #fffdf7;
+    --color-text: #16213f;
+    --color-text-secondary: #55617f;
+    --color-primary: var(--ai-700);
+    --color-primary-hover: var(--ai-600);
+    --color-primary-active: var(--ai-800);
+    --color-secondary: var(--washi);
+    --color-secondary-hover: #efe7d2;
+    --color-secondary-active: var(--washi-edge);
+    --color-border: var(--washi-edge);
+    --color-card-border: var(--washi-edge);
+    --color-focus-ring: rgba(201, 162, 39, 0.45);
+}
+
+html,
+html body { background: var(--ai-900); }
+html .app-container { background: var(--night-sky); }
+
+/* ---- Buttons: indigo lacquer with a gold edge, gold leaf for the hero ---- */
+html .btn--primary {
+    background: var(--indigo-lacquer);
+    color: #fff;
+    border: 2px solid var(--kin-400);
+    box-shadow: 0 4px 0 var(--kin-700), 0 8px 16px rgba(11, 24, 56, 0.3);
+    text-shadow: 0 1px 0 rgba(0, 0, 0, 0.25);
+}
+html .btn--primary:hover { background: var(--indigo-lacquer); box-shadow: 0 5px 0 var(--kin-700), 0 10px 18px rgba(11, 24, 56, 0.35); }
+html .btn--primary:active { background: var(--indigo-lacquer); transform: translateY(3px); box-shadow: 0 1px 0 var(--kin-700); }
+html .btn--secondary {
+    background: var(--washi);
+    color: var(--ai-800);
+    border: 2px solid var(--washi-edge);
+    box-shadow: 0 3px 0 var(--washi-edge);
+}
+html .btn--secondary:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--washi-edge); }
+
+/* ---- Home: solar system ---- */
+html .globe-home.candy { background: var(--night-sky); }
+html .candy .globe-loading { color: var(--kin-300); text-shadow: 0 2px 0 var(--ai-900); }
+html .candy .globe-title,
+html .globe-planet-title-name {
+    color: var(--kin-300);
+    -webkit-text-stroke: 2px var(--ai-900);
+    text-shadow: 0 4px 0 var(--kin-700), 0 8px 18px rgba(0, 0, 0, 0.45);
+}
+html .globe-planet-title-region { color: var(--ai-100); text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6); }
+html .candy .globe-stat {
+    background: linear-gradient(180deg, #fffdf5 0%, var(--washi) 100%);
+    color: var(--ai-800);
+    border: 2px solid var(--kin-300);
+    box-shadow: 0 3px 0 var(--kin-600), 0 8px 18px rgba(0, 0, 0, 0.35);
+}
+html .candy .globe-stat.stat-stars { color: var(--kin-700); }
+html .candy .globe-stat.stat-funding { color: var(--ai-600); }
+html .candy .globe-label-num {
+    background: var(--washi);
+    color: var(--ai-800);
+    border-color: var(--ai-600);
+    box-shadow: 0 3px 0 var(--ai-800), 0 6px 12px rgba(0, 0, 0, 0.35);
+}
+html .candy .globe-marker-label.current .globe-label-num { border-color: var(--kin-400); color: var(--ai-700); }
+html .candy .globe-marker-label.locked .globe-label-num { border-color: #9aa6bf; color: #6b7690; background: #eef1f7; box-shadow: 0 2px 0 #7d889f; }
+html .candy .globe-label-stars { color: var(--kin-300); text-shadow: 0 2px 0 var(--ai-900), 0 2px 6px rgba(0, 0, 0, 0.5); }
+html .candy .globe-label-chest { background: var(--washi); color: var(--ai-700); box-shadow: 0 2px 0 var(--kin-600); }
+html .candy .chest-label.ready .globe-label-chest { background: var(--gold-leaf); color: var(--ai-900); }
+html .candy .globe-label-lock { background: #eef1f7; color: #6b7690; }
+
+html .globe-planet-label {
+    background: rgba(247, 242, 228, 0.95);
+    border-color: var(--kin-300);
+    box-shadow: 0 3px 0 var(--kin-600), 0 6px 14px rgba(0, 0, 0, 0.35);
+    color: var(--ai-800);
+}
+html .globe-planet-region { color: var(--ai-500); }
+html .globe-planet-stars { color: var(--kin-700); }
+html .globe-planet-label.locked { background: rgba(232, 238, 248, 0.88); color: #6b7690; box-shadow: 0 2px 0 #7d889f; border-color: #fff; }
+
+html .globe-back {
+    background: linear-gradient(180deg, #fffdf5 0%, var(--washi) 100%);
+    border-color: var(--kin-300);
+    color: var(--ai-800);
+    box-shadow: 0 3px 0 var(--kin-600), 0 8px 18px rgba(0, 0, 0, 0.3);
+}
+html .globe-back:active { box-shadow: 0 1px 0 var(--kin-600); }
+
+html .globe-play {
+    border-color: #fff6d6;
+    background: var(--gold-leaf);
+    color: var(--ai-900);
+    text-shadow: 0 1px 0 rgba(255, 246, 214, 0.7);
+    box-shadow: 0 6px 0 var(--kin-700), 0 12px 24px rgba(0, 0, 0, 0.4), inset 0 3px 0 rgba(255, 255, 255, 0.55);
+}
+html .globe-play:active { box-shadow: 0 2px 0 var(--kin-700); }
+
+html .candy .globe-sheet,
+html .globe-sheet {
+    background: #fffdf7;
+    border: 3px solid var(--kin-300);
+    box-shadow: 0 10px 0 var(--kin-600), 0 -4px 30px rgba(0, 0, 0, 0.45);
+}
+html .globe-sheet h2 { color: var(--ai-800); }
+html .candy .globe-sheet-sub,
+html .globe-sheet-sub { color: var(--kin-700); }
+html .globe-sheet-desc { color: #3a4763; }
+html .globe-sheet-close { background: var(--washi); color: var(--ai-700); }
+html .candy .globe-sheet-btn,
+html .globe-sheet-btn {
+    background: var(--indigo-lacquer);
+    border: 2px solid var(--kin-400);
+    box-shadow: 0 5px 0 var(--kin-700);
+}
+
+html .settings-fab { background: var(--washi); color: var(--ai-800); border: 2px solid var(--kin-300); box-shadow: 0 3px 0 var(--kin-600), 0 6px 14px rgba(0, 0, 0, 0.35); }
+html .settings-sheet { background: #fffdf7; color: var(--color-text); border-top: 3px solid var(--kin-400); }
+html .ad-close { background: var(--ai-700); }
+html .ad-remove { border-color: var(--ai-700); color: var(--ai-700); }
+
+/* ---- Briefing and results cards: washi paper with a gold rim ---- */
+html .briefing-content,
+html .game-over-content {
+    background: #fffdf7;
+    border: 2px solid var(--kin-300);
+    box-shadow: 0 8px 0 var(--kin-600), 0 18px 40px rgba(0, 0, 0, 0.45);
+    border-radius: 18px;
+}
+html .briefing-content h2,
+html .game-over-content h2 { color: var(--ai-800); }
+html .disease-dynamics { background: var(--ai-100); border-radius: 12px; }
+html .lesson-card {
+    background: var(--kin-100);
+    border: 1px solid var(--kin-300);
+    border-left: 4px solid var(--kin-500);
+}
+html .lesson-kicker { color: var(--kin-700); }
+html .threat-box { background: linear-gradient(160deg, var(--ai-100), #f4f0ff00), var(--washi); border-color: var(--ai-200); }
+html .threat-pip.on {
+    background: radial-gradient(circle at 35% 30%, #fff6d6 0 18%, var(--kin-400) 45%, var(--kin-600) 100%);
+    box-shadow: 0 2px 0 var(--kin-700), inset 0 -3px 0 rgba(0, 0, 0, 0.12);
+}
+html .final-stat { background: var(--washi); }
+html #game-over-screen.has-tally .game-over-actions { background: linear-gradient(180deg, rgba(255, 253, 247, 0) 0, #fffdf7 14px); }
+
+/* ---- In-level dashboard ---- */
+html .game-header {
+    background: var(--indigo-lacquer);
+    border: 2px solid var(--kin-400);
+    box-shadow: 0 4px 0 var(--kin-700), 0 10px 24px rgba(0, 0, 0, 0.35);
+    color: #fff;
+}
+html .game-info h4 { color: var(--kin-300); }
+html .icon-btn { background: rgba(255, 255, 255, 0.12); color: var(--kin-300); border: 1.5px solid rgba(236, 210, 126, 0.5); }
+html .game-stats .stat {
+    background: rgba(11, 24, 56, 0.45);
+    border: 1px solid rgba(236, 210, 126, 0.35);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+html .game-stats .stat-label { color: var(--kin-300); }
+html .game-stats .stat-value { color: #fff; }
+html #r-value.r-up { color: #ff8a76; }
+html #r-value.r-down { color: #8ee6b0; }
+html .case-meter-bar { background: rgba(255, 255, 255, 0.18); }
+html .case-meter-bar::after { background: var(--kin-400); }
+html .case-meter.warn .case-meter-bar::after { background: var(--shu); }
+html .case-meter.warn .case-meter-value { color: #ff8a76; }
+
+html .network-container {
+    background:
+        radial-gradient(circle at 50% 120%, rgba(199, 214, 240, 0.55), transparent 60%),
+        var(--washi);
+    border: 2px solid var(--washi-edge);
+}
+html .legend-toggle,
+html .network-fit-btn { background: rgba(11, 24, 56, 0.82); color: var(--kin-300); }
+html .tool-hint { background: rgba(11, 24, 56, 0.88); color: var(--kin-100); }
+html .day-banner { background: #fffdf7; color: var(--ai-800); border: 1.5px solid var(--kin-300); }
+html .day-banner.bad { background: #fde8e3; color: #8f2a1c; border-color: #f2b5a8; }
+html .day-banner.good { background: var(--ai-100); color: var(--ai-700); border-color: var(--ai-200); }
+
+html .tools-panel,
+html .game-footer {
+    background: rgba(11, 24, 56, 0.55);
+    border: 1.5px solid rgba(236, 210, 126, 0.4);
+}
+html .tool-item {
+    background: #fffdf7;
+    border: 2px solid var(--washi-edge);
+    box-shadow: 0 3px 0 var(--washi-edge);
+}
+html .tool-item.selected {
+    background: var(--kin-100);
+    border-color: var(--kin-500);
+    box-shadow: 0 3px 0 var(--kin-600), 0 0 0 3px rgba(201, 162, 39, 0.35);
+}
+html .tool-item.empty { background: rgba(255, 253, 247, 0.85); }
+html .tool-item.shop-chip .tool-icon { background: var(--kin-500); }
+html .tool-name { color: var(--ai-800); }
+
+/* Care box: washi bins, each with its own ink (vermilion, gold, indigo). */
+html .care-bin,
+html .tally-bin { border-width: 2px; box-shadow: 0 3px 0 var(--bin-edge); }
+html .care-bin--treatment,
+html .tally-bin--treatment { --bin-bg: #fdf1ec; --bin-edge: #efc2b5; --bin-ink: #a8361f; }
+html .care-bin--isolated,
+html .tally-bin--isolated { --bin-bg: var(--kin-100); --bin-edge: var(--kin-300); --bin-ink: var(--kin-700); }
+html .care-bin--cured,
+html .tally-bin--cured { --bin-bg: var(--ai-100); --bin-edge: var(--ai-200); --bin-ink: var(--ai-600); }
+
+html .wrapup-card { background: var(--ai-100); border-color: var(--ai-400); color: var(--ai-800); box-shadow: 0 6px 18px rgba(11, 24, 56, 0.3); }
+
+html #game-screen.is-paused .game-footer { background: #fffdf7; border: 2px solid var(--kin-300); }
+html .shop-sheet-panel { background: #fffdf7; border-top: 3px solid var(--kin-400); }
+html .notification.info { background-color: var(--ai-800); }
+html .notification.success { background-color: var(--ai-600); border: 1.5px solid var(--kin-300); }
+html .notification.warning { background-color: var(--kin-700); }
+html .notification.error { background-color: var(--shu); }
+
+/* ---- Results tally ---- */
+html .tally-line { background: var(--ai-100); }
+html .tally-line strong { color: var(--ai-600); }
+html .tally-lines--award .tally-line { background: var(--kin-100); }
+html .tally-star.on { color: var(--kin-400); text-shadow: 0 3px 0 var(--kin-700), 0 0 14px rgba(236, 210, 126, 0.7); }
+html .tally-total { color: var(--ai-700); }
+html .tally-coin { background: radial-gradient(circle at 35% 30%, #fff6d6 0 18%, var(--kin-400) 45%, var(--kin-600) 100%); box-shadow: 0 2px 0 var(--kin-700); }
+html .tally-prize { background: linear-gradient(180deg, #fffdf7 0%, var(--kin-100) 100%); border-color: var(--kin-300); box-shadow: 0 4px 0 var(--kin-600); }
+html .tally-prize-text { color: var(--ai-700); }
+html .tally-prize-text strong { color: var(--ai-800); }
+html .gift-box { background: linear-gradient(90deg, var(--ai-600) 0 42%, var(--kin-400) 42% 58%, var(--ai-600) 58%); }
+html .gift-lid { background: linear-gradient(90deg, var(--ai-500) 0 42%, var(--kin-400) 42% 58%, var(--ai-500) 58%); }
+html .gift-lid::before,
+html .gift-lid::after { border-color: var(--kin-400); }
+html .tally-confetti i { background: hsl(calc(42deg + var(--i) * 97deg), 70%, 58%); }
+
+/* Settings rows and the pause card's music switch. */
+html .settings-row { background: var(--washi); border-color: var(--washi-edge); color: var(--ai-800); }
+html .settings-row.settings-danger { background: #fdf1ec; border-color: #efc2b5; color: #a8361f; }
+html .settings-section-title, html .settings-sheet h3 { color: var(--kin-700); }
+html #music-toggle { background: var(--washi); color: var(--ai-800); border: 2px solid var(--washi-edge); box-shadow: 0 3px 0 var(--washi-edge); }
+html .volume-control input[type="range"] { accent-color: var(--ai-600); }
