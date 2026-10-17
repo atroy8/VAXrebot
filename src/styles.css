@@ -1215,3 +1215,14 @@
     .game-over-actions { margin-top: var(--space-16); gap: 10px; }
     .game-over-actions .btn { min-height: 48px; }
 }
+
+/* Round 12: the "Open me!" tag is a real button (padding widens the touch area to 44 px). */
+.globe-marker-label.chest-label.ready {
+    pointer-events: auto;
+    cursor: pointer;
+    padding: 10px 8px;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}

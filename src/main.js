@@ -1,4 +1,5 @@
 import './styles.css';
+import './ui/theme-ai-gold.css';
 import '@fontsource/fredoka/500.css';
 import '@fontsource/fredoka/700.css';
 import { EpidemicSimulator } from './game.js';
@@ -10,4 +11,3 @@ import { mountGlobeHome } from './ui/screens.js';
             // Level taps route through the existing briefing flow.
             mountGlobeHome({ onPlayLevel: (levelId) => window.game.selectLevel(levelId) });
         });
-import('./ui/onboarding.js').then((m) => m.maybeShowOnboarding());

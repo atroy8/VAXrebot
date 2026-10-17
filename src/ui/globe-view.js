@@ -13,14 +13,17 @@ import { isLevelUnlocked, lockReason, levelRecord, totalStars } from '../progres
 import { loadSave, createStorage } from '../save.js';
 import { showNotification } from './panels.js';
 import './globe-candy.css';
+import './start-page.css';
+import { startPageMarkup, layoutPeople, bindPeopleTaps } from './start-page.js';
 import { starRow, levelLabelHtml, clampLabelX, LOCK_ICON as LOCK_SVG } from './globe-labels.js';
-import { latLngToXYZ, windingPath, chestStop, globeFitDistance, faceRotation, angleDelta, slerp } from './globe-math.js';
+import { latLngToXYZ, windingPath, chestStop, globeFitDistance, faceRotation, angleDelta, slerp, facesCamera } from './globe-math.js';
 import { PLANETS, PLANET_RADIUS, PLANET_LEVEL_POSITIONS, SUN_RADIUS } from '../config/solar-system.js';
 import { orbitAngle, orbitPosition, systemCamera, planetStatus } from './solar-math.js';
+import { THEME, FLAKES, CONFETTI, hexNum } from '../config/theme.js';
 
 // Level buttons: the planet's color while open, gold once beaten.
-const LOCKED_COLOR = 0xb9b3cc;
-const COMPLETED_COLOR = 0xffc93c;
+const LOCKED_COLOR = 0x9aa6bf;
+const COMPLETED_COLOR = hexNum(THEME.kin400);
 
 const POWERUP_NAMES = {
     eureka: 'Eureka cure',
@@ -46,7 +49,7 @@ function mulberry32(seed) {
 // continents with white frosting edges and sprinkles, candy-cane poles.
 // Drawn locally on a canvas, no downloads.
 const CANDY = ['#7ae582', '#ff9ad5', '#ffe66d', '#c3a6ff', '#ffb38a', '#8be9fd'];
-const SPRINKLES = ['#ff4d6d', '#ffd60a', '#4cc9f0', '#80ed99', '#b388ff', '#ffffff'];
+const SPRINKLES = FLAKES;
 
 function makeWorldTexture({ seed = 20261015, ocean = ['#4fd1ff', '#2bb3f3'], land = CANDY } = {}) {
     const w = 1024;
@@ -62,17 +65,19 @@ function makeWorldTexture({ seed = 20261015, ocean = ['#4fd1ff', '#2bb3f3'], lan
     sea.addColorStop(1, ocean[0]);
     ctx.fillStyle = sea;
     ctx.fillRect(0, 0, w, h);
-    // Soft wave stripes on the water.
-    ctx.strokeStyle = 'rgba(255,255,255,0.18)';
-    ctx.lineWidth = 3;
-    for (let y = 40; y < h - 40; y += 22) {
-        ctx.beginPath();
-        for (let x = 0; x <= w; x += 8) {
-            const yy = y + Math.sin((x + y * 3) / 38) * 4;
-            if (x === 0) ctx.moveTo(x, yy);
-            else ctx.lineTo(x, yy);
+    // Seigaiha: the classic overlapping wave scales, in pale indigo lines.
+    const R = 26;
+    ctx.lineWidth = 2.2;
+    for (let row = 0, y = 30; y < h + R; row++, y += R * 0.5) {
+        const off = row % 2 ? R : 0;
+        for (let x = -R + off; x < w + R; x += R * 2) {
+            for (let k = 0; k < 3; k++) {
+                ctx.strokeStyle = k === 0 ? 'rgba(232,238,248,0.22)' : 'rgba(199,214,240,0.14)';
+                ctx.beginPath();
+                ctx.arc(x, y, R - k * 7, Math.PI, Math.PI * 2);
+                ctx.stroke();
+            }
         }
-        ctx.stroke();
     }
 
     const rand = mulberry32(seed);
@@ -92,7 +97,7 @@ function makeWorldTexture({ seed = 20261015, ocean = ['#4fd1ff', '#2bb3f3'], lan
     }
     // Frosting outline first, then the candy fill, then a glossy highlight.
     for (const { parts } of blobs) {
-        ctx.fillStyle = '#ffffff';
+        ctx.fillStyle = THEME.kin100;
         for (const p of parts) {
             ctx.beginPath();
             ctx.arc(p.x, p.y, p.r + 6, 0, Math.PI * 2);
@@ -130,13 +135,13 @@ function makeWorldTexture({ seed = 20261015, ocean = ['#4fd1ff', '#2bb3f3'], lan
     }
     // Candy-cane poles.
     for (const [y0, y1] of [[0, 34], [h - 40, h]]) {
-        ctx.fillStyle = '#ffffff';
+        ctx.fillStyle = THEME.ai900;
         ctx.fillRect(0, y0, w, y1 - y0);
         ctx.save();
         ctx.beginPath();
         ctx.rect(0, y0, w, y1 - y0);
         ctx.clip();
-        ctx.fillStyle = '#ff6b9a';
+        ctx.fillStyle = THEME.kin400;
         for (let x = -60; x < w + 60; x += 28) {
             ctx.beginPath();
             ctx.moveTo(x, y1);
@@ -287,15 +292,16 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
         levelMarkers: [],
         chestMarkers: [],
         nextIndex: 0,
-        // 'system': the whole solar system. 'planet': flown in to one planet.
-        mode: 'system',
+        // 'title': the start page on one planet. 'system': the whole solar
+        // system. 'planet': flown in to one planet.
+        mode: 'title',
         planet: 0,
     };
     const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
     // ---- DOM shell -------------------------------------------------------
     mountEl.innerHTML = `
-        <div class="globe-home candy">
+        <div class="globe-home candy on-start">
             <div class="globe-loading" id="globe-loading">Loading the world...</div>
             <canvas class="globe-canvas" id="globe-canvas"></canvas>
             <div class="globe-labels" id="globe-labels"></div>
@@ -319,6 +325,7 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
                 <p class="globe-sheet-desc" id="globe-sheet-desc"></p>
                 <button class="globe-sheet-btn" id="globe-sheet-action" hidden></button>
             </div>
+            ${startPageMarkup()}
         </div>`;
 
     const canvas = mountEl.querySelector('#globe-canvas');
@@ -327,6 +334,9 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
     const playBtn = mountEl.querySelector('#globe-play');
     const backBtn = mountEl.querySelector('#globe-back');
     const planetTitle = mountEl.querySelector('#globe-planet-title');
+    const startPage = mountEl.querySelector('#start-page');
+    const startPeople = mountEl.querySelector('#start-people');
+    const homeEl = mountEl.querySelector('.globe-home');
 
     // ---- Renderer / scene ------------------------------------------------
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
@@ -340,11 +350,11 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
     let systemCam = { distance: 20, position: { x: 0, y: 14, z: 14 }, target: { x: 0, y: 0, z: 0 } };
     camera.position.set(0, 14, 14);
 
-    scene.add(new THREE.HemisphereLight(0xfff1fb, 0x7a5cff, 1.25));
+    scene.add(new THREE.HemisphereLight(0xfff6e0, hexNum(THEME.ai700), 1.25));
     const keyLight = new THREE.DirectionalLight(0xffffff, 1.9);
     keyLight.position.set(3, 4, 5);
     scene.add(keyLight);
-    const rim = new THREE.DirectionalLight(0xffb3e6, 1.2);
+    const rim = new THREE.DirectionalLight(hexNum(THEME.kin300), 1.2);
     rim.position.set(-4, -2, -3);
     scene.add(rim);
 
@@ -352,7 +362,7 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
     const sparkles = [];
     {
         const rand = mulberry32(7);
-        const colors = [0xffffff, 0xfff3a8, 0xffc6ec, 0xb9f6ff];
+        const colors = [0xffffff, hexNum(THEME.kin300), hexNum(THEME.kin100), hexNum(THEME.ai200)];
         for (let layer = 0; layer < 2; layer++) {
             const pts = [];
             for (let i = 0; i < 260; i++) {
@@ -373,15 +383,15 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
     scene.add(sunGroup);
     const sunMesh = new THREE.Mesh(
         new THREE.SphereGeometry(SUN_RADIUS, 48, 32),
-        new THREE.MeshBasicMaterial({ map: makeStripeTexture('#ffe66d', '#ffb347') })
+        new THREE.MeshBasicMaterial({ map: makeStripeTexture(THEME.kin300, THEME.kin500) })
     );
     sunMesh.material.map.repeat.set(6, 3);
     sunGroup.add(sunMesh);
-    const sunGlow = makeGlowSprite('#fff3a8');
+    const sunGlow = makeGlowSprite('#f3d27a');
     sunGlow.scale.set(SUN_RADIUS * 5, SUN_RADIUS * 5, 1);
     sunGroup.add(sunGlow);
 
-    const orbitStripe = makeStripeTexture('#ffffff', '#ffc6ec');
+    const orbitStripe = makeStripeTexture(THEME.kin100, THEME.kin500);
     const orbitMeshes = PLANETS.map((p) => {
         const pts = [];
         for (let i = 0; i <= 96; i++) {
@@ -409,8 +419,8 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
     const tmpC = new THREE.Vector3();
     const v3 = (p) => new THREE.Vector3(p.x, p.y, p.z);
     const PER_LEG = 28;
-    const brightStripe = makeStripeTexture('#ffffff', '#ff4f8b');
-    const paleStripe = makeStripeTexture('#ffffff', '#d9c8ff');
+    const brightStripe = makeStripeTexture('#ffffff', THEME.kin500);
+    const paleStripe = makeStripeTexture(THEME.ai100, THEME.ai400);
 
     const planets = PLANETS.map((def, pi) => {
         const orbitGroup = new THREE.Group();
@@ -436,7 +446,7 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
         // Pulsing ring around the planet with the next mission.
         const halo = new THREE.Mesh(
             new THREE.RingGeometry(1.32, 1.45, 64),
-            new THREE.MeshBasicMaterial({ color: 0xffd60a, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false })
+            new THREE.MeshBasicMaterial({ color: hexNum(THEME.kin300), transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false })
         );
         halo.rotation.x = -Math.PI / 2;
         scaled.add(halo);
@@ -621,7 +631,7 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
         p.label.classList.toggle('locked', !st.unlocked);
         p.label.dataset.w = '';
         // Locked planets look sugar-frosted (paler) until you reach them.
-        p.world.children[0].material.color.setHex(st.unlocked ? 0xffffff : 0xb9b3cc);
+        p.world.children[0].material.color.setHex(st.unlocked ? 0xffffff : 0x9aa6bf);
     }
 
     // Prize box: a wrapped gift with a ribbon and bow, on its planet's road.
@@ -637,8 +647,8 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
         grp.lookAt(anchor.clone().multiplyScalar(2));
         grp.rotateX(Math.PI / 2);
 
-        const wrap = new THREE.MeshPhysicalMaterial({ color: 0xff5fa2, roughness: 0.3, clearcoat: 1 });
-        const ribbonMat = new THREE.MeshPhysicalMaterial({ color: 0xffd60a, roughness: 0.25, clearcoat: 1 });
+        const wrap = new THREE.MeshPhysicalMaterial({ color: hexNum(THEME.ai600), roughness: 0.3, clearcoat: 1 });
+        const ribbonMat = new THREE.MeshPhysicalMaterial({ color: hexNum(THEME.kin400), roughness: 0.2, metalness: 0.35, clearcoat: 1 });
         const gift = new THREE.Group();
         const body = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.09, 0.12), wrap);
         body.position.y = 0.045;
@@ -663,12 +673,12 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
         gift.scale.setScalar(1.35);
         grp.add(gift);
 
-        const glow = makeGlowSprite('#fff3a8');
+        const glow = makeGlowSprite('#f3d27a');
         glow.scale.set(0.42, 0.42, 1);
         glow.position.y = 0.07;
         grp.add(glow);
 
-        const hit = new THREE.Mesh(new THREE.SphereGeometry(0.14, 8, 8), new THREE.MeshBasicMaterial({ visible: false }));
+        const hit = new THREE.Mesh(new THREE.SphereGeometry(0.2, 8, 8), new THREE.MeshBasicMaterial({ visible: false }));
         hit.position.y = 0.06;
         hit.userData = { kind: 'chest', chestId: chest.id };
         grp.add(hit);
@@ -677,13 +687,18 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
 
         const label = addLabel('<span class="globe-label-chest">Prize box</span>', 'chest-label');
         const marker = { kind: 'chest', chest, planet: pi, grp, gift, lidGroup, wrap, glow, label, chestState: 'locked' };
+        // The "Open me!" tag floats above the box; tapping it opens the box too.
+        label.addEventListener('click', (e) => {
+            e.stopPropagation();
+            onChestTapped(marker);
+        });
         state.chestMarkers.push(marker);
         return marker;
     }
 
     function setChestVisual(marker, chestState) {
         marker.chestState = chestState;
-        const col = chestState === 'locked' ? 0xb8a9d9 : chestState === 'opened' ? 0xffc2dc : 0xff5fa2;
+        const col = chestState === 'locked' ? 0x9aa6bf : chestState === 'opened' ? hexNum(THEME.ai200) : hexNum(THEME.ai600);
         marker.wrap.color.setHex(col);
         marker.lidGroup.children[0].material.color.setHex(col);
         marker.glow.visible = chestState === 'openable';
@@ -700,7 +715,7 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
     const confettiGeo = new THREE.BoxGeometry(0.018, 0.006, 0.01);
     function confetti(at, count = 36) {
         if (reduceMotion) return;
-        const colors = [0xff4d6d, 0xffd60a, 0x4cc9f0, 0x80ed99, 0xb388ff, 0xffffff];
+        const colors = CONFETTI;
         const origin = new THREE.Vector3();
         at.getWorldPosition(origin);
         const centre = new THREE.Vector3();
@@ -831,6 +846,14 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
         openSheet({ title: 'Prize box', sub: 'Ready to open', desc: contains, actionLabel: 'Open it', onAction: () => handleChestOpen(marker) });
     }
 
+    function onChestTapped(marker) {
+        marker.squishAt = performance.now();
+        chestOpenState(marker.chest).then((st) => {
+            if (st === 'openable') handleChestOpen(marker);
+            else showChestSheet(marker);
+        });
+    }
+
     async function handleChestOpen(marker) {
         const chest = marker.chest;
         if ((await chestOpenState(chest)) !== 'openable') {
@@ -939,6 +962,54 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
         startFlight(c.clone().add(new THREE.Vector3(0, 0, fitDistance)), c, dur);
     }
 
+    // ---- Start page ----------------------------------------------------------
+    // The planet sits in the lower middle with room above it for the title
+    // and the bouncing crowd standing on its top edge.
+    function titleFrame() {
+        const c = planetCentre(state.planet);
+        const lookAt = c.clone().add(new THREE.Vector3(0, PLANET_RADIUS * 0.55, 0));
+        const pos = lookAt.clone().add(new THREE.Vector3(0, 0, fitDistance * 1.35));
+        return { pos, lookAt };
+    }
+    function placeTitleCamera() {
+        const { pos, lookAt } = titleFrame();
+        camera.position.copy(pos);
+        look.copy(lookAt);
+        camera.lookAt(look);
+    }
+    function enterTitle() {
+        const pi = planetOfLevelIndex(state.nextIndex);
+        state.mode = 'title';
+        state.planet = pi >= 0 ? pi : 0;
+        controls.enabled = false;
+        placePlanets();
+        placeTitleCamera();
+        updateChrome();
+    }
+    // The planet's outline on screen, in CSS pixels, for pinning the people.
+    function titleCircle() {
+        const c = planetCentre(state.planet, new THREE.Vector3());
+        const vw = renderer.domElement.clientWidth;
+        const vh = renderer.domElement.clientHeight;
+        tmpV.copy(c).project(camera);
+        if (tmpV.z > 1) return null;
+        const d = c.distanceTo(camera.position);
+        const r = (PLANET_RADIUS / (d * Math.tan((camera.fov * Math.PI) / 360))) * (vh / 2);
+        return { cx: (tmpV.x * 0.5 + 0.5) * vw, cy: (-tmpV.y * 0.5 + 0.5) * vh, r };
+    }
+    function leaveTitle() {
+        if (state.mode !== 'title') return;
+        startPage.classList.add('leaving');
+        homeEl.classList.remove('on-start');
+        flyToSystem(1400);
+        setTimeout(() => {
+            startPage.hidden = true;
+            startPage.classList.remove('leaving');
+        }, 520);
+    }
+    mountEl.querySelector('#start-play').addEventListener('click', leaveTitle);
+    bindPeopleTaps(startPeople);
+
     function updateChrome() {
         const inPlanet = state.mode === 'planet';
         backBtn.hidden = !inPlanet;
@@ -964,6 +1035,7 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
         downT = performance.now();
     });
     canvas.addEventListener('pointerup', (e) => {
+        if (state.mode === 'title') return; // the start page has its own buttons
         const moved = Math.hypot(e.clientX - downX, e.clientY - downY);
         if (moved > 10 || performance.now() - downT > 600) return; // a drag
         const rect = canvas.getBoundingClientRect();
@@ -988,7 +1060,7 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
             return;
         }
 
-        const centre = planetCentre(state.planet, tmpC);
+        const centre = planetCentre(state.planet, new THREE.Vector3());
         const onPlanet = pickables.filter((h) => {
             const m = h.userData.kind === 'level'
                 ? state.levelMarkers.find((x) => x.level.id === h.userData.levelId)
@@ -998,7 +1070,7 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
         const hits = raycaster.intersectObjects(onPlanet, false).filter((h) => {
             // Ignore markers on the far side of the planet.
             h.object.getWorldPosition(tmpV);
-            return tmpV.sub(centre).dot(tmpC.copy(camera.position).sub(centre)) > 0;
+            return facesCamera(tmpV, centre, camera.position);
         });
         if (!hits.length) {
             closeSheet();
@@ -1014,13 +1086,7 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
             }
         } else if (ud.kind === 'chest') {
             const marker = state.chestMarkers.find((m) => m.chest.id === ud.chestId);
-            if (marker) {
-                marker.squishAt = performance.now();
-                chestOpenState(marker.chest).then((st) => {
-                    if (st === 'openable') handleChestOpen(marker);
-                    else showChestSheet(marker);
-                });
-            }
+            if (marker) onChestTapped(marker);
         }
     });
 
@@ -1065,8 +1131,8 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
         playBtn.textContent = next && next.done ? `Play level ${state.nextIndex + 1} again` : `Play level ${state.nextIndex + 1}`;
         const nextPlanet = planetOfLevelIndex(state.nextIndex);
         if (!refresh.ran) {
-            // First visit: start on the whole solar system.
-            flyToSystem(1);
+            // App launch: the start page, on the planet with the next mission.
+            enterTitle();
         } else if (prevNext !== state.nextIndex) {
             if (nextPlanet !== prevPlanet) {
                 // A new planet just opened: show it off, then fly there.
@@ -1096,6 +1162,7 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
             camera.position.set(systemCam.position.x, systemCam.position.y, systemCam.position.z);
             look.set(0, 0, 0);
         }
+        if (flight.dur === 0 && state.mode === 'title') placeTitleCamera();
     }
     new ResizeObserver(resize).observe(mountEl);
     resize();
@@ -1131,7 +1198,7 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
                 if (k >= 1) p.spin.dur = 0;
             } else if (!reduceMotion && !(state.mode === 'planet' && state.planet === p.index && userTurning)) {
                 // Idle: planets turn slowly in the system view, sway when close.
-                p.world.rotation.y += state.mode === 'system' ? dt * 0.15 : Math.sin(t * 0.4) * 0.0004;
+                p.world.rotation.y += state.mode === 'system' ? dt * 0.15 : state.mode === 'title' ? dt * 0.12 : Math.sin(t * 0.4) * 0.0004;
             }
             // The planet with the next mission wears a pulsing gold ring.
             const isNext = p.index === planetOfLevelIndex(state.nextIndex) && state.mode === 'system';
@@ -1232,6 +1299,7 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
 
         renderer.render(scene, camera);
         projectLabels();
+        if (state.mode === 'title' || startPage.classList.contains('leaving')) layoutPeople(startPeople, titleCircle());
 
         if (firstFrame) {
             firstFrame = false;
@@ -1294,6 +1362,6 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
     animate();
 
     // Expose for playtests.
-    mountEl.__globe = { focusOn, flyToPlanet, flyToSystem, refresh, state, planets, camera };
+    mountEl.__globe = { focusOn, flyToPlanet, flyToSystem, refresh, state, planets, camera, leaveTitle };
     return { refresh };
 }
