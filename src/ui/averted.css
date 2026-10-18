@@ -1,0 +1,66 @@
+/* Cases averted card on the results screen (round 13). Indigo and gold
+   theme tokens from theme-ai-gold.css; vermilion only for the no-response bar. */
+.averted {
+    margin: 0 0 var(--space-12, 12px);
+    padding: 12px 14px;
+    border-radius: 14px;
+    background: var(--ai-100, #e8eef8);
+    border: 1px solid var(--ai-200, #c7d6f0);
+    text-align: left;
+}
+.averted[hidden] { display: none; }
+.averted-kicker {
+    display: block;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ai-600, #234c9c);
+}
+.averted-big {
+    display: block;
+    font-size: 1.35rem;
+    line-height: 1.2;
+    color: var(--ai-800, #13265a);
+    margin: 2px 0 8px;
+}
+.averted-bars { display: grid; gap: 6px; margin-bottom: 8px; }
+.averted-row {
+    display: grid;
+    grid-template-columns: 6.2em 1fr 2.2em;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--color-text, #16213f);
+}
+.averted-track {
+    height: 14px;
+    border-radius: 999px;
+    background: rgba(19, 38, 90, 0.08);
+    overflow: hidden;
+}
+.averted-bar {
+    display: block;
+    height: 100%;
+    width: var(--w, 0%);
+    border-radius: inherit;
+    transform-origin: left center;
+    animation: avertedGrow 0.9s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+}
+.averted-bar--base { background: linear-gradient(90deg, #e2735f, var(--shu, #c8432f)); }
+.averted-bar--you { background: var(--gold-leaf, #c9a227); animation-delay: 0.25s; }
+.averted-num { text-align: right; font-variant-numeric: tabular-nums; }
+.averted-text {
+    margin: 0;
+    font-size: 0.85rem;
+    line-height: 1.35;
+    color: var(--color-text-secondary, #55617f);
+}
+@keyframes avertedGrow {
+    from { transform: scaleX(0); }
+    to { transform: scaleX(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .averted-bar { animation: none; }
+}
