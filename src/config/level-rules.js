@@ -19,5 +19,8 @@ export function levelRules(level) {
     const difficulty = { ...difficulties[level.difficultyId] };
     if (t.transmissionMultiplier != null) difficulty.transmissionMultiplier = t.transmissionMultiplier;
     if (t.dailyLimits) difficulty.dailyLimits = { ...t.dailyLimits };
+    // Puzzle levels can bring a tool forward (e.g. quarantine on day 2 on
+    // super-spreader levels). See toolAvailableDay in src/sim/engine.js.
+    if (level.variant && level.variant.toolDays) difficulty.toolDays = { ...level.variant.toolDays };
     return { scenario, difficulty };
 }

@@ -37,3 +37,26 @@ export function fillLessonCard(id, title, text) {
     document.getElementById(`${id}-title`).textContent = title;
     document.getElementById(`${id}-text`).textContent = text;
 }
+
+// Puzzle callout (round 14): a short card under the lesson on puzzle levels,
+// built on demand so the briefing markup stays unchanged. null hides it.
+export function showVariantCallout(callout) {
+    let card = document.getElementById('briefing-variant');
+    if (!callout) {
+        if (card) card.hidden = true;
+        return;
+    }
+    if (!card) {
+        card = document.createElement('div');
+        card.id = 'briefing-variant';
+        card.className = 'variant-card';
+        card.setAttribute('role', 'note');
+        card.innerHTML = '<strong class="variant-title"></strong><p class="variant-text"></p>';
+        const anchor = document.getElementById('briefing-lesson');
+        if (anchor) anchor.after(card);
+        else document.getElementById('briefing-title')?.after(card);
+    }
+    card.querySelector('.variant-title').textContent = callout.title;
+    card.querySelector('.variant-text').textContent = callout.text;
+    card.hidden = false;
+}

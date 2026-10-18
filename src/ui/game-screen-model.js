@@ -1,6 +1,6 @@
 // Pure view models for the phone game screen (roadmap item 7). No DOM here,
 // so everything is unit tested in tests/game-screen.test.js.
-import { toolDailyLimit } from '../sim/engine.js';
+import { toolDailyLimit, toolAvailableDay } from '../sim/engine.js';
 
 // Strip a leading emoji (and any joiners or variation selectors) from a
 // tool name: "💉 Vaccinate" -> "Vaccinate". The config keeps the emoji for
@@ -27,6 +27,7 @@ export function toolHint(toolId, tools = {}) {
 
 // One chip per tool for the bottom tray.
 // state: 'ready' | 'locked' (not yet available) | 'spent' (daily limit hit)
+//        | 'off' (none on this world: a puzzle level with a limit of 0)
 //        | 'empty' (power-up with no charges: tapping opens the shop)
 export function toolChips(tools, difficulty, day, dailyUsage, charges = {}) {
     return Object.entries(tools).map(([id, tool]) => {
@@ -37,8 +38,12 @@ export function toolChips(tools, difficulty, day, dailyUsage, charges = {}) {
         }
         const limit = toolDailyLimit(tool, difficulty, id);
         const used = dailyUsage[id] || 0;
-        if (day < tool.availableDay) {
-            return { id, label, usage: `Day ${tool.availableDay}`, state: 'locked', powerUp: false, color: null };
+        if (limit <= 0) {
+            return { id, label, usage: 'None here', state: 'off', powerUp: false, color: null };
+        }
+        const firstDay = toolAvailableDay(tool, difficulty, id);
+        if (day < firstDay) {
+            return { id, label, usage: `Day ${firstDay}`, state: 'locked', powerUp: false, color: null };
         }
         return {
             id,

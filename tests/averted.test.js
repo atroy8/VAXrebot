@@ -128,8 +128,8 @@ describe('cases averted summary and card', () => {
 });
 
 describe('loss coaching follows how the round was played (round 13)', () => {
-    const care = LESSONS['r1-care-home'];
-    const metro = LESSONS['r3-metro'];
+    const care = LESSONS['act-early'];
+    const metro = LESSONS['ring-vaccination'];
 
     it('wins are unchanged', () => {
         expect(debriefLine(care, 'contained', { unusedActions: 9 })).toBe(care.win);
