@@ -21,15 +21,21 @@ export function distToSegment(px, py, ax, ay, bx, by) {
     return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
 }
 
+// In the 3D web, people can sit in front of each other. Each node may carry
+// depth (0 nearest the camera, 1 farthest); when two are about equally close
+// on screen, the one in front wins.
+export const DEPTH_BIAS_PX = 14;
+
 function nearestNode(x, y, nodes) {
     let best = null;
     let bestD = Infinity;
     for (const n of nodes) {
         const reach = Math.max(n.r, MIN_TARGET_PX / 2);
         const d = Math.hypot(x - n.x, y - n.y);
-        if (d <= reach && d < bestD) {
+        const score = d + (n.depth != null ? n.depth * DEPTH_BIAS_PX : 0);
+        if (d <= reach && score < bestD) {
             best = n;
-            bestD = d;
+            bestD = score;
         }
     }
     return best;
