@@ -50,6 +50,41 @@ import { pickTapTarget } from './tap-target.js';
 import { layoutStep as forceStep, settleLayout, nextAlpha, layoutForAspect, LAYOUT } from './force-layout.js';
 import { isBoxed } from './care-box-model.js';
 import { linkStyle, LINK_WIDTHS } from './link-style.js';
+import {
+    LAYOUT_3D,
+    ORBIT,
+    layoutStep3d,
+    layout3dForAspect,
+    settleLayout3d,
+    nextAlpha3d,
+    liftTo3d,
+    flattenTo2d,
+    orbitPosition,
+    orbitDrag,
+    zoom3d,
+    fitOrbit,
+    easeOrbit,
+    ribbonOffset,
+    normalizedDepths,
+    loadViewMode,
+    saveViewMode,
+} from './web3d.js';
+
+// 3D web mode (round 15): deep space behind the web, and fog so far people
+// fade a little and near ones read first.
+const SPACE_FOG = 0x0d1a3d;
+// Who each person tool can be used on (mirrors canUseTool in src/sim/engine.js).
+export const TOOL_TARGET_STATES = {
+    vaccinate: ['healthy'],
+    quarantine: ['healthy', 'infected', 'recovered'],
+};
+const safeStorage = () => {
+    try {
+        return window.localStorage;
+    } catch {
+        return null;
+    }
+};
 
 // Bundle every face frame at build time so the game works fully offline.
 // Map ends up as: textures[state][frame] -> THREE.Texture
@@ -267,6 +302,15 @@ export class NetworkView {
         this.alpha = 0;
         this.lastLinkKey = -1;
         this.lastTime = 0;
+        // '3d': a floating web you orbit. '2d': the flat diagram.
+        this.mode = loadViewMode(safeStorage());
+        this.cam3 = { yaw: 0.5, pitch: 0.28, distance: 24, tx: 0, ty: 0, tz: 0 };
+        this.fit3 = null;
+        this.lastTouch = 0;
+    }
+
+    get is3d() {
+        return this.mode === '3d';
     }
 
     setup({ onNodeClick, onLinkClick, onBoxed = null }) {
@@ -312,6 +356,8 @@ export class NetworkView {
 
         this.bindGestures(canvas);
         this.mountFitButton();
+        this.mountModeButton();
+        this.applyModeLook();
 
         this.lastTime = performance.now();
         const loop = () => {
@@ -332,6 +378,9 @@ export class NetworkView {
         this.gestureCleanup = null;
         this.fitBtn?.remove();
         this.fitBtn = null;
+        this.modeBtn?.remove();
+        this.modeBtn = null;
+        this.container?.classList.remove('is-3d');
         if (this.renderer) {
             // Per-node sprite materials are per-setup; shared geometry and
             // state materials live at module level and are not disposed.
@@ -459,7 +508,8 @@ export class NetworkView {
         const countChanged = nodes.length !== this.nodeObjs.size;
         const starts = [];
         if (countChanged || isInitial) {
-            sunflowerDisc(nodes.length, 3 + Math.sqrt(nodes.length) * 1.2, starts);
+            if (this.is3d) fibonacciSphere(nodes.length, 2.5 + Math.cbrt(nodes.length) * 1.6, starts);
+            else sunflowerDisc(nodes.length, 3 + Math.sqrt(nodes.length) * 1.2, starts);
         }
         let i = 0;
         const leaving = [];
@@ -538,7 +588,8 @@ export class NetworkView {
         // Frame the network and (re)run the layout when the population changes.
         const linkKey = this.links.length;
         if (countChanged || isInitial) {
-            settleLayout(this.layoutObjs(), this.layoutPairs(), { maxSteps: WARMUP_STEPS, P: this.layoutParams() });
+            if (this.is3d) settleLayout3d(this.layoutObjs(), this.layoutPairs(), { maxSteps: WARMUP_STEPS, P: this.layoutParams3d() });
+            else settleLayout(this.layoutObjs(), this.layoutPairs(), { maxSteps: WARMUP_STEPS, P: this.layoutParams() });
             this.alpha = 0;
             for (const o of this.nodeObjs.values()) o.vel.set(0, 0, 0);
             this.frameNetwork();
@@ -617,15 +668,25 @@ export class NetworkView {
             const hidden = (a && a.boxed) || (b && b.boxed);
             const style = linkStyle(kind, severing);
             const w = hidden ? 0 : style.width / 2;
-            let dx = pb.x - pa.x;
-            let dy = pb.y - pa.y;
-            const len = Math.hypot(dx, dy) || 1;
-            const nx = (-dy / len) * w;
-            const ny = (dx / len) * w;
-            pos[k++] = pa.x + nx; pos[k++] = pa.y + ny; pos[k++] = -0.1;
-            pos[k++] = pa.x - nx; pos[k++] = pa.y - ny; pos[k++] = -0.1;
-            pos[k++] = pb.x + nx; pos[k++] = pb.y + ny; pos[k++] = -0.1;
-            pos[k++] = pb.x - nx; pos[k++] = pb.y - ny; pos[k++] = -0.1;
+            if (this.is3d) {
+                // Ribbons turn to face the camera so they keep their width
+                // from every angle.
+                const o = ribbonOffset(pa, pb, this.camera.position, w);
+                pos[k++] = pa.x + o.x; pos[k++] = pa.y + o.y; pos[k++] = pa.z + o.z;
+                pos[k++] = pa.x - o.x; pos[k++] = pa.y - o.y; pos[k++] = pa.z - o.z;
+                pos[k++] = pb.x + o.x; pos[k++] = pb.y + o.y; pos[k++] = pb.z + o.z;
+                pos[k++] = pb.x - o.x; pos[k++] = pb.y - o.y; pos[k++] = pb.z - o.z;
+            } else {
+                const dx = pb.x - pa.x;
+                const dy = pb.y - pa.y;
+                const len = Math.hypot(dx, dy) || 1;
+                const nx = (-dy / len) * w;
+                const ny = (dx / len) * w;
+                pos[k++] = pa.x + nx; pos[k++] = pa.y + ny; pos[k++] = -0.1;
+                pos[k++] = pa.x - nx; pos[k++] = pa.y - ny; pos[k++] = -0.1;
+                pos[k++] = pb.x + nx; pos[k++] = pb.y + ny; pos[k++] = -0.1;
+                pos[k++] = pb.x - nx; pos[k++] = pb.y - ny; pos[k++] = -0.1;
+            }
             const base = LINK_COLORS[style.color];
             const m = style.pulse ? pulse : 1;
             for (let v = 0; v < 4; v++) {
@@ -639,7 +700,7 @@ export class NetworkView {
     // Client (CSS pixel) position of a world point, for DOM effects.
     screenPoint(pos) {
         if (!this.renderer || !this.camera) return null;
-        const v = new THREE.Vector3(pos.x, pos.y, 0).project(this.camera);
+        const v = new THREE.Vector3(pos.x, pos.y, pos.z || 0).project(this.camera);
         const rect = this.renderer.domElement.getBoundingClientRect();
         return { x: rect.left + ((v.x + 1) / 2) * rect.width, y: rect.top + ((1 - v.y) / 2) * rect.height };
     }
@@ -652,7 +713,19 @@ export class NetworkView {
         return fitCamera(pts, { fovDeg: this.camera.fov, aspect: this.camera.aspect, pad: FIT_PAD });
     }
 
+    fitTarget3d() {
+        const pts = [];
+        for (const o of this.nodeObjs.values()) if (!o.boxed) pts.push(o.pos);
+        return fitOrbit(pts, { fovDeg: this.camera.fov, aspect: this.camera.aspect, pad: FIT_PAD, yaw: this.cam3.yaw, pitch: this.cam3.pitch });
+    }
+
     frameNetwork() {
+        if (this.is3d) {
+            this.fit3 = this.fitTarget3d();
+            this.cam3 = { ...this.fit3 };
+            this.applyCamera();
+            return;
+        }
         const { cx, cy, distance } = this.fitTarget();
         this.fitView = { cx, cy, distance, roll: 0 };
         this.cam = { ...this.fitView };
@@ -662,6 +735,13 @@ export class NetworkView {
     // Point the three.js camera at the current view: straight down, turned
     // by roll. Matches worldToScreen in network-gestures.js.
     applyCamera() {
+        if (this.is3d) {
+            const p = orbitPosition(this.cam3);
+            this.camera.position.set(p.x, p.y, p.z);
+            this.camera.up.set(0, 1, 0);
+            this.camera.lookAt(this.cam3.tx, this.cam3.ty, this.cam3.tz);
+            return;
+        }
         const { cx, cy, distance, roll } = this.cam;
         const up = cameraUp(roll);
         this.camera.position.set(cx, cy, distance);
@@ -677,11 +757,79 @@ export class NetworkView {
     // Back to the fitted, upright view (Fit button), easing there.
     resetView() {
         this.autoFit = true;
+        this.lastTouch = 0;
+    }
+
+    // ---- 2D / 3D switch -----------------------------------------------------
+
+    mountModeButton() {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'network-mode-btn';
+        btn.addEventListener('click', () => this.setViewMode(this.is3d ? '2d' : '3d'));
+        this.container.appendChild(btn);
+        this.modeBtn = btn;
+        this.updateModeButton();
+    }
+
+    updateModeButton() {
+        if (!this.modeBtn) return;
+        this.modeBtn.textContent = this.is3d ? '2D' : '3D';
+        this.modeBtn.setAttribute('aria-label', this.is3d ? 'Switch to the flat view' : 'Switch to the 3D view');
+        this.modeBtn.setAttribute('aria-pressed', String(this.is3d));
+    }
+
+    // First time in the 3D web on this device: one line on how to move it.
+    showOrbitHintOnce() {
+        const KEY = 'galactic-outbreak.orbit-hint.v1';
+        const store = safeStorage();
+        try {
+            if (store?.getItem(KEY)) return;
+            store?.setItem(KEY, '1');
+        } catch {
+            /* blocked storage: show it every time, harmless */
+        }
+        const el = document.createElement('div');
+        el.className = 'orbit-hint';
+        el.setAttribute('role', 'status');
+        el.textContent = 'Drag empty space to spin the web. Pinch to zoom.';
+        this.container?.appendChild(el);
+        setTimeout(() => el.remove(), 4800);
+    }
+
+    applyModeLook() {
+        if (this.is3d) this.showOrbitHintOnce();
+        this.container?.classList.toggle('is-3d', this.is3d);
+        if (this.scene) this.scene.fog = this.is3d ? new THREE.Fog(SPACE_FOG, 14, 60) : null;
+        this.reduceMotion = !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    }
+
+    setViewMode(mode) {
+        const next = mode === '2d' ? '2d' : '3d';
+        if (next === this.mode) return;
+        this.mode = next;
+        saveViewMode(safeStorage(), next);
+        const objs = [...this.nodeObjs.values()];
+        if (this.is3d) liftTo3d(objs);
+        else flattenTo2d(objs);
+        for (const o of objs) o.vel.set(0, 0, 0);
+        this.alpha = 1;
+        this.physicsSettled = false;
+        this.autoFit = true;
+        this.lastTouch = 0;
+        this.applyModeLook();
+        this.updateModeButton();
+        this.frameNetwork();
     }
 
     // While the layout is still spreading out, keep easing the camera so the
     // whole network stays on screen. Stops as soon as the player pans or zooms.
     easeToFit(rate = 0.15) {
+        if (this.is3d) {
+            this.fit3 = this.fitTarget3d();
+            this.cam3 = easeOrbit(this.cam3, this.fit3, rate);
+            return;
+        }
         const { cx, cy, distance } = this.fitTarget();
         this.fitView = { cx, cy, distance, roll: 0 };
         const c = this.cam;
@@ -721,6 +869,15 @@ export class NetworkView {
         return this._layoutParams;
     }
 
+    layoutParams3d() {
+        const aspect = Math.round(this.viewAspect() * 20) / 20;
+        if (!this._layout3d || this._layout3dAspect !== aspect) {
+            this._layout3dAspect = aspect;
+            this._layout3d = layout3dForAspect(aspect, LAYOUT_3D);
+        }
+        return this._layout3d;
+    }
+
     layoutObjs() {
         return [...this.nodeObjs.values()].filter((o) => !o.boxed);
     }
@@ -737,6 +894,11 @@ export class NetworkView {
 
     // One cooled step; returns the fastest node speed.
     layoutStep() {
+        if (this.is3d) {
+            const sp = layoutStep3d(this.layoutObjs(), this.layoutPairs(), this.alpha, this.layoutParams3d());
+            this.alpha = nextAlpha3d(this.alpha);
+            return sp;
+        }
         const speed = forceStep(this.layoutObjs(), this.layoutPairs(), this.alpha, this.layoutParams());
         this.alpha = nextAlpha(this.alpha);
         return speed;
@@ -778,11 +940,30 @@ export class NetworkView {
 
         // Camera-facing direction, reused to float each face sprite just off
         // the sphere surface so faces stay readable and occlude correctly.
-        _tmp2.set(0, 0, 1); // the camera always looks straight down
+        _tmp2.set(0, 0, 1); // in 2D the camera always looks straight down
         const faceOffset = NODE_RADIUS + 0.08;
+        if (this.is3d) {
+            // Slow drift so the depth reads, paused while a tool is chosen
+            // or for a few seconds after any touch.
+            const dt = Math.min(0.05, (now - (this.lastTime || now)) / 1000);
+            if (!this.toolMode && !this.grabbed && now - this.lastTouch > ORBIT.driftPauseMs && !this.reduceMotion) {
+                this.cam3 = { ...this.cam3, yaw: this.cam3.yaw + ORBIT.driftRadPerS * dt };
+            }
+            this.applyCamera();
+            // Fog tracks the zoom: people at the back of the web fade toward
+            // the night sky, so near and far read at a glance.
+            if (this.scene.fog) {
+                this.scene.fog.near = this.cam3.distance * 0.8;
+                this.scene.fog.far = this.cam3.distance * 2.1;
+            }
+        }
+        this.lastTime = now;
 
         for (const obj of this.nodeObjs.values()) {
             obj.group.position.copy(obj.pos);
+            // In 3D each person (ring, halo, badge) turns to face the camera.
+            if (this.is3d) obj.group.quaternion.copy(this.camera.quaternion);
+            else obj.group.quaternion.identity();
             const frame = this.frameFor(obj, now);
             const tex = faceTextures[obj.node.state]?.[frame] || faceTextures.healthy.idle;
             if (obj.sprite.material.map !== tex) obj.sprite.material.map = tex;
@@ -864,7 +1045,9 @@ export class NetworkView {
         // 1. Two stubs whip back into their nodes with an elastic overshoot.
         const stubMat = new THREE.MeshBasicMaterial({ color: 0xffb03a, transparent: true, depthWrite: false });
         const stubGeo = new THREE.PlaneGeometry(1, LINK_WIDTHS.severRisk);
-        const stubs = [a, b].map((end) => {
+        // In 3D the flat stubs would show edge on, so only sparks, the
+        // ring and the recoil play there.
+        const stubs = (this.is3d ? [] : [a, b]).map((end) => {
             const m = new THREE.Mesh(stubGeo, stubMat);
             m.position.z = 0.02;
             scene.add(m);
@@ -896,11 +1079,20 @@ export class NetworkView {
         for (let i = 0; i < 16; i++) {
             const mat = new THREE.MeshBasicMaterial({ color: i % 3 ? 0xffd23f : 0xffffff, transparent: true, depthWrite: false });
             const m = new THREE.Mesh(sparkGeometry, mat);
-            m.position.copy(mid).setZ(0.1);
+            m.position.copy(mid);
+            if (!this.is3d) m.position.setZ(0.1);
+            else m.quaternion.copy(this.camera.quaternion);
             scene.add(m);
             const ang = Math.random() * Math.PI * 2;
             const sp = 4 + Math.random() * 6;
-            sparks.push({ m, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp });
+            // Sparks fly across the screen plane (world x and y in 2D).
+            const right = new THREE.Vector3(1, 0, 0);
+            const up = new THREE.Vector3(0, 1, 0);
+            if (this.is3d) {
+                right.applyQuaternion(this.camera.quaternion);
+                up.applyQuaternion(this.camera.quaternion);
+            }
+            sparks.push({ m, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, right, up });
         }
         let last = start;
         this.effects.push({
@@ -911,8 +1103,7 @@ export class NetworkView {
                 for (const s of sparks) {
                     s.vx *= 0.9;
                     s.vy *= 0.9;
-                    s.m.position.x += s.vx * dt;
-                    s.m.position.y += s.vy * dt;
+                    s.m.position.addScaledVector(s.right, s.vx * dt).addScaledVector(s.up, s.vy * dt);
                     s.m.material.opacity = 1 - t;
                     s.m.scale.setScalar(1 - t * 0.6);
                 }
@@ -929,7 +1120,9 @@ export class NetworkView {
         // 3. A white ring flashes outward.
         const ringMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, depthWrite: false });
         const ring = new THREE.Mesh(ringGeometry, ringMat);
-        ring.position.copy(mid).setZ(0.05);
+        ring.position.copy(mid);
+        if (this.is3d) ring.quaternion.copy(this.camera.quaternion);
+        else ring.position.setZ(0.05);
         scene.add(ring);
         this.effects.push({
             update: (now) => {
@@ -945,12 +1138,15 @@ export class NetworkView {
         });
 
         // 4. The two nodes recoil apart, and the screen ticks.
-        const away = _tmp2.subVectors(b.pos, a.pos).setZ(0).normalize().multiplyScalar(0.55);
+        const away = _tmp2.subVectors(b.pos, a.pos);
+        if (!this.is3d) away.setZ(0);
+        away.normalize().multiplyScalar(0.55);
         b.vel.add(away);
         a.vel.sub(away);
         this.physicsSettled = false;
         this.alpha = Math.max(this.alpha || 0, LAYOUT.reheatAlpha);
         this.shakeUntil = start + 140;
+        this.lastTouch = start;
     }
 
     // ---- Tool hookup: tap to select / apply ---------------------------------
@@ -967,6 +1163,20 @@ export class NetworkView {
         const limits = () => ({ fitDistance: this.fitView?.distance });
         const userMoved = () => {
             this.autoFit = false;
+        };
+        const fit3Distance = () => this.fit3?.distance;
+        // 3D: move a held person across the plane through them that faces
+        // the camera, so they stay under the finger at their depth.
+        const raycaster = new THREE.Raycaster();
+        const plane = new THREE.Plane();
+        const hitPoint = new THREE.Vector3();
+        const dragTo3d = (obj, pt) => {
+            const box = this.viewBox();
+            const ndc = new THREE.Vector2((pt.x / box.widthPx) * 2 - 1, -(pt.y / box.heightPx) * 2 + 1);
+            raycaster.setFromCamera(ndc, this.camera);
+            this.camera.getWorldDirection(_tmp);
+            plane.setFromNormalAndCoplanarPoint(_tmp, obj.pos);
+            if (raycaster.ray.intersectPlane(plane, hitPoint)) obj.pos.copy(hitPoint);
         };
 
         const grabNodeAt = (pt) => {
@@ -992,6 +1202,7 @@ export class NetworkView {
         };
 
         const onDown = (e) => {
+            this.lastTouch = performance.now();
             canvas.setPointerCapture?.(e.pointerId);
             const pt = local(e);
             pts.set(e.pointerId, pt);
@@ -1012,6 +1223,20 @@ export class NetworkView {
             const pt = local(e);
             pts.set(e.pointerId, pt);
             const box = this.viewBox();
+            this.lastTouch = performance.now();
+            if (pts.size >= 2 && twoPrev && this.is3d) {
+                // Pinch to zoom; moving both fingers together also orbits.
+                const [a, b] = [...pts.values()];
+                const d0 = Math.hypot(twoPrev[0].x - twoPrev[1].x, twoPrev[0].y - twoPrev[1].y) || 1;
+                const d1 = Math.hypot(a.x - b.x, a.y - b.y) || 1;
+                this.cam3 = zoom3d(this.cam3, d1 / d0, fit3Distance());
+                const mx = (a.x + b.x - twoPrev[0].x - twoPrev[1].x) / 2;
+                const my = (a.y + b.y - twoPrev[0].y - twoPrev[1].y) / 2;
+                this.cam3 = orbitDrag(this.cam3, mx, my);
+                twoPrev = [a, b];
+                userMoved();
+                return;
+            }
             if (pts.size >= 2 && twoPrev) {
                 const [a, b] = [...pts.values()];
                 this.cam = twoFingerView(this.cam, twoPrev[0], twoPrev[1], a, b, box, limits());
@@ -1035,13 +1260,21 @@ export class NetworkView {
                     this.grabbed = obj;
                     obj.pinned = true;
                 }
-                const w = screenToWorld(pt, this.cam, box);
-                obj.pos.set(w.x, w.y, 0);
+                if (this.is3d) {
+                    dragTo3d(obj, pt);
+                } else {
+                    const w = screenToWorld(pt, this.cam, box);
+                    obj.pos.set(w.x, w.y, 0);
+                }
                 // Keep the layout warm while dragging so contacts follow.
                 this.alpha = Math.max(this.alpha || 0, LAYOUT.reheatAlpha);
                 this.physicsSettled = false;
                 // A held person no longer counts as a reason to re-frame.
                 this.autoFit = false;
+            } else if (this.is3d) {
+                // One finger on empty space orbits the web.
+                this.cam3 = orbitDrag(this.cam3, pt.x - press.last.x, pt.y - press.last.y);
+                userMoved();
             } else {
                 this.cam = panView(this.cam, press.last, pt, box);
                 userMoved();
@@ -1070,6 +1303,12 @@ export class NetworkView {
             e.preventDefault();
             const pt = local(e);
             const factor = Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0015));
+            this.lastTouch = performance.now();
+            if (this.is3d) {
+                this.cam3 = zoom3d(this.cam3, factor, fit3Distance());
+                userMoved();
+                return;
+            }
             this.cam = zoomAt(this.cam, pt, factor, this.viewBox(), limits());
             userMoved();
         };
@@ -1107,7 +1346,9 @@ export class NetworkView {
 
     updateFitButton() {
         if (!this.fitBtn) return;
-        const show = !this.autoFit && isOffFit(this.cam, this.fitView);
+        const show = this.is3d
+            ? !this.autoFit && !!this.fit3 && Math.abs(this.cam3.distance / this.fit3.distance - 1) > 0.08
+            : !this.autoFit && isOffFit(this.cam, this.fitView);
         if (this.fitBtn.hidden === show) this.fitBtn.hidden = !show;
     }
 
@@ -1121,13 +1362,24 @@ export class NetworkView {
         };
         const nodes = [];
         const screenOf = new Map();
+        const camDist = [];
+        // With a person tool chosen, only people it can work on are
+        // candidates, so a vaccinated face in front never swallows a tap
+        // meant for the healthy person just behind it.
+        const valid = TOOL_TARGET_STATES[this.toolMode];
         for (const obj of this.nodeObjs.values()) {
             if (obj.node.removed || obj.boxed) continue;
+            if (valid && !valid.includes(obj.node.state)) continue;
             const c = toScreen(obj.pos);
-            const edge = toScreen(_tmp.copy(obj.pos).setX(obj.pos.x + NODE_RADIUS));
+            // Radius on screen: offset along the camera's right vector so it
+            // stays right in 3D at any angle.
+            _tmp2.set(NODE_RADIUS, 0, 0).applyQuaternion(this.camera.quaternion).add(obj.pos);
+            const edge = toScreen(_tmp2);
             screenOf.set(obj, c);
-            nodes.push({ x: c.x, y: c.y, r: Math.abs(edge.x - c.x), node: obj.node });
+            nodes.push({ x: c.x, y: c.y, r: Math.hypot(edge.x - c.x, edge.y - c.y), node: obj.node });
+            camDist.push(obj.pos.distanceTo(this.camera.position));
         }
+        if (this.is3d) normalizedDepths(camDist).forEach((d, i) => (nodes[i].depth = d));
         const links = [];
         const tool = this.toolMode;
         if (!tool || tool === 'severLink') {

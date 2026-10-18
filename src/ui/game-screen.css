@@ -598,3 +598,57 @@ button.tally-prize:active { transform: translateY(2px); }
     font-size: 0.95rem;
     box-shadow: 0 3px 0 #8a6417;
 }
+
+/* 2D / 3D switch (round 15), top right of the network. */
+.network-mode-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    z-index: 7;
+    min-width: 52px;
+    height: 44px;
+    padding: 0 14px;
+    border: 2px solid var(--kin-400, #ddb94a);
+    border-radius: 999px;
+    background: rgba(10, 14, 26, 0.78);
+    color: var(--kin-300, #ecd27e);
+    font: inherit;
+    font-size: 0.95rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+}
+.network-mode-btn:active { transform: scale(0.96); }
+
+/* 3D web: the network floats in deep space. */
+html .network-container.is-3d {
+    background:
+        radial-gradient(circle at 18% 22%, rgba(236, 210, 126, 0.55) 0 1px, transparent 2px) 0 0 / 38px 38px,
+        radial-gradient(circle at 70% 64%, rgba(255, 255, 255, 0.35) 0 1px, transparent 2px) 0 0 / 27px 27px,
+        radial-gradient(ellipse at 50% 45%, #1d3270 0%, #0d1a3d 70%, #08112a 100%);
+    border-color: var(--ai-700, #1b3a7a);
+}
+.network-container.is-3d .legend-toggle { background: rgba(236, 210, 126, 0.92); color: #13265a; }
+.orbit-hint {
+    position: absolute;
+    top: 60px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 6;
+    max-width: calc(100% - 24px);
+    width: max-content;
+    padding: 8px 14px;
+    border-radius: 999px;
+    background: rgba(236, 210, 126, 0.95);
+    color: #13265a;
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-align: center;
+    pointer-events: none;
+    animation: orbitHint 4.8s ease both;
+}
+@keyframes orbitHint {
+    0% { opacity: 0; transform: translate(-50%, -6px); }
+    8%, 85% { opacity: 1; transform: translate(-50%, 0); }
+    100% { opacity: 0; }
+}
