@@ -25,7 +25,7 @@ export function settingsMarkup({ adsRemoved }) {
             <section class="settings-group">
                 <h3>Ads</h3>
                 <p class="settings-note" data-role="ads-status">${
-                    adsRemoved ? 'Ads are off. Thanks for supporting VAXrebot.' : 'A short ad may play between levels, never during one.'
+                    adsRemoved ? 'Ads are off. Thanks for supporting Galactic Outbreak.' : 'A short ad may play between levels, never during one.'
                 }</p>
                 <button type="button" class="settings-row" data-act="remove-ads">Remove Ads</button>
                 <button type="button" class="settings-row" data-act="restore">Restore purchases</button>
@@ -36,6 +36,7 @@ export function settingsMarkup({ adsRemoved }) {
             </section>
             <section class="settings-group">
                 <h3>About</h3>
+                <button type="button" class="settings-row" data-act="replay-story">Replay story</button>
                 <a class="settings-row" href="${PRIVACY_URL}" target="_blank" rel="noopener">Privacy policy</a>
                 <a class="settings-row" href="${SUPPORT_URL}" target="_blank" rel="noopener">Help and support</a>
             </section>
@@ -75,6 +76,10 @@ export function mountSettings({ monetization, onResetProgress, notify = () => {}
             if (e.target === backdrop) return close();
             const act = e.target.closest('[data-act]')?.dataset.act;
             if (act === 'close') close();
+            if (act === 'replay-story') {
+                close();
+                window.dispatchEvent(new CustomEvent('prologue:replay'));
+            }
             if (act === 'remove-ads' || act === 'restore') {
                 // Inline, inside the sheet, so it never hides behind the backdrop.
                 const status = backdrop.querySelector('[data-role="ads-status"]');
@@ -99,7 +104,7 @@ export function mountSettings({ monetization, onResetProgress, notify = () => {}
             const status = backdrop.querySelector('[data-role="ads-status"]');
             if (status) {
                 status.textContent = e.target.checked
-                    ? 'Ads are off. Thanks for supporting VAXrebot.'
+                    ? 'Ads are off. Thanks for supporting Galactic Outbreak.'
                     : 'A short ad may play between levels, never during one.';
             }
         });

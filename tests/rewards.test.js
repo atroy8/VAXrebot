@@ -6,9 +6,11 @@ import { freshSave } from '../src/save.js';
 import { applyNodeTool } from '../src/sim/actions.js';
 import { initGameState } from '../src/sim/state.js';
 import { tools } from '../src/config/tools.js';
+import { parDaysFor } from '../src/progress.js';
 
-const level = LEVELS[0]; // par 12
-const stats = (o = {}) => ({ initialPopulation: 40, totalDead: 0, totalRecovered: 5, treated: 3, isolated: 2, daysUsed: 9, ...o });
+const level = LEVELS[0];
+const par = parDaysFor(level);
+const stats = (o = {}) => ({ initialPopulation: 40, totalDead: 0, totalRecovered: 5, treated: 3, isolated: 2, daysUsed: par - 3, ...o });
 
 describe('care bonus', () => {
     it('pays per person in each bin plus clean and fast extras', () => {
@@ -48,20 +50,32 @@ describe('treated and isolated counts', () => {
 describe('prize boxes a win unlocks', () => {
     const win = (save, id, stars) => ({ ...save, levels: { ...save.levels, [id]: { stars, completed: true, bestDeaths: 0 } } });
 
+    // Round 14: two boxes per planet, after its 5th level and its boss.
+    const BOX = LEVELS[CHESTS[0].afterLevelIndex];
+
+    it('every planet has two prize boxes, after its 5th and 10th levels', () => {
+        expect(CHESTS).toHaveLength(16);
+        expect(CHESTS.slice(0, 2).map((c) => c.afterLevelIndex)).toEqual([4, 9]);
+        expect(new Set(CHESTS.map((c) => c.id)).size).toBe(16);
+        for (const c of CHESTS) expect(LEVELS[c.afterLevelIndex], c.id).toBeTruthy();
+        const gives = new Set(CHESTS.flatMap((c) => Object.keys(c.gives)));
+        expect([...gives].sort()).toEqual(['blitz', 'eureka', 'pay']);
+    });
+
     it('a first star on the box level unlocks its box', () => {
         const before = freshSave();
-        const after = win(before, LEVELS[0].id, 2);
-        const got = newlyUnlockedChests({ chests: CHESTS, levels: LEVELS, levelId: LEVELS[0].id, saveBefore: before, saveAfter: after });
-        expect(got.map((c) => c.id)).toEqual(['chest-a']);
+        const after = win(before, BOX.id, 2);
+        const got = newlyUnlockedChests({ chests: CHESTS, levels: LEVELS, levelId: BOX.id, saveBefore: before, saveAfter: after });
+        expect(got.map((c) => c.id)).toEqual([CHESTS[0].id]);
     });
 
     it('not again on a replay, not on a 0 star win, not once opened, not on other levels', () => {
-        const one = win(freshSave(), LEVELS[0].id, 1);
-        expect(newlyUnlockedChests({ chests: CHESTS, levels: LEVELS, levelId: LEVELS[0].id, saveBefore: one, saveAfter: win(one, LEVELS[0].id, 3) })).toEqual([]);
-        const zero = win(freshSave(), LEVELS[0].id, 0);
-        expect(newlyUnlockedChests({ chests: CHESTS, levels: LEVELS, levelId: LEVELS[0].id, saveBefore: freshSave(), saveAfter: zero })).toEqual([]);
-        const opened = { ...win(freshSave(), LEVELS[0].id, 2), openedChests: ['chest-a'] };
-        expect(newlyUnlockedChests({ chests: CHESTS, levels: LEVELS, levelId: LEVELS[0].id, saveBefore: freshSave(), saveAfter: opened })).toEqual([]);
+        const one = win(freshSave(), BOX.id, 1);
+        expect(newlyUnlockedChests({ chests: CHESTS, levels: LEVELS, levelId: BOX.id, saveBefore: one, saveAfter: win(one, BOX.id, 3) })).toEqual([]);
+        const zero = win(freshSave(), BOX.id, 0);
+        expect(newlyUnlockedChests({ chests: CHESTS, levels: LEVELS, levelId: BOX.id, saveBefore: freshSave(), saveAfter: zero })).toEqual([]);
+        const opened = { ...win(freshSave(), BOX.id, 2), openedChests: [CHESTS[0].id] };
+        expect(newlyUnlockedChests({ chests: CHESTS, levels: LEVELS, levelId: BOX.id, saveBefore: freshSave(), saveAfter: opened })).toEqual([]);
         expect(newlyUnlockedChests({ chests: CHESTS, levels: LEVELS, levelId: LEVELS[1].id, saveBefore: freshSave(), saveAfter: win(freshSave(), LEVELS[1].id, 3) })).toEqual([]);
     });
 });

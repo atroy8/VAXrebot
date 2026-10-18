@@ -13,6 +13,19 @@ const BIN_LOOKS = {
 const MAX_FACES = 12;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// A prize box this win unlocked. It is a real button: tapping it leaves the
+// results, flies to the box on the map and opens it (game.js wires the tap
+// through data-chest-id).
+export function prizeCardHtml(c) {
+    return `
+            <button type="button" class="tally-prize" data-chest-id="${c.id}" aria-label="Prize box unlocked! Tap to open it on the map.">
+                <span class="tally-gift" aria-hidden="true"><span class="gift-lid"></span><span class="gift-box"></span></span>
+                <span class="tally-prize-text"><strong>Prize box unlocked!</strong><span>Tap to open it on the map.</span></span>
+                <span class="tally-prize-go" aria-hidden="true">Open</span>
+                <span class="tally-confetti" aria-hidden="true">${Array.from({ length: 14 }, (_, i) => `<i style="--i:${i}"></i>`).join('')}</span>
+            </button>`;
+}
+
 // bins: { treatment, isolated, cured } counts. bonus: careBonus() result.
 // baseFunding: the level's normal award. chests: newly unlocked boxes.
 // sound(kind, i): optional ('tick' | 'line' | 'star' | 'coin' | 'prize').
@@ -73,22 +86,13 @@ export function playResultsTally(el, { bins, bonus, stars, baseFunding, chests =
 
     const awardLine = { id: 'award', label: `${stars}-star mission reward`, amount: baseFunding };
 
-    function prizeHtml(c) {
-        return `
-            <div class="tally-prize">
-                <span class="tally-gift" aria-hidden="true"><span class="gift-lid"></span><span class="gift-box"></span></span>
-                <span class="tally-prize-text"><strong>Prize box unlocked!</strong><span>Open it on the map.</span></span>
-                <span class="tally-confetti" aria-hidden="true">${Array.from({ length: 14 }, (_, i) => `<i style="--i:${i}"></i>`).join('')}</span>
-            </div>`;
-    }
-
     function finish() {
         for (const id of Object.keys(BIN_LOOKS)) fillBin(id, bins[id] || 0, false);
         q('[data-lines]').innerHTML = bonus.lines.map(lineHtml).join('');
         q('[data-stars]').querySelectorAll('.tally-star').forEach((s, i) => s.classList.toggle('on', i < stars));
         q('[data-award]').innerHTML = baseFunding > 0 ? lineHtml(awardLine) : '';
         q('[data-total]').textContent = `+${totalFunding}`;
-        q('[data-prizes]').innerHTML = chests.map(prizeHtml).join('');
+        q('[data-prizes]').innerHTML = chests.map(prizeCardHtml).join('');
         el.classList.add('done');
     }
 
@@ -157,7 +161,7 @@ export function playResultsTally(el, { bins, bonus, stars, baseFunding, chests =
         // 5. Prize boxes drop in.
         for (const c of chests) {
             if (skipped) return;
-            q('[data-prizes]').insertAdjacentHTML('beforeend', prizeHtml(c));
+            q('[data-prizes]').insertAdjacentHTML('beforeend', prizeCardHtml(c));
             sound('prize');
             await sleep(500);
         }

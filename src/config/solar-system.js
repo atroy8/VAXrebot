@@ -1,65 +1,76 @@
-// The solar system on the home screen (candy gloss, indigo and gold colours): one planet per region, each
-// holding that region's three levels. Pure data, shared by the 3D view
-// (src/ui/globe-view.js) and its tests.
+// The galaxy on the home screen (round 14): 3 star systems, each a sun with
+// 2 or 3 inhabited planets on circular orbits. Pure data and layout, shared
+// by the 3D view (src/ui/globe-view.js) and its tests.
 //
-// Unlocking follows the existing level rules (src/progress.js): a planet
-// opens when its first level unlocks, which needs the last level of the
-// previous planet beaten plus the region's star requirement.
+// The map is seen from straight above, so every orbit is a true circle on
+// screen (Adam: "have the systems appear circular not elliptical"). The
+// planets' fronts (where the level road is) face up, toward the camera.
 //
-// Orbits are ellipses around the sun, longer front to back than side to
-// side, so the whole system fits a tall phone screen. All planets turn
-// together a third of a lap apart, so they never pass in front of each
-// other.
+// Planet sizes come from PLANET_DEFS[].size in src/config/campaign.js, and
+// colours from each planet's Wada colour combination (paletteId, see
+// src/config/planet-palettes.js). Unlocking follows the level rules in
+// src/progress.js: a planet opens when its first level unlocks.
+import { SYSTEMS, PLANET_DEFS } from './campaign.js';
 
-export const PLANET_RADIUS = 0.65; // world units; each planet is a unit sphere scaled by this
-
-export const PLANETS = [
-    {
-        regionId: 'hometown',
-        name: 'Gumdrop',
-        orbit: { a: 1.3, b: 2.3, phase: 0.5 },
-        // Ai and kin theme (round 12): deep indigo seas, gold leaf and washi land.
-        ocean: ['#234c9c', '#13265a'],
-        land: ['#d4ab3a', '#ecd27e', '#f7f2e4', '#c9a227', '#e2bf5a', '#f3e3b3'],
-        glow: 0xf3d27a,
-        button: 0x2f6fd6,
-        seed: 20261015,
-    },
-    {
-        regionId: 'national',
-        name: 'Marshmallow',
-        orbit: { a: 1.9, b: 3.8, phase: 0.5 + (2 * Math.PI) / 3 },
-        ocean: ['#3565b8', '#1b3a7a'],
-        land: ['#f7f2e4', '#ddb94a', '#f3e3b3', '#c9a227', '#ecd27e', '#ffffff'],
-        glow: 0x9cc4ff,
-        button: 0x3f8fe0,
-        seed: 777,
-    },
-    {
-        regionId: 'global',
-        name: 'Jawbreaker',
-        orbit: { a: 2.5, b: 5.3, phase: 0.5 + (4 * Math.PI) / 3 },
-        ocean: ['#1b3a7a', '#0b1838'],
-        land: ['#c9a227', '#f7f2e4', '#ecd27e', '#a9801f', '#ddb94a', '#f3e3b3'],
-        glow: 0xe8c45f,
-        button: 0x5b6fd8,
-        seed: 4242,
-    },
-];
-
-// Where a planet's three levels sit on its surface (lat/lng, degrees). All
-// on the side that faces you, so a planet's levels show at once without
-// spinning it. lng -90 faces the camera.
-export const PLANET_LEVEL_POSITIONS = [
-    { lat: 6, lng: -128 },
-    { lat: 26, lng: -90 },
-    { lat: 2, lng: -52 },
-];
+export const PLANET_RADIUS_MAX = 0.55; // world units for a size 1 planet
+export const SUN_RADIUS = 0.42;
+export const ORBIT_GAP = 0.34; // clear space between neighbouring orbits' planets
+export const SUN_GAP = 0.3; // clear space between the sun and the first planet
 
 // Seconds for one lap of the orbits. Slow, so taps on planets are easy.
 export const ORBIT_PERIOD_S = 120;
 
-// Camera height above the orbit plane, as an angle (degrees). Higher looks
-// down on the orbits; lower shows them edge on.
-export const SYSTEM_ELEVATION_DEG = 48;
-export const SUN_RADIUS = 0.45;
+// Centre to centre distance between systems on the galaxy map. Large enough
+// that a neighbouring system never shows in the frame of a system view.
+export const SYSTEM_SPACING = 14.5;
+
+export function planetRadius(def) {
+    return (def.size || 1) * PLANET_RADIUS_MAX;
+}
+
+function layoutSystem(system, si) {
+    const defs = PLANET_DEFS.filter((p) => p.systemId === system.id);
+    let edge = SUN_RADIUS + SUN_GAP; // inner edge of the next planet's lane
+    const planets = defs.map((def, j) => {
+        const radius = planetRadius(def);
+        const orbitR = edge + radius;
+        edge = orbitR + radius + ORBIT_GAP;
+        return {
+            def,
+            regionId: def.id,
+            systemId: system.id,
+            name: def.name,
+            radius,
+            orbitR,
+            // Planets in one system turn together, evenly spaced, so they
+            // never line up and their labels never stack.
+            phase: 0.6 + (j * 2 * Math.PI) / defs.length,
+        };
+    });
+    const last = planets[planets.length - 1];
+    const extent = last.orbitR + last.radius;
+    // Zig-zag up the screen: screen up is world -z.
+    const centre = { x: si % 2 === 0 ? -0.9 : 0.9, y: 0, z: (1 - si) * SYSTEM_SPACING };
+    return { system, index: si, planets, extent, centre };
+}
+
+export const SYSTEM_LAYOUTS = SYSTEMS.map(layoutSystem);
+
+// Every planet, in campaign order, with its system index.
+export const PLANETS = SYSTEM_LAYOUTS.flatMap((s) => s.planets.map((p) => ({ ...p, systemIndex: s.index })));
+
+// Where a planet's 10 levels sit on its surface (lat/lng, degrees), in play
+// order. A road that climbs the face of the planet in rows of 3, 2, 3, 2,
+// all on the side that faces you (lng -90 is the centre of the face).
+export const PLANET_LEVEL_POSITIONS = [
+    { lat: -40, lng: -128 },
+    { lat: -46, lng: -90 },
+    { lat: -40, lng: -52 },
+    { lat: -14, lng: -64 },
+    { lat: -14, lng: -116 },
+    { lat: 12, lng: -130 },
+    { lat: 14, lng: -90 },
+    { lat: 12, lng: -50 },
+    { lat: 38, lng: -68 },
+    { lat: 40, lng: -112 },
+];

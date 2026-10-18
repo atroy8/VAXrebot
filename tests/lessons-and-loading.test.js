@@ -21,8 +21,10 @@ describe('one lesson per level (item 5)', () => {
     });
 
     it('no orphan lessons and no repeated titles', () => {
-        const ids = new Set(LEVELS.map((l) => l.id));
-        for (const id of Object.keys(LESSONS)) expect(ids.has(id), id).toBe(true);
+        // Since round 14 levels name their lesson by id (src/config/campaign.js).
+        const used = new Set(LEVELS.map((l) => l.lessonId));
+        for (const id of Object.keys(LESSONS)) expect(used.has(id), id).toBe(true);
+        for (const id of used) expect(LESSONS[id], id).toBeTruthy();
         const titles = Object.values(LESSONS).map((l) => l.title);
         expect(new Set(titles).size).toBe(titles.length);
     });
@@ -30,7 +32,7 @@ describe('one lesson per level (item 5)', () => {
     it('copy is short enough for a phone and uses no emoji or long dashes', () => {
         for (const [id, l] of Object.entries(LESSONS)) {
             expect(l.title.split(/\s+/).length, id).toBeLessThanOrEqual(4);
-            for (const key of ['brief', 'win', 'retry']) {
+            for (const key of ['brief', 'win', 'retry', 'retryBusy'].filter((k) => l[k] != null)) {
                 expect(l[key].length, `${id}.${key}`).toBeLessThanOrEqual(150);
                 expect(l[key], `${id}.${key}`).not.toMatch(DASHES);
                 expect(l[key], `${id}.${key}`).not.toMatch(EMOJI);
@@ -39,7 +41,7 @@ describe('one lesson per level (item 5)', () => {
     });
 
     it('results show the fact on a win and a tip otherwise', () => {
-        const l = lessonFor('r1-care-home');
+        const l = lessonFor('mizuho-1');
         expect(debriefLine(l, 'contained')).toBe(l.win);
         expect(debriefLine(l, 'overwhelmed')).toBe(l.retry);
         expect(debriefLine(l, 'timeout')).toBe(l.retry);
