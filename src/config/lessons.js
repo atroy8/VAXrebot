@@ -10,6 +10,8 @@
 //   brief    what to try in this level (briefing card, one sentence)
 //   win      the real-world fact behind it (results after a win)
 //   retry    a concrete tip for the next attempt (results after a loss)
+//   retryBusy optional: the tip when the player used every action and still
+//            lost (only where `retry` is about acting sooner)
 
 export const LESSONS = {
     'r1-care-home': {
@@ -17,6 +19,7 @@ export const LESSONS = {
         brief: 'Outbreaks grow by multiplying, so the moves you make on day 1 stop the most cases.',
         win: 'Each case you stop early would have seeded more. That is why health teams move on the very first reports.',
         retry: 'Cases multiply, so a slow start snowballs. Use your actions on day 1 next time.',
+        retryBusy: 'You used every action and it still got ahead. Cut the red links around the sick first: each one is a case that never starts.',
     },
     'r1-elementary': {
         title: 'Isolation breaks chains',
@@ -73,8 +76,17 @@ export function lessonFor(levelId) {
 }
 
 // The one-line takeaway for the results screen. Wins get the real-world fact,
-// everything else gets a concrete tip for the next attempt.
-export function debriefLine(lesson, outcome) {
+// everything else gets a concrete tip for the next attempt, shaped by how the
+// player actually played: `unusedActions` counts daily actions left on the
+// table when a day ended (fast-forwarded days excluded).
+export const UNUSED_ACTIONS_NUDGE = 2;
+
+export function debriefLine(lesson, outcome, { unusedActions = null } = {}) {
     if (!lesson) return '';
-    return outcome === 'contained' ? lesson.win : lesson.retry;
+    if (outcome === 'contained') return lesson.win;
+    if (unusedActions != null && unusedActions >= UNUSED_ACTIONS_NUDGE) {
+        return `You ended days with ${unusedActions} actions unused. ${lesson.retry}`;
+    }
+    if (unusedActions === 0 && lesson.retryBusy) return lesson.retryBusy;
+    return lesson.retry;
 }

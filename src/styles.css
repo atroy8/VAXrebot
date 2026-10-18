@@ -99,6 +99,15 @@
             box-sizing: border-box;
         }
 
+        /* Form controls do not inherit the page font by default, so every
+           button fell back to Arial next to Fredoka text (round 13). */
+        button,
+        input,
+        select,
+        textarea {
+            font-family: inherit;
+        }
+
         body {
             margin: 0;
             padding: 0;

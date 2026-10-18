@@ -21,6 +21,7 @@ import {
 } from './progress.js';
 import { isPowerUp, usePowerUp, getCharges, getFunding } from './economy.js';
 import './ui/game-screen.css';
+import './ui/averted.css';
 import { toolHint, dayBanner } from './ui/game-screen-model.js';
 import { renderCareBox, flyToCareBox } from './ui/care-box.js';
 import { mountShop, renderShop } from './ui/shop.js';
@@ -41,6 +42,8 @@ import { createAutoAdvance } from './ui/auto-advance.js';
 import { showScreen as renderScreen, refreshGlobeHome } from './ui/screens.js';
 import { createViewLoader } from './ui/view-loader.js';
 import { lessonFor, debriefLine } from './config/lessons.js';
+import { snapshotNetwork, noResponseCases, avertedSummary } from './sim/counterfactual.js';
+import { renderAverted } from './ui/averted.js';
 import {
     renderHeader,
     renderTools,
@@ -324,6 +327,8 @@ export class EpidemicSimulator {
         }
 
         this.network = { nodes, links };
+        // Opening snapshot for the no-response baseline on the results screen.
+        this.openingSnapshot = snapshotNetwork(this.network);
     }
 
     handleNodeClick(event, node) {
@@ -438,6 +443,11 @@ export class EpidemicSimulator {
         }
         this.autoAdvance.cancel();
         const difficulty = this.difficulty;
+        // Coaching: count actions left unused when a day ends by choice.
+        if (!this.wrapUp) {
+            const left = actionsRemaining(this.gameState, this.tools, difficulty);
+            this.gameState.stats.unusedActions = (this.gameState.stats.unusedActions || 0) + left;
+        }
         const { spread, outcomes, result, activeBefore } = advanceDay(this.gameState, this.network, {
             scenario: this.currentScenario,
             difficulty,
@@ -608,8 +618,33 @@ export class EpidemicSimulator {
             });
         }
         const lesson = this.currentLevel ? lessonFor(this.currentLevel.id) : null;
-        fillLessonCard('game-over-lesson', lesson?.title, debriefLine(lesson, outcome));
+        fillLessonCard('game-over-lesson', lesson?.title, debriefLine(lesson, outcome, { unusedActions: stats.unusedActions ?? 0 }));
+        this.renderAvertedCard(outcome, stats);
         this.showScreen('game-over');
+    }
+
+    // Cases averted: the player's outbreak against a no-response baseline
+    // simulated from the opening snapshot (about 41 tiny runs, a few ms).
+    renderAvertedCard(outcome, stats) {
+        const el = document.getElementById('averted');
+        if (!el) return;
+        let data = { summary: null };
+        try {
+            if (this.openingSnapshot) {
+                const d = this.difficulty;
+                const baseline = noResponseCases(this.openingSnapshot, {
+                    transmissionRate: this.currentScenario.baseTransmissionRate * d.transmissionMultiplier,
+                    recoveryTime: d.recoveryTime,
+                    fatalityRate: d.fatalityRate,
+                });
+                const population = stats.initialPopulation;
+                const actual = stats.totalInfected;
+                data = { summary: avertedSummary({ actual, baseline, population, outcome }), actual, baseline, population };
+            }
+        } catch (err) {
+            data = { summary: null }; // never block the results screen
+        }
+        renderAverted(el, data);
     }
 
     // Little rising blips for the tally; pitch climbs as a bin fills.
