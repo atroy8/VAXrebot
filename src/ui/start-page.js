@@ -1,6 +1,6 @@
 // Start page (round 12): replaces the How to play pop-up. The game opens on
 // one planet with a crowd of little people bouncing along its top edge, the
-// VAXrebot title in gold, and one big Play button. Tapping a person makes them
+// Galactic Outbreak title in gold, and one big Play button. Tapping a person makes them
 // leap. Play flies out to the solar system.
 //
 // The people are HTML face tokens laid over the 3D canvas and pinned to the
@@ -45,8 +45,8 @@ export function startPageMarkup(crowd = START_CROWD) {
         <div class="start-page" id="start-page">
             <div class="start-people" id="start-people">${people}</div>
             <div class="start-top">
-                <h1 class="start-title">VAXrebot</h1>
-                <p class="start-tagline">Stop the outbreak. Save the planet.</p>
+                <h1 class="start-title"><span>Galactic</span> <span>Outbreak</span></h1>
+                <p class="start-tagline">The galaxy's last hope.</p>
             </div>
             <button type="button" class="start-play" id="start-play">Play</button>
         </div>`;

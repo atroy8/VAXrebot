@@ -572,3 +572,29 @@
 @media (prefers-reduced-motion: reduce) {
     .tally-line, .tally-star.pop, .tally-prize, .tally-gift, .tally-confetti i { animation: none; }
 }
+
+/* Round 14: the prize box card on the award screen is a button that opens
+   the box on the map. */
+button.tally-prize {
+    width: 100%;
+    min-height: 56px;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    touch-action: manipulation;
+}
+button.tally-prize:active { transform: translateY(2px); }
+.tally-prize-go {
+    margin-left: auto;
+    flex: 0 0 auto;
+    min-height: 36px;
+    padding: 0 14px;
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    background: linear-gradient(180deg, #f6e3a1 0%, #ddb94a 55%, #a9801f 100%);
+    color: #0b1838;
+    font-weight: 700;
+    font-size: 0.95rem;
+    box-shadow: 0 3px 0 #8a6417;
+}

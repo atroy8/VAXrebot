@@ -1,21 +1,26 @@
-// Web Audio: procedural SFX, the menu "spy theme" riff, and a generative
-// adaptive music engine for gameplay. Everything is synthesized in code;
-// no external audio files, no network requests.
+// Web Audio: procedural SFX, stingers and the looping theme song. Everything
+// is synthesized in code; no external audio files, no network requests.
 //
-// Public API consumed by src/game.js (kept with identical signatures):
+// Public API consumed by src/game.js (signatures unchanged):
 //   initAudio(), setupThemeMusic(), playThemeMusic(), startThemeMusic(),
-//   stopThemeMusic(), playSound(freq, dur, type), setVolume(v)
-// New API (safe no-ops until init, or when music is disabled):
-//   updateMood(stats), playStinger(name),
-//   setMusicEnabled(bool), isMusicEnabled(),
-//   startGameMusic(), stopGameMusic()
+//   stopThemeMusic(), playSound(freq, dur, type), playSnip(), setVolume(v),
+//   updateMood(stats), playStinger(name), setMusicEnabled(bool),
+//   isMusicEnabled(), startGameMusic(), stopGameMusic()
+//
+// Music (round 14): one song, "Starlight Response" (src/audio-song.js), in
+// two arrangements. Calm on the start page, map, briefing and results;
+// driving in a level. A lookahead scheduler on the AudioContext clock plays
+// both arrangements into two buses and crossfades them when the screen
+// changes. Nothing plays before the first user gesture.
+import { mixedEvents, createScheduler, arrangementForScreen, busTargets, midiToFreq, ARRANGEMENTS, CROSSFADE_S, SONG } from './audio-song.js';
 
 const MUSIC_ENABLED_KEY = 'vaxrebot_music_enabled';
 
-// A-minor pentatonic across two octaves, used for ambient plucks.
-const PENTATONIC = [220.0, 261.63, 293.66, 329.63, 392.0, 440.0, 523.25, 587.33, 659.25, 784.0];
-// Tension notes added when the outbreak is severe (minor 2nd / tritone color).
-const TENSION_NOTES = [233.08, 311.13, 466.16]; // Bb3, Eb4, Bb4
+// Per layer loudness inside the music bus. Music sits well under SFX
+// (playSound peaks at 0.1 on the SFX bus; the music bus is at 0.45).
+const LAYER_VOL = { pad: 0.035, bass: 0.07, melody: 0.06, arp: 0.022, kick: 0.16, snare: 0.05, hat: 0.025 };
+const TICK_MS = 25;
+const LOOKAHEAD_S = 0.2;
 
 export class AudioEngine {
     // getScreen: () => current screen name, used to stop the theme when leaving the menu.
@@ -29,10 +34,14 @@ export class AudioEngine {
         this.themeMusicSequence = [];
         this.getScreen = getScreen;
 
-        // Generative music state
+        // Song state
         this.musicEnabled = this._readMusicPreference();
-        this.musicLoopTimeout = null;
-        this.padNodes = [];
+        this.song = null; // { scheduler, timer, buses: { menu, level }, arrangement }
+        this.songWanted = false; // asked to play, waiting for a user gesture
+        this.resumeAfterResults = false; // stopGameMusic at a level's end: come back on the map
+        this.hadGesture = false;
+        this.watchTimer = null;
+        this.noiseBuffer = null;
         this.mood = 0; // 0 = calm, 1 = full outbreak crisis
         this.toggleButton = null;
     }
@@ -55,6 +64,7 @@ export class AudioEngine {
 
             this.setupThemeMusic();
             this._injectMusicToggle();
+            this._listenForGesture();
         } catch (e) {
             console.error('Web Audio API is not supported in this browser');
         }
@@ -64,53 +74,22 @@ export class AudioEngine {
     // Existing SFX / theme API (unchanged signatures)
     // ------------------------------------------------------------------
 
+    // The old menu riff is now part of the theme song; kept for callers.
     setupThemeMusic() {
-        // Notes for a "spy theme" riff
-        const note = (freq, dur) => ({ freq, dur });
-        const rest = (dur) => ({ freq: 0, dur });
-        const E3 = 164.81,
-            F3 = 174.61,
-            Fs3 = 185.0,
-            G3 = 196.0;
-        const eighth = 150;
-
-        this.themeMusicSequence = [
-            note(E3, eighth),
-            note(F3, eighth),
-            rest(eighth / 2),
-            note(Fs3, eighth),
-            note(G3, eighth * 2),
-            rest(eighth / 2),
-            note(E3, eighth),
-            note(F3, eighth),
-            rest(eighth / 2),
-            note(Fs3, eighth),
-            note(G3, eighth * 2),
-            rest(eighth * 4),
-        ];
+        this.themeMusicSequence = [];
     }
 
-    playThemeMusic(noteIndex = 0) {
-        if (this.getScreen() !== 'menu') return; // Stop if not on menu
-        if (!this.musicEnabled) return; // Theme is music; respect the toggle
-
-        const { freq, dur } = this.themeMusicSequence[noteIndex];
-        if (freq > 0) {
-            this.playSound(freq, dur / 1000, 'triangle');
-        }
-
-        const nextNoteIndex = (noteIndex + 1) % this.themeMusicSequence.length;
-        this.themeMusicTimeout = setTimeout(() => this.playThemeMusic(nextNoteIndex), dur);
+    playThemeMusic() {
+        this.startThemeMusic();
     }
 
+    // Menu screens get the calm arrangement of the same song.
     startThemeMusic() {
-        if (this.themeMusicTimeout) clearTimeout(this.themeMusicTimeout);
-        if (this.audioContext && this.audioContext.state === 'suspended') {
-            this.audioContext.resume();
-        }
-        this.playThemeMusic();
+        this._startSong();
     }
 
+    // The song keeps playing across screens (it crossfades instead), so this
+    // only clears the legacy timer.
     stopThemeMusic() {
         if (this.themeMusicTimeout) {
             clearTimeout(this.themeMusicTimeout);
@@ -193,8 +172,8 @@ export class AudioEngine {
     // ------------------------------------------------------------------
 
     // stats: { day, infected, dead, totalInfected, population }
-    // Safe no-op until init, or when music is disabled. Auto-starts the
-    // ambient loop on first call so game.js only needs this one call per tick.
+    // Safe no-op until init, or when music is disabled. Starts the song on
+    // the first call so game.js only needs this one call per day.
     updateMood(stats = {}) {
         try {
             if (!this.audioContext || !this.musicEnabled) return;
@@ -203,114 +182,277 @@ export class AudioEngine {
             const infectionPressure = Math.min(1, (infected / pop) * 12); // saturates ~8% active
             const mortalityPressure = Math.min(1, (dead / Math.max(1, totalInfected)) * 3); // saturates ~33% CFR
             this.mood = Math.max(0, Math.min(1, infectionPressure * 0.7 + mortalityPressure * 0.3));
-            if (!this.musicLoopTimeout && !this.padNodes.length) {
-                this.startGameMusic();
-            }
+            if (!this.song) this._startSong();
         } catch (e) {
             // Never throw into the game loop.
         }
     }
 
     startGameMusic() {
+        this._startSong();
+    }
+
+    // Called when a level ends (results get the stingers) and when the old
+    // menu screen opens. Fades the song out; it comes back calm once the
+    // player is on the map again.
+    stopGameMusic() {
+        this.resumeAfterResults = this.musicEnabled;
+        this._stopSong(0.6);
+    }
+
+    // ---- Song engine ----------------------------------------------------
+
+    _listenForGesture() {
+        if (typeof document === 'undefined') return;
+        const onGesture = () => {
+            this.hadGesture = true;
+            document.removeEventListener('pointerdown', onGesture, true);
+            document.removeEventListener('keydown', onGesture, true);
+            if (this.songWanted) this._startSong();
+            this._startWatch();
+        };
+        document.addEventListener('pointerdown', onGesture, true);
+        document.addEventListener('keydown', onGesture, true);
+        document.addEventListener('visibilitychange', () => {
+            if (!this.audioContext) return;
+            try {
+                if (document.hidden) this.audioContext.suspend();
+                else if (this.hadGesture) this.audioContext.resume();
+            } catch (e) { /* ignore */ }
+        });
+    }
+
+    // Light watcher: brings the song back after a level's results, once the
+    // player leaves the results screen.
+    _startWatch() {
+        if (this.watchTimer) return;
+        this.watchTimer = setInterval(() => {
+            try {
+                if (this.song || !this.resumeAfterResults || !this.musicEnabled) return;
+                const screen = this.getScreen();
+                if (screen !== 'game' && screen !== 'game-over') this._startSong();
+            } catch (e) { /* ignore */ }
+        }, 800);
+    }
+
+    _startSong() {
         try {
             if (!this.audioContext || !this.musicEnabled) return;
-            if (this.audioContext.state === 'suspended') {
-                this.audioContext.resume();
+            if (!this.hadGesture) {
+                this.songWanted = true;
+                return;
             }
-            if (this.musicLoopTimeout || this.padNodes.length) return; // already running
-            this._startPads();
-            this._schedulePluck();
-        } catch (e) {
-            // Never throw into the game loop.
-        }
-    }
-
-    stopGameMusic() {
-        if (this.musicLoopTimeout) {
-            clearTimeout(this.musicLoopTimeout);
-            this.musicLoopTimeout = null;
-        }
-        for (const node of this.padNodes) {
-            try {
-                node.stop();
-            } catch (e) { /* already stopped */ }
-            try {
-                node.disconnect();
-            } catch (e) { /* ignore */ }
-        }
-        this.padNodes = [];
-    }
-
-    // Slow detuned pad (root + fifth) through a breathing lowpass filter.
-    _startPads() {
-        const ctx = this.audioContext;
-        const filter = ctx.createBiquadFilter();
-        filter.type = 'lowpass';
-        filter.frequency.value = 500;
-        filter.Q.value = 0.8;
-
-        const lfo = ctx.createOscillator();
-        lfo.frequency.value = 0.06; // ~17s breathing cycle
-        const lfoGain = ctx.createGain();
-        lfoGain.gain.value = 260;
-        lfo.connect(lfoGain);
-        lfoGain.connect(filter.frequency);
-        lfo.start();
-
-        const padGain = ctx.createGain();
-        padGain.gain.value = 0.12;
-        filter.connect(padGain);
-        padGain.connect(this.musicBus);
-
-        for (const [freq, detune] of [[110.0, -4], [110.0, 4], [164.81, 0]]) {
-            const osc = ctx.createOscillator();
-            osc.type = 'sawtooth';
-            osc.frequency.value = freq;
-            osc.detune.value = detune;
-            osc.connect(filter);
-            osc.start();
-            this.padNodes.push(osc);
-        }
-        this.padNodes.push(lfo);
-    }
-
-    // Sparse pluck scheduler; tempo and dissonance scale with this.mood.
-    _schedulePluck() {
-        this._pluckOnce();
-        const interval = 2800 - this.mood * 1900; // ~2.8s calm, ~0.9s crisis
-        this.musicLoopTimeout = setTimeout(() => this._schedulePluck(), interval);
-    }
-
-    _pluckOnce() {
-        try {
-            if (!this.audioContext) return;
-            // Calm: frequent rests; crisis: nearly always a note.
-            const playChance = 0.35 + this.mood * 0.65;
-            if (Math.random() > playChance) return;
-
-            let freq;
-            if (this.mood > 0.55 && Math.random() < (this.mood - 0.55) * 2.2) {
-                // Tension notes slip in as the outbreak worsens.
-                freq = TENSION_NOTES[Math.floor(Math.random() * TENSION_NOTES.length)];
-            } else {
-                freq = PENTATONIC[Math.floor(Math.random() * PENTATONIC.length)];
-            }
-
+            this.songWanted = false;
+            this.resumeAfterResults = false;
             const ctx = this.audioContext;
-            const osc = ctx.createOscillator();
-            osc.type = 'triangle';
-            osc.frequency.value = freq;
-            const gain = ctx.createGain();
-            const now = ctx.currentTime;
-            gain.gain.setValueAtTime(0.0001, now);
-            gain.gain.exponentialRampToValueAtTime(0.22, now + 0.03);
-            gain.gain.exponentialRampToValueAtTime(0.0001, now + 1.4);
-            osc.connect(gain);
-            gain.connect(this.musicBus);
-            osc.start(now);
-            osc.stop(now + 1.5);
+            if (ctx.state === 'suspended') ctx.resume();
+            if (this.song) return; // already playing
+
+            const arrangement = arrangementForScreen(this.getScreen());
+            const targets = busTargets(arrangement);
+            const master = ctx.createGain();
+            master.gain.setValueAtTime(0.0001, ctx.currentTime);
+            master.gain.exponentialRampToValueAtTime(1, ctx.currentTime + 1.2);
+            master.connect(this.musicBus);
+            const buses = {};
+            for (const name of ['menu', 'level']) {
+                const g = ctx.createGain();
+                g.gain.value = targets[name];
+                g.connect(master);
+                buses[name] = g;
+            }
+            // Warm lowpass on the lead (one per bus), opened up by outbreak pressure.
+            const leadFilters = {};
+            for (const name of ['menu', 'level']) {
+                const f = ctx.createBiquadFilter();
+                f.type = 'lowpass';
+                f.frequency.value = 2400;
+                f.Q.value = 0.7;
+                f.connect(buses[name]);
+                leadFilters[name] = f;
+            }
+            const scheduler = createScheduler({
+                startTime: ctx.currentTime + 0.1,
+                lookahead: LOOKAHEAD_S,
+                getEvents: () => mixedEvents(this.mood),
+            });
+            this.song = { scheduler, master, buses, leadFilters, arrangement, switchedAt: ctx.currentTime, timer: null };
+            const tick = () => this._songTick();
+            tick();
+            this.song.timer = setInterval(tick, TICK_MS);
         } catch (e) {
             // Never throw into the game loop.
+        }
+    }
+
+    _stopSong(fadeS = 0.6) {
+        const song = this.song;
+        if (!song) {
+            this.songWanted = false;
+            return;
+        }
+        this.song = null;
+        clearInterval(song.timer);
+        try {
+            const t = this.audioContext.currentTime;
+            song.master.gain.cancelScheduledValues(t);
+            song.master.gain.setValueAtTime(Math.max(0.0001, song.master.gain.value), t);
+            song.master.gain.exponentialRampToValueAtTime(0.0001, t + fadeS);
+            setTimeout(() => {
+                try {
+                    song.master.disconnect();
+                } catch (e) { /* ignore */ }
+            }, (fadeS + LOOKAHEAD_S + 0.5) * 1000);
+        } catch (e) { /* ignore */ }
+    }
+
+    _songTick() {
+        const song = this.song;
+        if (!song || !this.audioContext) return;
+        const ctx = this.audioContext;
+        // Crossfade the buses when the screen asks for the other arrangement.
+        const arrangement = arrangementForScreen(this.getScreen());
+        if (arrangement !== song.arrangement) {
+            song.arrangement = arrangement;
+            song.switchedAt = ctx.currentTime;
+            const targets = busTargets(arrangement);
+            for (const name of ['menu', 'level']) {
+                song.buses[name].gain.setTargetAtTime(targets[name], ctx.currentTime, CROSSFADE_S / 3);
+            }
+        }
+        song.leadFilters.level.frequency.setTargetAtTime(2400 + this.mood * 2600, ctx.currentTime, 0.5);
+        if (this.masterGain && this.masterGain.gain.value === 0) {
+            // Muted: keep time moving without building voices.
+            song.scheduler.tick(ctx.currentTime);
+            return;
+        }
+        song.scheduler.tick(ctx.currentTime, (event, time) => {
+            const target = busTargets(song.arrangement)[event.bus];
+            // Skip the silent bus once its fade has finished.
+            if (target === 0 && ctx.currentTime - song.switchedAt > CROSSFADE_S * 1.5) return;
+            const mix = ARRANGEMENTS[event.bus][event.layer] || 0;
+            if (mix <= 0) return;
+            this._playVoice(event, time, event.bus, mix * LAYER_VOL[event.layer] * (event.vel || 1));
+        });
+    }
+
+    _noise() {
+        if (!this.noiseBuffer) {
+            const ctx = this.audioContext;
+            const len = Math.floor(ctx.sampleRate * 0.4);
+            const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+            const d = buf.getChannelData(0);
+            for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+            this.noiseBuffer = buf;
+        }
+        return this.noiseBuffer;
+    }
+
+    // One note or drum hit, scheduled at `t` on the audio clock.
+    _playVoice(event, t, busName, vol) {
+        const ctx = this.audioContext;
+        const bus = this.song.buses[busName];
+        const step = 60 / SONG.bpm / 4;
+        const dur = Math.max(step, (event.len || 1) * step);
+        const env = (g, attack, peak, release) => {
+            g.gain.setValueAtTime(0.0001, t);
+            g.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak), t + attack);
+            g.gain.exponentialRampToValueAtTime(0.0001, t + attack + release);
+        };
+        const osc = (type, freq, dest, detune = 0) => {
+            const o = ctx.createOscillator();
+            o.type = type;
+            o.frequency.setValueAtTime(freq, t);
+            o.detune.value = detune;
+            o.connect(dest);
+            return o;
+        };
+        switch (event.layer) {
+            case 'pad': {
+                const g = ctx.createGain();
+                const lp = ctx.createBiquadFilter();
+                lp.type = 'lowpass';
+                lp.frequency.value = 900;
+                lp.connect(g).connect(bus);
+                g.gain.setValueAtTime(0.0001, t);
+                g.gain.linearRampToValueAtTime(vol, t + 0.6);
+                g.gain.setValueAtTime(vol, t + dur - 0.2);
+                g.gain.linearRampToValueAtTime(0.0001, t + dur + 0.5);
+                for (const d of [-7, 7]) {
+                    const o = osc('sawtooth', midiToFreq(event.midi), lp, d);
+                    o.start(t);
+                    o.stop(t + dur + 0.6);
+                }
+                break;
+            }
+            case 'bass': {
+                const g = ctx.createGain();
+                const lp = ctx.createBiquadFilter();
+                lp.type = 'lowpass';
+                lp.frequency.value = 420;
+                lp.connect(g).connect(bus);
+                env(g, 0.01, vol, Math.min(dur, 0.9));
+                const o = osc('triangle', midiToFreq(event.midi), lp);
+                o.start(t);
+                o.stop(t + dur + 0.1);
+                break;
+            }
+            case 'melody': {
+                // Soft bell: sine plus a quiet octave, through the lead filter.
+                const g = ctx.createGain();
+                g.connect(this.song.leadFilters[busName]);
+                env(g, 0.015, vol, dur + 0.4);
+                const f = midiToFreq(event.midi);
+                const o1 = osc('triangle', f, g);
+                const g2 = ctx.createGain();
+                g2.gain.value = 0.25;
+                g2.connect(g);
+                const o2 = osc('sine', f * 2, g2);
+                for (const o of [o1, o2]) {
+                    o.start(t);
+                    o.stop(t + dur + 0.5);
+                }
+                break;
+            }
+            case 'arp': {
+                const g = ctx.createGain();
+                g.connect(bus);
+                env(g, 0.005, vol, 0.18);
+                const o = osc('square', midiToFreq(event.midi), g);
+                o.start(t);
+                o.stop(t + 0.22);
+                break;
+            }
+            case 'kick': {
+                const g = ctx.createGain();
+                g.connect(bus);
+                env(g, 0.004, vol, 0.28);
+                const o = ctx.createOscillator();
+                o.type = 'sine';
+                o.frequency.setValueAtTime(130, t);
+                o.frequency.exponentialRampToValueAtTime(45, t + 0.18);
+                o.connect(g);
+                o.start(t);
+                o.stop(t + 0.32);
+                break;
+            }
+            case 'snare':
+            case 'hat': {
+                const src = ctx.createBufferSource();
+                src.buffer = this._noise();
+                const f = ctx.createBiquadFilter();
+                f.type = event.layer === 'hat' ? 'highpass' : 'bandpass';
+                f.frequency.value = event.layer === 'hat' ? 7000 : 1800;
+                const g = ctx.createGain();
+                src.connect(f).connect(g).connect(bus);
+                const len = event.layer === 'hat' ? 0.05 : 0.16;
+                env(g, 0.002, vol, len);
+                src.start(t, Math.random() * 0.2);
+                src.stop(t + len + 0.05);
+                break;
+            }
+            default:
+                break;
         }
     }
 
@@ -378,12 +520,11 @@ export class AudioEngine {
         this._refreshToggleButton();
         if (!this.musicEnabled) {
             this.stopThemeMusic();
-            this.stopGameMusic();
+            this.resumeAfterResults = false;
+            this._stopSong(0.3);
         } else if (this.audioContext) {
-            // Resume whatever music belongs to the current screen.
-            if (this.getScreen() === 'menu') {
-                this.startThemeMusic();
-            }
+            // The song picks the arrangement for the current screen itself.
+            this._startSong();
         }
     }
 

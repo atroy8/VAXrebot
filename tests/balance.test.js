@@ -2,7 +2,7 @@
 // are repeatable. Bands are deliberately loose: they catch a level that
 // became trivial or impossible, not small tuning drift.
 import { describe, it, expect } from 'vitest';
-import { LEVELS } from '../src/config/levels.js';
+import { LEVELS, REGIONS, SYSTEMS } from '../src/config/levels.js';
 import { summarize } from '../src/sim/balance.js';
 import { levelRules } from '../src/config/level-rules.js';
 import { actionsRemaining, allActionsSpent, caseCapFor, effectiveR } from '../src/sim/actions.js';
@@ -32,6 +32,40 @@ describe('difficulty ramp', () => {
     });
     it('random clicking does not beat the final level', () => {
         expect(summarize(last, 'random', RUNS, 11).winRate).toBeLessThanOrEqual(0.1);
+    });
+});
+
+describe('campaign ramp across 3 systems and 8 planets (round 14)', () => {
+    const SAMPLE = 40;
+    const planetSmart = REGIONS.map((r) => {
+        const lv = LEVELS.filter((l) => l.regionId === r.id);
+        const rates = lv.map((l) => summarize(l, 'smart', SAMPLE, 13).winRate);
+        return { id: r.id, systemId: r.systemId, mean: rates.reduce((a, b) => a + b, 0) / rates.length, rates };
+    });
+    const systemMean = (id) => {
+        const p = planetSmart.filter((x) => x.systemId === id);
+        return p.reduce((a, b) => a + b.mean, 0) / p.length;
+    };
+
+    it('average smart win rate falls from system 1 to system 3', () => {
+        const [a, b, c] = SYSTEMS.map((s) => systemMean(s.id));
+        expect(a).toBeGreaterThan(b);
+        expect(b).toBeGreaterThan(c);
+        expect(a - c).toBeGreaterThanOrEqual(0.15);
+    });
+
+    it('no level is a wall or a walkover for the smart bot', () => {
+        for (const p of planetSmart) {
+            for (const [k, rate] of p.rates.entries()) {
+                expect(rate, `${p.id}-${k + 1}`).toBeGreaterThanOrEqual(0.2);
+            }
+        }
+    });
+
+    it('random clicking rarely wins after the first system', () => {
+        for (const level of LEVELS.filter((l) => l.systemId !== SYSTEMS[0].id && l.levelInPlanet % 3 === 0)) {
+            expect(summarize(level, 'random', SAMPLE, 17).winRate, level.id).toBeLessThanOrEqual(0.15);
+        }
     });
 });
 

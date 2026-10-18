@@ -61,12 +61,12 @@ export function renderTools(tools, difficulty, day, dailyUsage, { charges = {}, 
     const chips = toolChips(tools, difficulty, day, dailyUsage, charges);
     const html = chips
         .map((c) => {
-            const cls = ['tool-item', c.state === 'locked' || c.state === 'spent' ? 'disabled' : '', c.state === 'empty' ? 'empty' : '', selected === c.id ? 'selected' : '']
+            const cls = ['tool-item', c.state === 'locked' || c.state === 'spent' || c.state === 'off' ? 'disabled' : '', c.state === 'off' ? 'off' : '', c.state === 'empty' ? 'empty' : '', selected === c.id ? 'selected' : '']
                 .filter(Boolean)
                 .join(' ');
             const color = c.color || TOOL_COLORS[c.id] || '#64748b';
             const icon = ICONS[c.id] || ICONS.powerUp;
-            return `<button type="button" class="${cls}" data-tool="${c.id}" aria-pressed="${selected === c.id}" ${c.state === 'locked' || c.state === 'spent' ? 'aria-disabled="true"' : ''}>
+            return `<button type="button" class="${cls}" data-tool="${c.id}" aria-pressed="${selected === c.id}" ${c.state === 'locked' || c.state === 'spent' || c.state === 'off' ? 'aria-disabled="true"' : ''}>
                     <span class="tool-icon" style="--tool-color:${color}">${icon}</span>
                     <span class="tool-text"><span class="tool-name">${c.label}</span><span class="tool-usage">${c.usage}</span></span>
                 </button>`;
@@ -156,6 +156,8 @@ export function renderGameOver({ outcome, stats, difficultyId, threatPips = null
             ? 'Outbreak Contained!'
             : outcome === 'overwhelmed'
               ? 'Outbreak Overwhelmed'
+              : outcome === 'envoy-lost'
+                ? 'The Envoy Fell Ill'
               : outcome === 'burnout'
                 ? 'Outbreak Burned Out'
                 : 'Simulation Over';
@@ -164,6 +166,8 @@ export function renderGameOver({ outcome, stats, difficultyId, threatPips = null
             ? 'Excellent work! Your strategic interventions stopped the spread.'
             : outcome === 'overwhelmed'
               ? lossReason({ totalInfected: stats.totalInfected, caseCap })
+              : outcome === 'envoy-lost'
+                ? 'The virus reached the Envoy and the peace talks are off. Protect the Envoy and the people around them before cases get close.'
               : outcome === 'burnout'
                 ? 'The virus ran its course and faded on its own. You never intervened, so this is not a victory. Containment requires action: try a new strategy.'
                 : 'The simulation period has ended. Analyze the results and try a new strategy.';
@@ -207,7 +211,7 @@ export function renderGameOver({ outcome, stats, difficultyId, threatPips = null
     // Burnout is neutral (not a victory, not a defeat).
     const screen = document.getElementById('game-over-screen');
     screen.classList.remove('outcome-win', 'outcome-loss', 'outcome-timeout');
-    screen.classList.add(outcome === 'contained' ? 'outcome-win' : outcome === 'overwhelmed' ? 'outcome-loss' : 'outcome-timeout');
+    screen.classList.add(outcome === 'contained' ? 'outcome-win' : outcome === 'overwhelmed' || outcome === 'envoy-lost' ? 'outcome-loss' : 'outcome-timeout');
 
     const badgeEl = document.getElementById('final-difficulty-badge');
     const played = outcome === 'contained' ? 'Completed' : 'Played';

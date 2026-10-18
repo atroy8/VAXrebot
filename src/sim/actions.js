@@ -1,7 +1,7 @@
 // Pure player actions and the day step, shared by the game (src/game.js),
 // the balance bot (scripts/balance.mjs) and the tests. No DOM, no audio.
 // Keeping one code path means the bot measures the same rules people play.
-import { simulateSpread, updateOutcomes, checkGameOver, toolDailyLimit } from './engine.js';
+import { simulateSpread, updateOutcomes, checkGameOver, toolDailyLimit, toolAvailableDay } from './engine.js';
 
 const nodeId = (ref) => (ref && typeof ref === 'object' ? ref.id : ref);
 
@@ -36,11 +36,30 @@ export function advanceDay(state, network, { scenario, difficulty, rng = Math.ra
     const activeBefore = activeInfectiousCount(network);
     state.day++;
     for (const tool of Object.keys(state.dailyUsage)) state.dailyUsage[tool] = 0;
+    endStayHome(state, network);
     const rate = scenario.baseTransmissionRate * difficulty.transmissionMultiplier;
     const spread = simulateSpread(state, network, rate, rng);
     const outcomes = updateOutcomes(state, network, difficulty.recoveryTime, difficulty.fatalityRate, rng);
     const result = checkGameOver(state, network, scenario.duration, caseCapFor(state, scenario));
     return { spread, outcomes, result, activeBefore };
+}
+
+// Stay Home Pay (src/economy.js) sends sick people home for a few days.
+// When the break ends, anyone still sick goes back out and can spread again,
+// so the power-up buys time but never ends an outbreak by itself.
+export function endStayHome(state, network) {
+    const back = [];
+    for (const n of network.nodes) {
+        if (n.homeUntilDay == null) continue;
+        if (n.state === 'quarantined' && n.sickWhileQuarantined) {
+            if (state.day < n.homeUntilDay) continue;
+            n.state = 'infected';
+            n.sickWhileQuarantined = false;
+            back.push(n);
+        }
+        delete n.homeUntilDay;
+    }
+    return back;
 }
 
 // Total cases allowed before the outbreak counts as overwhelmed:
@@ -61,7 +80,7 @@ export function actionsRemaining(state, tools, difficulty) {
     let left = 0;
     for (const [id, tool] of Object.entries(tools)) {
         if (tool.consumable) continue;
-        if (state.day < tool.availableDay) continue;
+        if (state.day < toolAvailableDay(tool, difficulty, id)) continue;
         left += Math.max(0, toolDailyLimit(tool, difficulty, id) - (state.dailyUsage[id] || 0));
     }
     return left;

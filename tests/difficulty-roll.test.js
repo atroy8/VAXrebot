@@ -7,20 +7,21 @@ import { mulberry32 } from '../src/sim/balance.js';
 
 describe('difficulty rolls per play and rises toward each prize box', () => {
     it('progress to the next prize box climbs inside each stretch and resets after a box', () => {
-        // Boxes open after levels 0, 3 and 6.
+        // Boxes open after each planet's 5th level and its boss (indexes 4, 9, 14, 19, ...).
         const p = LEVELS.map((_, i) => progressToPrize(i));
         expect(p[0]).toBe(0);
-        expect(p[1]).toBe(0);
-        expect(p[2]).toBeGreaterThan(p[1]);
-        expect(p[3]).toBe(1);
-        expect(p[4]).toBe(0);
-        expect(p[6]).toBe(1);
-        expect(p[7]).toBe(0);
-        expect(p[8]).toBe(1);
+        expect(p[1]).toBeGreaterThan(p[0]);
+        expect(p[4]).toBe(1);
+        expect(p[5]).toBe(0);
+        expect(p[8]).toBeGreaterThan(p[6]);
+        expect(p[9]).toBe(1);
+        expect(p[10]).toBe(0);
+        // Every boss level sits at the top of the climb.
+        for (let i = 9; i < LEVELS.length; i += 10) expect(p[i], LEVELS[i].id).toBe(1);
     });
 
     it('the band sits higher on the level that unlocks a box', () => {
-        expect(threatBand(3).lo).toBeGreaterThan(threatBand(4).lo);
+        expect(threatBand(4).lo).toBeGreaterThan(threatBand(5).lo);
         for (let i = 0; i < LEVELS.length; i++) {
             const { lo, hi } = threatBand(i);
             expect(lo).toBeGreaterThanOrEqual(0);

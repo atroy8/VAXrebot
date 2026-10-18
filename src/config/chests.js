@@ -9,29 +9,25 @@
 //   - gives: power-up ids from the economy lane, e.g. eureka / blitz / pay.
 //   - lat / lng: globe marker position in degrees.
 
-export const CHESTS = [
-    {
-        id: 'chest-a',
-        afterLevelIndex: 0, // Greenfield Care Home (Hometown region)
-        gives: { blitz: 1 },
-        lat: 20,
-        lng: -30,
-    },
-    {
-        id: 'chest-b',
-        afterLevelIndex: 3, // Sunfield Music Festival (National Response region)
-        gives: { eureka: 1 },
-        lat: 30,
-        lng: 100,
-    },
-    {
-        id: 'chest-c',
-        afterLevelIndex: 6, // Metro Eastside (Global Frontline region)
-        gives: { pay: 2 },
-        lat: -30,
-        lng: -120,
-    },
-];
+// Round 14: two prize boxes on every planet, after its 5th level and its
+// boss (10th) level, 16 in all. The per-play threat climbs toward each box
+// (src/config/difficulty-roll.js), so bosses play at high threat. What they hold rotates so every power-up turns up often.
+const GIFTS = [{ blitz: 1 }, { eureka: 1 }, { blitz: 2 }, { pay: 1 }];
+const LEVELS_PER_PLANET = 10;
+const PLANET_COUNT = 8;
+export const CHESTS = [];
+for (let p = 0; p < PLANET_COUNT; p++) {
+    for (const [j, slot] of [4, 9].entries()) {
+        const n = CHESTS.length;
+        CHESTS.push({
+            id: `chest-${p + 1}${j === 0 ? 'a' : 'b'}`,
+            afterLevelIndex: p * LEVELS_PER_PLANET + slot,
+            gives: GIFTS[n % GIFTS.length],
+            lat: 0,
+            lng: 0,
+        });
+    }
+}
 
 export function chestById(id) {
     return CHESTS.find((c) => c.id === id) || null;
