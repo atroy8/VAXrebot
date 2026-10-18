@@ -20,5 +20,8 @@ export function initGameState(tools, population = 100) {
         },
         dailyUsage: Object.keys(tools).reduce((acc, tool) => ({ ...acc, [tool]: 0 }), {}),
         usedOnPeople: new Set(),
+        // Puzzle levels (src/sim/variants.js): the marked people, if any.
+        envoyId: null,
+        superSpreaderId: null,
     };
 }

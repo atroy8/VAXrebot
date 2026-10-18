@@ -10,7 +10,7 @@ describe('privacy and support pages (item 9)', () => {
         it(`${page} exists, is phone ready, and has a title`, () => {
             expect(existsSync(new URL(`../${page}`, import.meta.url))).toBe(true);
             const html = read(page);
-            expect(html).toMatch(/<title>VAXrebot [^<]+<\/title>/);
+            expect(html).toMatch(/<title>Galactic Outbreak [^<]+<\/title>/);
             expect(html).toContain('name="viewport"');
             expect(html).toContain('href="./index.html"');
         });
@@ -52,9 +52,9 @@ describe('privacy and support pages (item 9)', () => {
 });
 
 describe('game page head (round 11)', () => {
-    it('is titled VAXrebot and ships its own icon, so browsers do not 404 on favicon.ico', () => {
+    it('is titled Galactic Outbreak and ships its own icon, so browsers do not 404 on favicon.ico', () => {
         const html = read('index.html');
-        expect(html).toContain('<title>VAXrebot</title>');
+        expect(html).toContain('<title>Galactic Outbreak</title>');
         expect(html).toMatch(/<link rel="icon" type="image\/svg\+xml" href="data:image\/svg\+xml,/);
     });
 });
