@@ -15,7 +15,7 @@
 .start-title {
     margin: 0;
     font-family: var(--font-family-base);
-    font-size: clamp(2.8rem, 15vw, 4.2rem);
+    font-size: clamp(2.6rem, 14vw, 4rem);
     font-weight: 700;
     line-height: 1;
     color: var(--kin-300, #ecd27e);
@@ -24,6 +24,8 @@
     text-shadow: 0 5px 0 var(--kin-700, #8a6417), 0 12px 26px rgba(0, 0, 0, 0.5);
     animation: startTitleBob 3s ease-in-out infinite;
 }
+/* Two words, two lines: Galactic on top, Outbreak below. */
+.start-title span { display: block; }
 @keyframes startTitleBob { 0%, 100% { transform: translateY(0) rotate(-1.5deg); } 50% { transform: translateY(-6px) rotate(1.5deg); } }
 .start-tagline {
     margin: 12px 0 0;

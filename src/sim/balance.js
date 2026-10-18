@@ -16,7 +16,7 @@
 import { rollLevelRules } from '../config/difficulty-roll.js';
 import { tools } from '../config/tools.js';
 import { LEVELS } from '../config/levels.js';
-import { generateNetwork } from './network.js';
+import { buildOutbreak } from './setup.js';
 import { initGameState } from './state.js';
 import { canUseTool } from './engine.js';
 import { applyNodeTool, severLink, advanceDay, neighbors, allActionsSpent } from './actions.js';
@@ -40,23 +40,11 @@ export function buildRun(level, rng) {
     const [lo, hi] = scenario.populationRange;
     const population = lo + Math.floor(rng() * (hi - lo + 1));
     const state = initGameState(tools, population);
-    const nodes = Array.from({ length: population }, (_, i) => ({ id: i, state: 'healthy', daysInfected: 0, removed: false }));
-    const saved = Math.random;
-    Math.random = rng; // network generators use Math.random
-    let links;
-    try {
-        ({ links } = generateNetwork(scenario.networkType, population));
-    } finally {
-        Math.random = saved;
-    }
-    for (let i = 0; i < scenario.initialInfected; i++) {
-        let node;
-        do node = nodes[Math.floor(rng() * population)];
-        while (node.state === 'infected');
-        node.state = 'infected';
-        state.stats.totalInfected++;
-    }
-    return { scenario, difficulty, state, network: { nodes, links } };
+    const out = buildOutbreak({ scenario, population, variant: level.variant || null, rng });
+    state.stats.totalInfected += out.initialCases;
+    state.envoyId = out.envoyId;
+    state.superSpreaderId = out.superSpreaderId;
+    return { scenario, difficulty, state, network: { nodes: out.nodes, links: out.links } };
 }
 
 const degree = (network, id) => neighbors(network, id).length;
@@ -84,9 +72,48 @@ function shuffled(arr, rng) {
     return a;
 }
 
+// Puzzle levels: what a player who read the briefing does first.
+// Carrier: cut its links to healthy people, then isolate it.
+// Envoy: vaccinate (or isolate) the Envoy, then guard its neighbours.
+function handleVariant(run, { thorough }) {
+    const net = run.network;
+    const map = byId(net);
+    const carrier = run.state.superSpreaderId != null ? map.get(run.state.superSpreaderId) : null;
+    if (carrier && carrier.state === 'infected') {
+        tryNode(run, 'quarantine', carrier);
+        if (carrier.state === 'infected') {
+            const cuts = neighbors(net, carrier.id).filter((nb) => map.get(nb.id)?.state === 'healthy');
+            cuts.sort((a, b) => degree(net, b.id) - degree(net, a.id));
+            for (const c of cuts) if (!tryLink(run, c.link)) break;
+        }
+    }
+    const envoy = run.state.envoyId != null ? map.get(run.state.envoyId) : null;
+    if (envoy && envoy.state === 'healthy') {
+        // Cut any link from a sick person straight to the Envoy.
+        for (const nb of neighbors(net, envoy.id)) {
+            if (map.get(nb.id)?.state === 'infected') tryLink(run, nb.link);
+        }
+        if (!tryNode(run, 'vaccinate', envoy)) {
+            const close = neighbors(net, envoy.id).some((nb) => {
+                const n = map.get(nb.id);
+                return n && n.state === 'healthy' && neighbors(net, n.id).some((x) => map.get(x.id)?.state === 'infected');
+            });
+            if (close) tryNode(run, 'quarantine', envoy);
+        }
+    }
+    if (thorough && envoy && (envoy.state === 'vaccinated' || envoy.state === 'quarantined')) {
+        // Ring the Envoy's contacts who are next to the sick.
+        for (const nb of neighbors(net, envoy.id)) {
+            const n = map.get(nb.id);
+            if (n && n.state === 'healthy' && neighbors(net, n.id).some((x) => map.get(x.id)?.state === 'infected')) tryNode(run, 'vaccinate', n);
+        }
+    }
+}
+
 export const BOTS = {
     passive() {},
     beginner(run, rng) {
+        handleVariant(run, { thorough: false });
         const net = run.network;
         const map = byId(net);
         const sick = () => net.nodes.filter((n) => n.state === 'infected');
@@ -111,6 +138,7 @@ export const BOTS = {
         }
     },
     smart(run) {
+        handleVariant(run, { thorough: true });
         const net = run.network;
         const map = byId(net);
         const sick = net.nodes.filter((n) => n.state === 'infected');

@@ -116,6 +116,85 @@ const ringGeometry = new THREE.RingGeometry(0.62, 0.78, 36);
 const pulseMaterial = new THREE.MeshBasicMaterial({ color: 0xff4d6d, transparent: true, opacity: 0.6, depthWrite: false });
 const particleMaterial = new THREE.MeshBasicMaterial({ color: 0xdc3545 });
 
+// Puzzle badges (round 14): a vermilion crown for the super-spreader and a
+// gold star for the Envoy, drawn once on a canvas, plus a halo ring each.
+function badgeTexture(draw) {
+    const c = document.createElement('canvas');
+    c.width = 128;
+    c.height = 128;
+    const g = c.getContext('2d');
+    // Round token with a white rim so it reads on any face colour.
+    g.beginPath();
+    g.arc(64, 64, 58, 0, Math.PI * 2);
+    g.fillStyle = '#ffffff';
+    g.fill();
+    g.beginPath();
+    g.arc(64, 64, 50, 0, Math.PI * 2);
+    g.fillStyle = draw.bg;
+    g.fill();
+    g.fillStyle = draw.fg;
+    g.beginPath();
+    draw.path(g);
+    g.fill();
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+}
+const BADGES = {
+    superSpreader: {
+        bg: '#c8432f',
+        fg: '#fff3d6',
+        ring: 0xc8432f,
+        // A three-point crown.
+        path: (g) => {
+            g.moveTo(30, 84);
+            g.lineTo(26, 46);
+            g.lineTo(46, 62);
+            g.lineTo(64, 36);
+            g.lineTo(82, 62);
+            g.lineTo(102, 46);
+            g.lineTo(98, 84);
+            g.closePath();
+        },
+    },
+    envoy: {
+        bg: '#c9a227',
+        fg: '#ffffff',
+        ring: 0xddb94a,
+        // A five-point star.
+        path: (g) => {
+            for (let i = 0; i < 10; i++) {
+                const r = i % 2 === 0 ? 34 : 15;
+                const a = -Math.PI / 2 + (i * Math.PI) / 5;
+                const x = 64 + r * Math.cos(a);
+                const y = 66 + r * Math.sin(a);
+                if (i === 0) g.moveTo(x, y);
+                else g.lineTo(x, y);
+            }
+            g.closePath();
+        },
+    },
+};
+let badgeMaterials = null;
+function getBadgeMaterials() {
+    if (badgeMaterials) return badgeMaterials;
+    badgeMaterials = {};
+    for (const [kind, def] of Object.entries(BADGES)) {
+        badgeMaterials[kind] = {
+            sprite: new THREE.SpriteMaterial({ map: badgeTexture(def), transparent: true, depthWrite: false, depthTest: false }),
+            ring: new THREE.MeshBasicMaterial({ color: def.ring, transparent: true, opacity: 0.85, depthWrite: false }),
+        };
+    }
+    return badgeMaterials;
+}
+const haloGeometry = new THREE.RingGeometry(0.8, 0.98, 40);
+
+export function badgeKind(node) {
+    if (node && node.superSpreader) return 'superSpreader';
+    if (node && node.envoy) return 'envoy';
+    return null;
+}
+
 function loadFaceTextures() {
     const loader = new THREE.TextureLoader();
     const textures = {};
@@ -321,6 +400,22 @@ export class NetworkView {
         pulse.visible = node.state === 'infected';
         group.add(pulse);
 
+        // Puzzle badge and halo (super-spreader crown, Envoy star).
+        let badge = null;
+        let halo = null;
+        const kind = badgeKind(node);
+        if (kind) {
+            const mats = getBadgeMaterials()[kind];
+            halo = new THREE.Mesh(haloGeometry, mats.ring);
+            halo.position.z = -0.04;
+            group.add(halo);
+            badge = new THREE.Sprite(mats.sprite);
+            badge.scale.set(0.8, 0.8, 1);
+            badge.position.set(0.52, 0.56, 0.6);
+            badge.renderOrder = 5;
+            group.add(badge);
+        }
+
         group.position.copy(pos);
         this.nodeGroup.add(group);
         this.nodePickMeshes.push(sphere);
@@ -331,6 +426,9 @@ export class NetworkView {
             sphere,
             sprite,
             pulse,
+            badge,
+            halo,
+            badgeKind: kind,
             pos: pos.clone(),
             vel: new THREE.Vector3(),
             prevState: node.state,
@@ -703,6 +801,12 @@ export class NetworkView {
         const beat = 1 + 0.18 * Math.sin(now / 180);
         for (const obj of this.nodeObjs.values()) {
             if (obj.pulse.visible) obj.pulse.scale.setScalar(beat);
+            // The carrier's crown halo throbs while it can still spread.
+            if (obj.halo && obj.badgeKind === 'superSpreader') {
+                const live = obj.node.state === 'infected';
+                obj.halo.scale.setScalar(live ? 1 + 0.12 * Math.sin(now / 140) : 1);
+                obj.halo.material.opacity = live ? 0.9 : 0.4;
+            }
         }
 
         this.syncLinkPositions(now);
