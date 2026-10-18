@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { rimSpots, personSize, startPageMarkup, START_CROWD } from '../src/ui/start-page.js';
 import { THEME, hexNum, CONFETTI } from '../src/config/theme.js';
 import { PLANETS } from '../src/config/solar-system.js';
+import { planetPalette, comboFor, lightness } from '../src/config/planet-palettes.js';
 
 const read = (p) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
 
@@ -37,7 +38,8 @@ describe('start page (round 12)', () => {
         const html = startPageMarkup();
         expect(html.match(/class="start-person"/g)).toHaveLength(START_CROWD.length);
         expect(html).toContain('id="start-play"');
-        expect(html).toContain('VAXrebot');
+        expect(html).toContain('Galactic</span> <span>Outbreak');
+        expect(html).not.toContain('VAXrebot');
         expect(START_CROWD).toContain('infected');
     });
 
@@ -70,20 +72,10 @@ describe('indigo and gold theme (round 12)', () => {
         expect(css).toContain(`--kin-400: ${THEME.kin400}`);
     });
 
-    it('planets use indigo seas and gold or paper land, no candy pastels', () => {
+    it('planets paint their seas darker than their land, from Wada colour combinations', () => {
         for (const p of PLANETS) {
-            for (const c of p.ocean) {
-                const n = hexNum(c);
-                const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-                expect(b).toBeGreaterThan(r); // blue dominant
-                expect(b).toBeGreaterThan(g);
-            }
-            for (const c of p.land) {
-                const n = hexNum(c);
-                const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-                expect(r).toBeGreaterThanOrEqual(b); // warm gold or paper, never blue or pink-purple
-                expect(g).toBeGreaterThanOrEqual(b);
-            }
+            const pal = planetPalette(comboFor(p.def));
+            expect(Math.min(...pal.land.map(lightness))).toBeGreaterThan(Math.max(...pal.ocean.map(lightness)));
         }
         expect(CONFETTI).toContain(hexNum(THEME.kin400));
     });

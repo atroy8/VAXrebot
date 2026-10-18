@@ -4,6 +4,8 @@ import { latLngToXYZ, slerp, windingPath, chestStop, globeFitDistance, faceRotat
 import { createMemoryBackend, freshSave, writeSave } from '../src/save.js';
 import { recordCompletion } from '../src/progress.js';
 import { getChestState, openChest, setEconomyStorage, setChestConfig } from '../src/economy.js';
+import { CHESTS } from '../src/config/chests.js';
+import { LEVELS } from '../src/config/levels.js';
 
 const len = (v) => Math.hypot(v.x, v.y, v.z);
 
@@ -69,8 +71,8 @@ describe('prize boxes open in the built game (bug fix)', () => {
         setChestConfig(null);
         let save = freshSave();
         writeSave(storage, save);
-        expect(await getChestState('chest-a')).toBe('locked');
-        save = recordCompletion(save, 'r1-care-home', 'contained', {
+        expect(await getChestState(CHESTS[0].id)).toBe('locked');
+        save = recordCompletion(save, LEVELS[CHESTS[0].afterLevelIndex].id, 'contained', {
             initialPopulation: 40,
             totalDead: 0,
             totalInfected: 4,
@@ -79,10 +81,10 @@ describe('prize boxes open in the built game (bug fix)', () => {
             daysUsed: 6,
         });
         writeSave(storage, save);
-        expect(await getChestState('chest-a')).toBe('ready');
-        const res = await openChest('chest-a');
+        expect(await getChestState(CHESTS[0].id)).toBe('ready');
+        const res = await openChest(CHESTS[0].id);
         expect(res.ok).toBe(true);
-        expect(await getChestState('chest-a')).toBe('opened');
+        expect(await getChestState(CHESTS[0].id)).toBe('opened');
         const src = readFileSync(new URL('../src/economy.js', import.meta.url), 'utf8');
         expect(src).not.toContain('@vite-ignore');
     });

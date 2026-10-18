@@ -7,12 +7,20 @@
 // -----------------------------------------------------------------------
 // id       name            cost (funding)   effect
 // eureka   Eureka!         100 (priciest)   Cure every infected person to recovered, instantly.
-// pay      Stay Home Pay    60              Quarantine every infected person (isolation; they stay sick while quarantined).
+// pay      Stay Home Pay   120 (priciest)   Send the 3 best-connected sick people home for 2 days.
 // blitz    Vax Blitz        40              Vaccinate the 5 most-connected healthy people.
 //
 // Cost rationale: a contained win earns 75/100/125 funding (see
 // src/progress.js fundingAward), so one solid win buys a Eureka! or a
-// couple of smaller charges. Eureka is the run-saver, hence most expensive.
+// couple of smaller charges.
+// Round 14 (Adam): Stay Home Pay was overpowered. It isolated every sick
+// person at once, which stopped all spread, so the round fast-forwarded to
+// a win the moment it was used. Now it costs 120 (about one and a half
+// wins) and sends at most STAY_HOME.maxPeople of the best-connected sick
+// people home for STAY_HOME.days days. When the break ends anyone still
+// sick comes back and can spread again (src/sim/actions.js endStayHome),
+// and the end-of-spread check still counts them as infectious, so the
+// power-up buys time but can never end a level on its own.
 //
 // EFFECTS (applied through the game's tool system, not by touching the sim)
 // -----------------------------------------------------------------------
@@ -79,10 +87,10 @@ export const POWER_UPS = {
         id: 'pay',
         name: 'Stay Home Pay',
         emoji: '🏠',
-        cost: 60,
+        cost: 120,
         color: '#FF6FB5',
-        tagline: 'Paid sick leave for all',
-        effect: 'Send every infected person home to quarantine. Isolation keeps them from spreading it.',
+        tagline: 'Paid sick leave',
+        effect: 'Pay the 3 busiest sick people to stay home for 2 days. They cannot spread it while home, then they come back if still sick.',
     },
     blitz: {
         id: 'blitz',
@@ -241,21 +249,32 @@ function applyEureka(gameApi) {
     return cured;
 }
 
+export const STAY_HOME = { maxPeople: 3, days: 2 };
+
 function applyPay(gameApi) {
-    const { nodes } = gameApi.network;
-    let sent = 0;
-    for (const node of nodes) {
-        if (node.removed || node.state === 'quarantined' || node.state === 'dead') continue;
-        if (node.state !== 'infected') continue;
-        // Isolation, not a cure: the node keeps its illness flag so the
-        // sim keeps ticking it and counts it as active while quarantined.
+    const { nodes, links } = gameApi.network;
+    const degree = new Map();
+    for (const link of links || []) {
+        const a = nodeId(link.source);
+        const b = nodeId(link.target);
+        degree.set(a, (degree.get(a) || 0) + 1);
+        degree.set(b, (degree.get(b) || 0) + 1);
+    }
+    const sick = nodes
+        .filter((n) => !n.removed && n.state === 'infected')
+        .sort((a, b) => (degree.get(b.id) || 0) - (degree.get(a.id) || 0))
+        .slice(0, STAY_HOME.maxPeople);
+    const until = (gameApi.gameState.day || 1) + STAY_HOME.days;
+    for (const node of sick) {
+        // Isolation, not a cure: they keep ticking toward recovery at home,
+        // and come back out when the break ends if they are still sick.
         node.sickWhileQuarantined = true;
         node.state = 'quarantined';
-        sent++;
+        node.homeUntilDay = until;
     }
-    gameApi.gameState.stats.totalProtected += sent;
-    gameApi.gameState.stats.treated = (gameApi.gameState.stats.treated || 0) + sent;
-    return sent;
+    gameApi.gameState.stats.totalProtected += sick.length;
+    gameApi.gameState.stats.treated = (gameApi.gameState.stats.treated || 0) + sick.length;
+    return sick.length;
 }
 
 function applyBlitz(gameApi) {
@@ -279,7 +298,7 @@ function applyBlitz(gameApi) {
 const EFFECTS = { eureka: applyEureka, pay: applyPay, blitz: applyBlitz };
 const USE_MESSAGES = {
     eureka: (n) => `EUREKA! ${n} ${n === 1 ? 'person' : 'people'} cured instantly.`,
-    pay: (n) => `STAY HOME! ${n} ${n === 1 ? 'person' : 'people'} sent home to quarantine.`,
+    pay: (n) => `STAY HOME! ${n} ${n === 1 ? 'person' : 'people'} paid to stay home for ${STAY_HOME.days} days.`,
     blitz: (n) => `VAX BLITZ! ${n} highly connected ${n === 1 ? 'person' : 'people'} vaccinated.`,
 };
 

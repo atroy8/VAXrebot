@@ -5,6 +5,7 @@
 // and visualization updates. `rng` is injectable for deterministic tests.
 
 const nodeId = (ref) => (ref && typeof ref === 'object' ? ref.id : ref);
+import { envoyLost } from './variants.js';
 
 // One day of spread. Returns { events: [{ source, target }], count }.
 // `transmissionRate` is the fully computed per-contact probability
@@ -84,13 +85,18 @@ export function updateOutcomes(state, network, recoveryTime, fatalityRate, rng =
 // waiting for the sick to recover, so the game fast-forwards to the end.
 // People never become healthy again and links only ever disappear, so once
 // this is true it stays true for the rest of the run.
+// Sick and able to spread, now or once a Stay Home Pay break ends.
+function infectiousSoon(n) {
+    return n.state === 'infected' || (n.state === 'quarantined' && n.sickWhileQuarantined && n.homeUntilDay != null);
+}
+
 export function spreadIsOver(network) {
     const byId = new Map(network.nodes.map((n) => [n.id, n]));
     for (const link of network.links) {
         const a = byId.get(nodeId(link.source));
         const b = byId.get(nodeId(link.target));
         if (!a || !b || a.removed || b.removed) continue;
-        if ((a.state === 'infected' && b.state === 'healthy') || (b.state === 'infected' && a.state === 'healthy')) {
+        if ((infectiousSoon(a) && b.state === 'healthy') || (infectiousSoon(b) && a.state === 'healthy')) {
             return false;
         }
     }
@@ -102,7 +108,8 @@ export function spreadIsOver(network) {
 export const OVERWHELMED_DEATH_FRACTION = 0.08;
 export const OVERWHELMED_DEATH_FLOOR = 5;
 
-// End-of-day check. Returns 'contained' (win), 'overwhelmed' (loss),
+// End-of-day check. Returns 'contained' (win), 'overwhelmed' or
+// 'envoy-lost' (losses),
 // 'timeout' or 'burnout' (neutral), or null.
 // Precedence: contained > overwhelmed > timeout. No timeout once spread is
 // over (see spreadIsOver): the remaining sick resolve in a few days.
@@ -117,6 +124,8 @@ export const OVERWHELMED_DEATH_FLOOR = 5;
 // epidemic that infected nearly everyone and then burned out would score
 // as a containment win. Callers pass Infinity (the default) to disable it.
 export function checkGameOver(state, network, durationDays, caseCap = Infinity) {
+    // Envoy levels: if the Envoy falls ill the mission is lost, whatever else.
+    if (state.envoyId != null && envoyLost(network, state.envoyId)) return 'envoy-lost';
     const activeInfected = network.nodes.filter(
         (n) => n.state === 'infected' || (n.state === 'quarantined' && n.sickWhileQuarantined)
     ).length;
@@ -134,6 +143,12 @@ export function checkGameOver(state, network, durationDays, caseCap = Infinity) 
     return null;
 }
 
+const NONE_HERE = { vaccinate: 'vaccines', quarantine: 'isolation wards', severLink: 'link cutting' };
+
+function plain(name) {
+    return String(name).replace(/^[^A-Za-z]+/, '').toLowerCase();
+}
+
 // Turn-advance gate for the real pause. nextDay() may run only when the game
 // is neither over nor paused. Pure so it is unit-testable without a DOM.
 export function canAdvanceDay(state) {
@@ -149,14 +164,25 @@ export function toolDailyLimit(tool, difficulty, toolId = null) {
     return Math.floor(tool.baseDailyLimit * difficulty.toolLimitMultiplier);
 }
 
+// First day a tool can be used. Puzzle levels can bring a tool forward
+// through difficulty.toolDays (src/config/level-rules.js).
+export function toolAvailableDay(tool, difficulty, toolId = null) {
+    const pinned = toolId && difficulty && difficulty.toolDays ? difficulty.toolDays[toolId] : undefined;
+    return pinned != null ? pinned : tool.availableDay;
+}
+
 // Single validation path for tool use (node clicks and link clicks alike).
 // Returns { allowed: true } or { allowed: false, reason }.
 export function canUseTool(state, tools, toolId, difficulty, target = null) {
     const tool = tools[toolId];
     const limit = toolDailyLimit(tool, difficulty, toolId);
 
-    if (state.day < tool.availableDay) {
-        return { allowed: false, reason: `${tool.name} available on Day ${tool.availableDay}.` };
+    if (!tool.consumable && limit <= 0) {
+        return { allowed: false, reason: `No ${NONE_HERE[toolId] || plain(tool.name)} on this world.` };
+    }
+    const firstDay = toolAvailableDay(tool, difficulty, toolId);
+    if (state.day < firstDay) {
+        return { allowed: false, reason: `${tool.name} available on Day ${firstDay}.` };
     }
     if (state.dailyUsage[toolId] >= limit) {
         return { allowed: false, reason: `Daily limit for ${tool.name} reached.` };

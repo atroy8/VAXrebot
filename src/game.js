@@ -22,10 +22,11 @@ import {
 import { isPowerUp, usePowerUp, getCharges, getFunding } from './economy.js';
 import './ui/game-screen.css';
 import './ui/averted.css';
+import './ui/variants.css';
 import { toolHint, dayBanner } from './ui/game-screen-model.js';
 import { renderCareBox, flyToCareBox } from './ui/care-box.js';
 import { mountShop, renderShop } from './ui/shop.js';
-import { generateNetwork } from './sim/network.js';
+import { buildOutbreak } from './sim/setup.js';
 import { initGameState } from './sim/state.js';
 import { checkGameOver as resolveGameOver, canUseTool, canAdvanceDay, spreadIsOver } from './sim/engine.js';
 import {
@@ -40,6 +41,7 @@ import {
 import { rollLevelRules, threatLine } from './config/difficulty-roll.js';
 import { createAutoAdvance } from './ui/auto-advance.js';
 import { showScreen as renderScreen, refreshGlobeHome } from './ui/screens.js';
+import { requestChestOpen } from './ui/pending-chest.js';
 import { createViewLoader } from './ui/view-loader.js';
 import { lessonFor, debriefLine } from './config/lessons.js';
 import { snapshotNetwork, noResponseCases, avertedSummary } from './sim/counterfactual.js';
@@ -54,7 +56,8 @@ import {
     showDayBanner,
     renderGameOver,
 } from './ui/panels.js';
-import { fillBriefing, showThreat, fillLessonCard } from './ui/briefing.js';
+import { fillBriefing, showThreat, fillLessonCard, showVariantCallout } from './ui/briefing.js';
+import { variantCallout } from './sim/variants.js';
 import { renderLevelSelect } from './ui/level-select.js';
 import { AudioEngine } from './audio.js';
 
@@ -214,6 +217,18 @@ export class EpidemicSimulator {
         document
             .getElementById('try-different-scenario')
             .addEventListener('click', () => this.leaveResults(() => this.showScreen('welcome')));
+        // A prize box on the award screen: back to the map, which flies to
+        // the box and opens it (the same exit path, so ad pacing still applies).
+        document.getElementById('results-tally')?.addEventListener('click', (e) => {
+            const card = e.target.closest?.('[data-chest-id]');
+            if (!card) return;
+            e.stopPropagation();
+            const chestId = card.dataset.chestId;
+            this.leaveResults(() => {
+                requestChestOpen(chestId);
+                this.showScreen('welcome');
+            });
+        });
 
         // Volume control
         document.getElementById('master-volume').addEventListener('input', (e) => {
@@ -254,6 +269,7 @@ export class EpidemicSimulator {
         showThreat({ pips: this.threat.pips, line: threatLine(this.threat.value), r0: this.difficulties[level.difficultyId]?.R0 });
         const lesson = lessonFor(level.id);
         fillLessonCard('briefing-lesson', lesson?.title, lesson?.brief);
+        showVariantCallout(variantCallout(level.variant));
         // Start fetching the network view while the player reads the briefing.
         this.viewLoader.prefetch();
         this.showScreen('briefing');
@@ -312,21 +328,17 @@ export class EpidemicSimulator {
     }
 
     createNetwork() {
-        const n = this.gameState.stats.initialPopulation;
-        const nodes = Array.from({ length: n }, (_, i) => ({ id: i, state: 'healthy', daysInfected: 0, removed: false }));
-        const { links } = generateNetwork(this.currentScenario.networkType, n);
-
-        // Infect initial nodes
-        for (let i = 0; i < this.currentScenario.initialInfected; i++) {
-            let node;
-            do {
-                node = nodes[Math.floor(Math.random() * n)];
-            } while (node.state === 'infected');
-            node.state = 'infected';
-            this.gameState.stats.totalInfected++;
-        }
-
-        this.network = { nodes, links };
+        // Shared with the balance bots (src/sim/setup.js), so puzzle levels
+        // (super-spreader, Envoy) are set up the same way everywhere.
+        const out = buildOutbreak({
+            scenario: this.currentScenario,
+            population: this.gameState.stats.initialPopulation,
+            variant: this.currentLevel?.variant || null,
+        });
+        this.gameState.stats.totalInfected += out.initialCases;
+        this.gameState.envoyId = out.envoyId;
+        this.gameState.superSpreaderId = out.superSpreaderId;
+        this.network = { nodes: out.nodes, links: out.links };
         // Opening snapshot for the no-response baseline on the results screen.
         this.openingSnapshot = snapshotNetwork(this.network);
     }
@@ -376,6 +388,10 @@ export class EpidemicSimulator {
                 toolId === 'vaccinate'
                     ? `Person ${node.id} has been vaccinated.`
                     : `Person ${node.id} has been quarantined.`;
+            if (toolId === 'quarantine' && node.superSpreader) {
+                showNotification('Carrier isolated! The super-spreader cannot pass it on now.', 'success');
+                this.audio.playStinger?.('milestone');
+            }
             // Music hook: milestone stinger each time totalProtected crosses
             // 25, 50, or 75. Called with optional chaining; safe if the audio
             // track has not landed yet.

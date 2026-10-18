@@ -1,0 +1,23 @@
+/* Puzzle level callout on the briefing (round 14). Vermilion edge, since a
+   puzzle changes the rules; indigo and gold theme tokens otherwise. */
+.variant-card {
+    margin: 0 0 var(--space-16, 16px);
+    padding: 10px 14px;
+    border-radius: 14px;
+    background: var(--ai-100, #e8eef8);
+    border: 1px solid var(--ai-200, #c7d6f0);
+    border-left: 4px solid var(--shu, #c8432f);
+    text-align: left;
+}
+.variant-card[hidden] { display: none; }
+.variant-title {
+    display: block;
+    font-size: 1rem;
+    color: var(--ai-800, #13265a);
+}
+.variant-text {
+    margin: 2px 0 0;
+    font-size: 0.88rem;
+    line-height: 1.35;
+    color: var(--color-text-secondary, #55617f);
+}

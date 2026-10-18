@@ -1,10 +1,12 @@
 // Economy tests: power-up charges, purchases, effects, and supply chests.
 // Pure logic with the memory storage backend; no DOM, node environment.
+import { LEVELS } from '../src/config/levels.js';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { createMemoryBackend, freshSave, writeSave } from '../src/save.js';
 import { recordCompletion } from '../src/progress.js';
 import {
     POWER_UPS,
+    STAY_HOME,
     isPowerUp,
     getCharges,
     getFunding,
@@ -53,13 +55,16 @@ beforeEach(() => {
 });
 
 describe('power-up catalog', () => {
-    it('defines exactly eureka, blitz, and pay with eureka priciest', () => {
+    it('defines exactly eureka, blitz, and pay; Stay Home Pay is now the priciest (round 14)', () => {
         expect(isPowerUp('eureka')).toBe(true);
         expect(isPowerUp('blitz')).toBe(true);
         expect(isPowerUp('pay')).toBe(true);
         expect(isPowerUp('vaccinate')).toBe(false);
-        expect(POWER_UPS.eureka.cost).toBeGreaterThan(POWER_UPS.pay.cost);
-        expect(POWER_UPS.pay.cost).toBeGreaterThan(POWER_UPS.blitz.cost);
+        expect(POWER_UPS.pay.cost).toBe(120);
+        expect(POWER_UPS.pay.cost).toBeGreaterThan(POWER_UPS.eureka.cost);
+        expect(POWER_UPS.eureka.cost).toBeGreaterThan(POWER_UPS.blitz.cost);
+        // More than one solid win's funding (75 to 125 per win).
+        expect(POWER_UPS.pay.cost).toBeGreaterThan(100);
     });
 });
 
@@ -109,21 +114,26 @@ describe('usePowerUp', () => {
         expect(calls.checkGameOver).toBe(1);
     });
 
-    it('pay quarantines every infected node', () => {
+    it('pay sends at most 3 of the busiest sick people home, for 2 days', () => {
         seedSave({ powerups: { eureka: 0, blitz: 0, pay: 1 } });
-        const nodes = [
-            { id: 0, state: 'infected' },
-            { id: 1, state: 'infected' },
-            { id: 2, state: 'healthy' },
-        ];
-        const { api } = fakeGame(nodes);
+        // Five sick people; 0 to 2 are the best connected.
+        const nodes = Array.from({ length: 10 }, (_, i) => ({ id: i, state: i < 5 ? 'infected' : 'healthy' }));
+        const links = [];
+        for (const [hub, n] of [[0, 4], [1, 3], [2, 2], [3, 1], [4, 1]]) for (let k = 0; k < n; k++) links.push({ source: hub, target: 5 + k });
+        const { api } = fakeGame(nodes, links);
+        api.gameState.day = 4;
         const result = usePowerUp('pay', api);
         expect(result.ok).toBe(true);
-        expect(nodes[0].state).toBe('quarantined');
-        expect(nodes[0].sickWhileQuarantined).toBe(true);
-        expect(nodes[1].state).toBe('quarantined');
-        expect(nodes[2].state).toBe('healthy');
-        expect(api.gameState.stats.totalProtected).toBe(2);
+        const home = nodes.filter((n) => n.state === 'quarantined');
+        expect(home.map((n) => n.id)).toEqual([0, 1, 2]);
+        for (const n of home) {
+            expect(n.sickWhileQuarantined).toBe(true);
+            expect(n.homeUntilDay).toBe(4 + STAY_HOME.days);
+        }
+        expect(nodes[3].state).toBe('infected');
+        expect(nodes[4].state).toBe('infected');
+        expect(api.gameState.stats.totalProtected).toBe(3);
+        expect(STAY_HOME).toEqual({ maxPeople: 3, days: 2 });
         expect(getCharges().pay).toBe(0);
     });
 
@@ -155,7 +165,7 @@ describe('supply chests', () => {
     function oneStarSave() {
         const storage = createMemoryBackend();
         setEconomyStorage(storage);
-        const save = recordCompletion(freshSave(), 'r1-care-home', 'contained', winStats({ totalDead: 5 }));
+        const save = recordCompletion(freshSave(), LEVELS[0].id, 'contained', winStats({ totalDead: 5 }));
         writeSave(storage, save);
         return storage;
     }
