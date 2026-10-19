@@ -1,6 +1,7 @@
 // DOM rendering for the game screen chrome: header stats, tools panel,
 // action log, toast notifications, and the game-over stats screen.
 // No game logic here; callers pass plain data.
+import { formatR, rTone, rExplainer, rScalePos } from './game-screen-model.js';
 import { spriteFor } from '../sprites.js';
 import { toolChips, lossReason } from './game-screen-model.js';
 import { threatPipsHtml } from './briefing.js';
@@ -46,9 +47,10 @@ export function renderHeader({ scenarioName, difficultyName, difficultyId, threa
     // Effective R: above 1 the outbreak grows, below 1 it shrinks.
     const rEl = document.getElementById('r-value');
     if (rEl) {
-        rEl.textContent = r == null ? '–' : r >= 5 ? '5+' : r.toFixed(1);
-        rEl.classList.toggle('r-up', r != null && r > 1);
-        rEl.classList.toggle('r-down', r != null && r <= 1);
+        rEl.textContent = formatR(r);
+        const tone = rTone(r);
+        rEl.classList.toggle('r-up', tone === 'up');
+        rEl.classList.toggle('r-down', tone === 'down');
     }
     const aEl = document.getElementById('actions-left');
     if (aEl && actionsLeft != null) aEl.textContent = actionsLeft;
@@ -259,4 +261,43 @@ export function renderLegend() {
         toggle.textContent = open ? 'Hide key' : 'Key';
     });
     container.appendChild(toggle);
+}
+
+// ---- R card (round 16) ------------------------------------------------------
+// Tap the R stat to see what the number means today. Closes on Got it, on a
+// tap outside, or when the R value changes under it.
+const escapeHtml = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+
+export function renderRCard({ r = null, r0 = '' } = {}) {
+    const card = document.getElementById('r-card');
+    if (!card) return null;
+    const { value, headline, lines } = rExplainer({ r, r0 });
+    const tone = rTone(r) || 'none';
+    card.className = `r-card r-card--${tone}`;
+    card.innerHTML = `<div class="r-card-top">
+            <span class="r-card-value" aria-hidden="true">R ${escapeHtml(value === "–" ? "?" : value)}</span>
+            <strong class="r-card-headline" id="r-card-headline">${escapeHtml(headline)}</strong>
+        </div>
+        ${tone === 'none' ? '' : `<div class="r-card-scale" aria-hidden="true"><span class="r-card-mark" style="--pos:${rScalePos(r)}"></span><span class="r-card-one">1</span></div>`}
+        ${lines.map((l) => `<p>${escapeHtml(l)}</p>`).join('')}
+        <button type="button" class="btn btn--primary r-card-close">Got it</button>`;
+    return card;
+}
+
+export function openRCard(opts) {
+    const card = renderRCard(opts);
+    if (!card) return;
+    card.hidden = false;
+    document.getElementById('r-stat')?.setAttribute('aria-expanded', 'true');
+}
+
+export function closeRCard() {
+    const card = document.getElementById('r-card');
+    if (card) card.hidden = true;
+    document.getElementById('r-stat')?.setAttribute('aria-expanded', 'false');
+}
+
+export function isRCardOpen() {
+    const card = document.getElementById('r-card');
+    return !!card && !card.hidden;
 }

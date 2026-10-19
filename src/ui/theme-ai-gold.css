@@ -269,3 +269,99 @@ html .settings-row.settings-danger { background: #fdf1ec; border-color: #efc2b5;
 html .settings-section-title, html .settings-sheet h3 { color: var(--kin-700); }
 html #music-toggle { background: var(--washi); color: var(--ai-800); border: 2px solid var(--washi-edge); box-shadow: 0 3px 0 var(--washi-edge); }
 html .volume-control input[type="range"] { accent-color: var(--ai-600); }
+
+/* ---- R stat and R card (round 16) ---- */
+html .game-stats button.stat--r {
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+    min-height: 44px;
+    -webkit-tap-highlight-color: transparent;
+    transition: transform 120ms ease, border-color 120ms ease;
+}
+html .game-stats button.stat--r:active { transform: scale(0.95); }
+html .game-stats button.stat--r[aria-expanded="true"] { border-color: var(--kin-300); }
+html .stat--r .r-info {
+    display: inline-grid;
+    place-items: center;
+    width: 13px;
+    height: 13px;
+    margin-left: 2px;
+    border-radius: 50%;
+    background: rgba(236, 210, 126, 0.25);
+    color: var(--kin-300);
+    font-size: 0.6rem;
+    line-height: 1;
+    vertical-align: 1px;
+}
+html .stat--r.r-celebrate { animation: r-celebrate 0.8s ease 2; border-color: #8ee6b0; }
+
+html .r-card {
+    position: fixed;
+    z-index: 40;
+    top: 150px;
+    left: 16px;
+    right: 16px;
+    max-width: 420px;
+    margin: 0 auto;
+    padding: 14px 16px 16px;
+    border-radius: 18px;
+    background: var(--washi, #fbf6e9);
+    color: var(--ai-900);
+    border: 2px solid var(--kin-400);
+    box-shadow: 0 6px 0 var(--kin-700), 0 16px 32px rgba(0, 0, 0, 0.4);
+    animation: r-card-in 180ms ease-out;
+}
+html .r-card[hidden] { display: none; }
+html .r-card-top { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+html .r-card-value {
+    flex: none;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: var(--ai-700);
+    color: #fff;
+    font-weight: 700;
+    font-size: 1.05rem;
+}
+html .r-card--up .r-card-value { background: var(--shu, #d9482b); }
+html .r-card--down .r-card-value { background: #2e8b57; }
+html .r-card-headline { font-size: 1.05rem; line-height: 1.2; }
+html .r-card p { margin: 6px 0 0; font-size: 0.92rem; line-height: 1.35; }
+html .r-card-scale {
+    position: relative;
+    height: 10px;
+    margin: 6px 0 18px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #2e8b57 0%, #8ee6b0 30%, var(--kin-400) 33.3%, #ff8a76 45%, var(--shu, #d9482b) 100%);
+}
+html .r-card-mark {
+    position: absolute;
+    top: -4px;
+    left: calc(var(--pos, 0) * 100%);
+    width: 18px;
+    height: 18px;
+    margin-left: -9px;
+    border-radius: 50%;
+    background: #fff;
+    border: 3px solid var(--ai-900);
+    transition: left 300ms ease;
+}
+html .r-card-one {
+    position: absolute;
+    top: 12px;
+    left: 33.3%;
+    transform: translateX(-50%);
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: var(--ai-700);
+}
+html .r-card-one::before {
+    content: '';
+    position: absolute;
+    top: -14px;
+    left: 50%;
+    width: 2px;
+    height: 12px;
+    background: var(--ai-900);
+}
+html .r-card-close { width: 100%; min-height: 48px; margin-top: 12px; }

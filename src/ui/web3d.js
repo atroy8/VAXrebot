@@ -377,3 +377,33 @@ export function saveViewMode(storage, mode) {
         /* storage blocked: the choice lasts for this session only */
     }
 }
+
+// ---- Opening view (round 16) ------------------------------------------------
+
+// Yaw that turns the web so the given people (usually the sick ones) face
+// the camera: the orbit camera sits on the side of the cloud where they are,
+// so they are in front of everyone else instead of hidden at the back.
+// focus: [{x, y, z}] the people to show; all: [{x, y, z}] the whole cloud.
+// Returns the current yaw when there is nothing to turn toward.
+export function yawToward(focus, all, fallbackYaw = 0) {
+    if (!focus.length || !all.length) return fallbackYaw;
+    let cx = 0;
+    let cz = 0;
+    for (const p of all) {
+        cx += p.x;
+        cz += p.z;
+    }
+    cx /= all.length;
+    cz /= all.length;
+    let fx = 0;
+    let fz = 0;
+    for (const p of focus) {
+        fx += p.x - cx;
+        fz += p.z - cz;
+    }
+    // Sick people right on the vertical axis: any yaw shows them equally.
+    if (Math.hypot(fx, fz) < 1e-6) return fallbackYaw;
+    // viewDirection(yaw) = (sin yaw, ., cos yaw) points from the centre
+    // toward the camera, so match it to the focus direction.
+    return Math.atan2(fx, fz);
+}
