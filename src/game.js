@@ -23,7 +23,7 @@ import { isPowerUp, usePowerUp, getCharges, getFunding } from './economy.js';
 import './ui/game-screen.css';
 import './ui/averted.css';
 import './ui/variants.css';
-import { toolHint, dayBanner } from './ui/game-screen-model.js';
+import { toolHint, dayBanner, rFellBelowOne, R_BELOW_ONE_TEXT } from './ui/game-screen-model.js';
 import { renderCareBox, flyToCareBox } from './ui/care-box.js';
 import { mountShop, renderShop } from './ui/shop.js';
 import { buildOutbreak } from './sim/setup.js';
@@ -55,6 +55,9 @@ import {
     showToolHint,
     showDayBanner,
     renderGameOver,
+    openRCard,
+    closeRCard,
+    isRCardOpen,
 } from './ui/panels.js';
 import { fillBriefing, showThreat, fillLessonCard, showVariantCallout } from './ui/briefing.js';
 import { variantCallout } from './sim/variants.js';
@@ -170,6 +173,16 @@ export class EpidemicSimulator {
         document.getElementById('start-simulation').addEventListener('click', () => this.startGame());
         document.getElementById('next-day').addEventListener('click', () => this.nextDay());
         document.getElementById('hold-advance').addEventListener('click', () => this.autoAdvance.hold());
+        // R card (round 16): tap R to learn what today's number means.
+        document.getElementById('r-stat')?.addEventListener('click', () => this.toggleRCard());
+        document.getElementById('r-card')?.addEventListener('click', (e) => {
+            if (e.target.closest('.r-card-close')) closeRCard();
+        });
+        document.addEventListener('pointerdown', (e) => {
+            if (!isRCardOpen()) return;
+            if (e.target.closest('#r-card, #r-stat')) return;
+            closeRCard();
+        });
         document.getElementById('pause-game').addEventListener('click', () => this.togglePause());
         document.getElementById('resume-game').addEventListener('click', () => this.togglePause());
         const tray = document.getElementById('tools-list');
@@ -243,6 +256,7 @@ export class EpidemicSimulator {
     }
 
     showScreen(screenName) {
+        closeRCard();
         renderScreen(screenName);
         this.currentScreen = screenName;
 
@@ -266,7 +280,8 @@ export class EpidemicSimulator {
         // Briefing shows the mission name; the disease profile still comes
         // from the underlying scenario.
         fillBriefing({ ...this.currentScenario, name: level.name, description: level.blurb });
-        showThreat({ pips: this.threat.pips, line: threatLine(this.threat.value), r0: this.difficulties[level.difficultyId]?.R0 });
+        this.currentR0 = this.difficulties[level.difficultyId]?.R0 || '';
+        showThreat({ pips: this.threat.pips, line: threatLine(this.threat.value), r0: this.currentR0 });
         const lesson = lessonFor(level.id);
         fillLessonCard('briefing-lesson', lesson?.title, lesson?.brief);
         showVariantCallout(variantCallout(level.variant));
@@ -451,6 +466,17 @@ export class EpidemicSimulator {
         if (hold) hold.hidden = false;
     }
 
+    // R card: open it (holding any auto-advance countdown so there is time
+    // to read), or close it if it is already open.
+    toggleRCard() {
+        if (isRCardOpen()) {
+            closeRCard();
+            return;
+        }
+        if (this.autoAdvance.isRunning()) this.autoAdvance.hold();
+        openRCard({ r: this.lastR, r0: this.currentR0 });
+    }
+
     nextDay() {
         if (this.gameState.gameOver) return;
         if (!canAdvanceDay(this.gameState)) {
@@ -471,7 +497,18 @@ export class EpidemicSimulator {
         const { events, count } = spread;
         // Smooth day-to-day noise: blend today's R with yesterday's.
         const rToday = effectiveR(count, activeBefore, difficulty.recoveryTime);
+        const prevR = this.lastR;
         this.lastR = rToday == null ? this.lastR : this.lastR == null ? rToday : 0.5 * rToday + 0.5 * this.lastR;
+        // Round 16: the first day R drops under 1 is the turning point of an
+        // outbreak, so mark it (once per level) with a toast and a chime.
+        if (!result && !this.gameState.stats.rBelowOneDay && rFellBelowOne(prevR, this.lastR)) {
+            this.gameState.stats.rBelowOneDay = this.gameState.day - 1;
+            showNotification(R_BELOW_ONE_TEXT, 'success');
+            this.audio.playStinger?.('milestone');
+            document.getElementById('r-stat')?.classList.add('r-celebrate');
+            setTimeout(() => document.getElementById('r-stat')?.classList.remove('r-celebrate'), 1600);
+        }
+        if (isRCardOpen()) openRCard({ r: this.lastR, r0: this.currentR0 });
         for (const { source, target } of events) {
             this.view.animateVirus(source, target);
             this.audio.playSound(150, 0.2, 'triangle');
@@ -564,6 +601,7 @@ export class EpidemicSimulator {
     finishGame(result) {
         if (this.gameState.gameOver) return;
         this.autoAdvance.cancel();
+        closeRCard();
         this.gameState.gameOver = true;
         this.gameState.outcome = result;
         this.audio.playSound(261, 1.0, 'sine');

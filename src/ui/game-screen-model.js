@@ -97,3 +97,72 @@ export function lossReason({ totalInfected = 0, caseCap = Infinity } = {}) {
     }
     return 'Deaths overwhelmed the response before the outbreak could be contained. Try isolating the sick sooner.';
 }
+
+// ---- R you can read (round 16) ---------------------------------------------
+// The R stat in the HUD opens a short card that says what the number means
+// right now. On a phone there is no hover, so the old title tooltip never
+// showed. Pure text here, tested in tests/r-explainer.test.js.
+
+// Highest number in a briefing range such as "1.5 - 2.0" (null if none).
+export function r0High(r0) {
+    const nums = String(r0 ?? '').match(/\d+(?:\.\d+)?/g);
+    if (!nums) return null;
+    return Math.max(...nums.map(Number));
+}
+
+export function formatR(r) {
+    if (r == null || !Number.isFinite(r)) return '–';
+    return r >= 5 ? '5+' : r.toFixed(1);
+}
+
+// 'up' above 1 (growing), 'down' at or below 1 (shrinking), null before day 2.
+export function rTone(r) {
+    if (r == null || !Number.isFinite(r)) return null;
+    return r > 1 ? 'up' : 'down';
+}
+
+// { value, headline, lines[] } for the R card.
+export function rExplainer({ r = null, r0 = '' } = {}) {
+    const value = formatR(r);
+    const lines = [];
+    let headline;
+    if (r == null || !Number.isFinite(r)) {
+        headline = 'R shows after the first day';
+        lines.push('R counts how many people each sick person infects. Health teams watch it every day.');
+    } else if (r > 1) {
+        const about = r >= 5 ? '5 or more' : r < 1.5 ? 'more than 1' : `about ${Math.round(r)}`;
+        headline = 'Growing: R is above 1';
+        lines.push(`Each sick person is passing it to ${about} others right now, so cases multiply.`);
+        lines.push('Isolate the sick and cut the red links to push R under 1.');
+    } else if (r === 0) {
+        headline = 'Stopped for now: R is 0';
+        lines.push('Nobody caught it yesterday. Keep the sick away from the healthy.');
+    } else {
+        headline = 'Shrinking: R is below 1';
+        lines.push('Each sick person now passes it to fewer than one other, so the outbreak fades out.');
+    }
+    const high = r0High(r0);
+    if (high != null) {
+        let line = `The briefing estimate is R₀ ${String(r0).trim()}: how fast it spreads when nobody is protected.`;
+        if (r != null && Number.isFinite(r) && r > high + 0.5) {
+            line += ' This web is more crowded than a real town, so R runs higher here.';
+        }
+        lines.push(line);
+    }
+    return { value, headline, lines };
+}
+
+// True on the day R first drops from above 1 to 1 or below: a moment worth
+// celebrating, because that is when an outbreak starts to die out.
+export function rFellBelowOne(prevR, nextR) {
+    return prevR != null && nextR != null && Number.isFinite(prevR) && Number.isFinite(nextR) && prevR > 1 && nextR <= 1;
+}
+
+export const R_BELOW_ONE_TEXT = 'R fell below 1! Each case now leads to less than one more, so the outbreak is shrinking.';
+
+// Where R sits on a 0 to 3 scale with 1 marked, as a 0..1 position (string
+// for a CSS custom property).
+export function rScalePos(r) {
+    if (r == null || !Number.isFinite(r)) return '0';
+    return Math.max(0, Math.min(1, r / 3)).toFixed(3);
+}
