@@ -68,6 +68,7 @@ import {
     normalizedDepths,
     loadViewMode,
     saveViewMode,
+    yawToward,
 } from './web3d.js';
 
 // 3D web mode (round 15): deep space behind the web, and fog so far people
@@ -145,10 +146,17 @@ const sphereMaterials = {};
 for (const state of STATES) {
     sphereMaterials[state] = new THREE.MeshLambertMaterial({ color: STATE_COLORS[state] });
 }
+// Round 16: sick people never fade into the 3D fog, so they stay the
+// brightest thing in the web even at the back.
+sphereMaterials.infected.fog = false;
 const particleGeometry = new THREE.SphereGeometry(0.16, 8, 6);
 const sparkGeometry = new THREE.CircleGeometry(0.09, 8);
 const ringGeometry = new THREE.RingGeometry(0.62, 0.78, 36);
-const pulseMaterial = new THREE.MeshBasicMaterial({ color: 0xff4d6d, transparent: true, opacity: 0.6, depthWrite: false });
+// The red pulse ring around a sick person draws on top of everything and
+// ignores the fog (round 16), so in the 3D web you can see a sick person
+// through the crowd in front of them, like an x-ray alert.
+const pulseMaterial = new THREE.MeshBasicMaterial({ color: 0xff4d6d, transparent: true, opacity: 0.6, depthWrite: false, depthTest: false, fog: false });
+const PULSE_RENDER_ORDER = 6;
 const particleMaterial = new THREE.MeshBasicMaterial({ color: 0xdc3545 });
 
 // Puzzle badges (round 14): a vermilion crown for the super-spreader and a
@@ -447,6 +455,7 @@ export class NetworkView {
         const pulse = new THREE.Mesh(ringGeometry, pulseMaterial);
         pulse.position.z = -0.05;
         pulse.visible = node.state === 'infected';
+        pulse.renderOrder = PULSE_RENDER_ORDER;
         group.add(pulse);
 
         // Puzzle badge and halo (super-spreader crown, Envoy star).
@@ -592,6 +601,9 @@ export class NetworkView {
             else settleLayout(this.layoutObjs(), this.layoutPairs(), { maxSteps: WARMUP_STEPS, P: this.layoutParams() });
             this.alpha = 0;
             for (const o of this.nodeObjs.values()) o.vel.set(0, 0, 0);
+            // Round 16: a level opens with the web turned so the first sick
+            // people face you, instead of hiding behind the crowd.
+            if (isInitial && this.is3d) this.faceTheSick();
             this.frameNetwork();
             this.autoFit = true;
             this.physicsSettled = true;
@@ -719,6 +731,18 @@ export class NetworkView {
         return fitOrbit(pts, { fovDeg: this.camera.fov, aspect: this.camera.aspect, pad: FIT_PAD, yaw: this.cam3.yaw, pitch: this.cam3.pitch });
     }
 
+    // Turn the 3D web so the sick people are on the camera's side.
+    faceTheSick() {
+        const all = [];
+        const sick = [];
+        for (const o of this.nodeObjs.values()) {
+            if (o.boxed) continue;
+            all.push(o.pos);
+            if (o.node.state === 'infected') sick.push(o.pos);
+        }
+        this.cam3 = { ...this.cam3, yaw: yawToward(sick, all, this.cam3.yaw) };
+    }
+
     frameNetwork() {
         if (this.is3d) {
             this.fit3 = this.fitTarget3d();
@@ -819,6 +843,7 @@ export class NetworkView {
         this.lastTouch = 0;
         this.applyModeLook();
         this.updateModeButton();
+        if (this.is3d) this.faceTheSick();
         this.frameNetwork();
     }
 
@@ -967,6 +992,12 @@ export class NetworkView {
             const frame = this.frameFor(obj, now);
             const tex = faceTextures[obj.node.state]?.[frame] || faceTextures.healthy.idle;
             if (obj.sprite.material.map !== tex) obj.sprite.material.map = tex;
+            // Sick faces skip the fog too (round 16), so they read at any depth.
+            const wantFog = obj.node.state !== 'infected';
+            if (obj.sprite.material.fog !== wantFog) {
+                obj.sprite.material.fog = wantFog;
+                obj.sprite.material.needsUpdate = true;
+            }
 
             // Scale bounce right after a vaccinate / recover action lands.
             let scale = FACE_SCALE;

@@ -82,6 +82,7 @@
 
         <!-- Game Screen -->
         <div id="game-screen" class="screen">
+            <div class="r-card" id="r-card" role="dialog" aria-modal="false" aria-labelledby="r-card-headline" hidden></div>
             <div class="game-layout">
                 <div class="game-header">
                     <div class="game-topbar">
@@ -109,10 +110,10 @@
                             <span class="stat-value case-meter-value">0</span>
                             <span class="case-meter-bar" aria-hidden="true"></span>
                         </div>
-                        <div class="stat" title="Effective R: new cases each sick person causes. Above 1 it grows, below 1 it shrinks.">
-                            <span class="stat-label">R</span>
+                        <button type="button" class="stat stat--r" id="r-stat" aria-haspopup="dialog" aria-controls="r-card" aria-label="R, new cases per sick person. Tap to learn what it means.">
+                            <span class="stat-label">R <span class="r-info" aria-hidden="true">?</span></span>
                             <span class="stat-value" id="r-value">–</span>
-                        </div>
+                        </button>
                         <div class="stat">
                             <span class="stat-label">Actions</span>
                             <span class="stat-value" id="actions-left">0</span>
