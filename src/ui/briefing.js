@@ -60,3 +60,17 @@ export function showVariantCallout(callout) {
     card.querySelector('.variant-text').textContent = callout.text;
     card.hidden = false;
 }
+
+// Star goal (round 17): one line under the threat so players know what the
+// stars reward before they start: lives kept and beating par.
+export function starGoalLine({ parDays = 0, best = 0 } = {}) {
+    const stars = '★'.repeat(best) + '☆'.repeat(3 - best);
+    const par = parDays > 0 ? `, and every day you finish before day ${parDays} adds points` : '';
+    if (best >= 3) return `Your best: ${stars}. A perfect response!`;
+    return `Stars reward lives kept${par}.${best > 0 ? ` Your best: ${stars}` : ''}`;
+}
+
+export function showStarGoal(opts) {
+    const el = document.getElementById('star-goal');
+    if (el) el.textContent = starGoalLine(opts);
+}
