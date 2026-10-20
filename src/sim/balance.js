@@ -20,7 +20,7 @@ import { buildOutbreak } from './setup.js';
 import { initGameState } from './state.js';
 import { canUseTool } from './engine.js';
 import { applyNodeTool, severLink, advanceDay, neighbors, allActionsSpent } from './actions.js';
-import { calculateStars } from '../progress.js';
+import { calculateStars, calculateScore } from '../progress.js';
 
 export function mulberry32(seed) {
     let a = seed >>> 0;
@@ -167,7 +167,7 @@ export const BOTS = {
     },
 };
 
-// Play one run to the end. Returns { outcome, stars, day, deaths }.
+// Play one run to the end. Returns { outcome, stars, score, day, deaths }.
 export function playRun(level, bot, seed) {
     const rng = mulberry32(seed);
     const run = buildRun(level, rng);
@@ -177,7 +177,7 @@ export function playRun(level, bot, seed) {
         result = advanceDay(run.state, run.network, { scenario: run.scenario, difficulty: run.difficulty, rng }).result;
     }
     const stats = { ...run.state.stats, daysUsed: run.state.day };
-    return { outcome: result, stars: calculateStars(result, stats, level), day: run.state.day, deaths: stats.totalDead, recovered: stats.totalRecovered, pop: stats.initialPopulation };
+    return { outcome: result, stars: calculateStars(result, stats, level), score: calculateScore(result, stats, level), day: run.state.day, deaths: stats.totalDead, recovered: stats.totalRecovered, pop: stats.initialPopulation };
 }
 
 // Summary per level for one bot: win rate, mean stars, outcome counts.

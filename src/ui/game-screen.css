@@ -662,3 +662,22 @@ html .network-container.is-3d {
     from { opacity: 0; transform: translateY(-8px) scale(0.97); }
     to { opacity: 1; transform: none; }
 }
+
+/* Star meter (round 17): score against the 1, 2 and 3 star lines. */
+.tally-meter:empty { display: none; }
+.tally-meter.enter .star-meter { animation: tallyLineIn 0.4s cubic-bezier(.3, 1.4, .5, 1) both; }
+.star-meter { margin: 6px 2px 8px; padding: 8px 10px 6px; border-radius: 12px; background: var(--washi, #f7f2e4); border: 1px solid var(--washi-edge, #e7dcc0); text-align: left; }
+.star-meter-head { display: flex; justify-content: space-between; align-items: baseline; font-size: 0.8rem; color: var(--color-text-secondary, #55617f); }
+.star-meter-head strong { font-size: 1.05rem; color: var(--ai-700, #1b3a7a); font-variant-numeric: tabular-nums; }
+.star-meter-bar { position: relative; height: 12px; margin: 16px 0 6px; border-radius: 6px; background: var(--ai-100, #e8eef8); }
+.star-meter-fill { position: absolute; inset: 0 auto 0 0; border-radius: 6px; background: linear-gradient(90deg, var(--ai-500, #3565b8), var(--ai-700, #1b3a7a)); transition: width 0.6s ease-out; }
+.star-meter-tick { position: absolute; top: -3px; bottom: -3px; width: 3px; margin-left: -1.5px; border-radius: 2px; background: #b8c2d6; }
+.star-meter-tick.on { background: var(--kin-500, #c9a227); }
+.star-meter-tick i { position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); margin-bottom: 1px; font-style: normal; font-size: 0.62rem; letter-spacing: -1px; white-space: nowrap; color: #9aa4b8; }
+.star-meter-tick.on i { color: var(--kin-600, #a9801f); }
+.star-meter-hint { margin: 2px 0 4px; font-size: 0.86rem; font-weight: 600; color: var(--color-text, #16213f); line-height: 1.3; }
+.star-meter-facts { display: flex; flex-wrap: wrap; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.star-meter-facts li { padding: 2px 7px; border-radius: 999px; background: #fff; border: 1px solid var(--washi-edge, #e7dcc0); font-size: 0.72rem; color: var(--color-text-secondary, #55617f); }
+.star-meter-why { margin: 5px 0 0; font-size: 0.72rem; color: var(--color-text-secondary, #55617f); line-height: 1.3; }
+.star-goal { margin: 6px 0 0; font-size: 0.82rem; color: var(--kin-700, #8a6417); line-height: 1.3; }
+.star-goal:empty { display: none; }
