@@ -16,6 +16,7 @@
 // Tuning comes from src/config/campaign-tuning.js (written by
 // scripts/tune-campaign.mjs); levels without an entry use the defaults below.
 import { CAMPAIGN_TUNING } from './campaign-tuning.js';
+import { STAR_TARGETS } from './star-targets.js';
 
 export const SYSTEMS = [
     {
@@ -179,7 +180,8 @@ export function buildCampaign() {
                 scenarioId: slot.scenarioId,
                 difficultyId,
                 blurb: slot.variant ? VARIANT_BLURB[slot.variant] : BLURB[slot.scenarioId],
-                target: 800,
+                // Per-level star target (round 17, scripts/tune-stars.mjs).
+                target: STAR_TARGETS[id] ?? 800,
                 lessonId,
                 tuning: { ...defaultTuning(difficultyId, slot), ...(CAMPAIGN_TUNING[id] || {}) },
             };

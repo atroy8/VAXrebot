@@ -4,6 +4,7 @@
 // confetti. Tap the tally to skip to the end. Reduced motion shows the end
 // state right away.
 import { faceTokenHtml } from './face-token.js';
+import { starMeterHtml } from './star-meter.js';
 
 const BIN_LOOKS = {
     treatment: { face: 'infected', label: 'Treated' },
@@ -29,7 +30,8 @@ export function prizeCardHtml(c) {
 // bins: { treatment, isolated, cured } counts. bonus: careBonus() result.
 // baseFunding: the level's normal award. chests: newly unlocked boxes.
 // sound(kind, i): optional ('tick' | 'line' | 'star' | 'coin' | 'prize').
-export function playResultsTally(el, { bins, bonus, stars, baseFunding, chests = [], sound = () => {} }) {
+// meter: starProgress() result (star-meter.js), shown under the stars.
+export function playResultsTally(el, { bins, bonus, stars, baseFunding, chests = [], meter = null, sound = () => {} }) {
     if (!el) return { skip() {} };
     const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
     const lineOf = (id) => bonus.lines.find((l) => l.id === id);
@@ -54,6 +56,7 @@ export function playResultsTally(el, { bins, bonus, stars, baseFunding, chests =
         </div>
         <ul class="tally-lines" data-lines></ul>
         <div class="tally-stars" data-stars aria-label="${stars} of 3 stars">${'<span class="tally-star">★</span>'.repeat(3)}</div>
+        <div class="tally-meter" data-meter></div>
         <ul class="tally-lines tally-lines--award" data-award></ul>
         <div class="tally-total"><span class="tally-coin" aria-hidden="true"></span><span data-total>+0</span> funding</div>
         <div class="tally-prizes" data-prizes></div>
@@ -90,6 +93,7 @@ export function playResultsTally(el, { bins, bonus, stars, baseFunding, chests =
         for (const id of Object.keys(BIN_LOOKS)) fillBin(id, bins[id] || 0, false);
         q('[data-lines]').innerHTML = bonus.lines.map(lineHtml).join('');
         q('[data-stars]').querySelectorAll('.tally-star').forEach((s, i) => s.classList.toggle('on', i < stars));
+        q('[data-meter]').innerHTML = starMeterHtml(meter);
         q('[data-award]').innerHTML = baseFunding > 0 ? lineHtml(awardLine) : '';
         q('[data-total]').textContent = `+${totalFunding}`;
         q('[data-prizes]').innerHTML = chests.map(prizeCardHtml).join('');
@@ -142,6 +146,12 @@ export function playResultsTally(el, { bins, bonus, stars, baseFunding, chests =
             starEls[i].classList.add('on', 'pop');
             sound('star', i);
             await sleep(380);
+        }
+        if (meter) {
+            if (skipped) return;
+            q('[data-meter]').innerHTML = starMeterHtml(meter);
+            q('[data-meter]').classList.add('enter');
+            await sleep(450);
         }
         if (baseFunding > 0) {
             if (skipped) return;
