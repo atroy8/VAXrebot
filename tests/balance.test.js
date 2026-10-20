@@ -39,8 +39,10 @@ describe('campaign ramp across 3 systems and 8 planets (round 14)', () => {
     const SAMPLE = 40;
     const planetSmart = REGIONS.map((r) => {
         const lv = LEVELS.filter((l) => l.regionId === r.id);
-        const rates = lv.map((l) => summarize(l, 'smart', SAMPLE, 13).winRate);
-        return { id: r.id, systemId: r.systemId, mean: rates.reduce((a, b) => a + b, 0) / rates.length, rates };
+        const sums = lv.map((l) => summarize(l, 'smart', SAMPLE, 13));
+        const rates = sums.map((x) => x.winRate);
+        const threes = sums.map((x) => x.starDist[3] / x.runs);
+        return { id: r.id, systemId: r.systemId, mean: rates.reduce((a, b) => a + b, 0) / rates.length, rates, threes };
     });
     const systemMean = (id) => {
         const p = planetSmart.filter((x) => x.systemId === id);
@@ -59,6 +61,16 @@ describe('campaign ramp across 3 systems and 8 planets (round 14)', () => {
             for (const [k, rate] of p.rates.entries()) {
                 expect(rate, `${p.id}-${k + 1}`).toBeGreaterThanOrEqual(0.2);
             }
+        }
+    });
+
+    // Round 17: with one target for all 80 levels, the smart bot never earned
+    // 3 stars on any level from the 4th planet on. Per-level targets fix that.
+    it('3 stars is within reach on every planet, but never handed out', () => {
+        for (const p of planetSmart) {
+            const mean = p.threes.reduce((a, b) => a + b, 0) / p.threes.length;
+            expect(mean, p.id).toBeGreaterThanOrEqual(0.08);
+            for (const [k, share] of p.threes.entries()) expect(share, `${p.id}-${k + 1}`).toBeLessThanOrEqual(0.7);
         }
     });
 

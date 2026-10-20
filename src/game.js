@@ -10,6 +10,7 @@ import { createWebAdProvider } from './monetization/ad-provider-web.js';
 import { pickAdProvider } from './monetization/ad-provider-admob.js';
 import { careBonus, newlyUnlockedChests } from './rewards.js';
 import { playResultsTally } from './ui/results-tally.js';
+import { starProgress } from './ui/star-meter.js';
 import { CHESTS } from './config/chests.js';
 import { mountSettings } from './ui/settings.js';
 import {
@@ -18,6 +19,8 @@ import {
     fundingAward,
     livesSavedForRun,
     recordCompletion,
+    parDaysFor,
+    levelRecord,
 } from './progress.js';
 import { isPowerUp, usePowerUp, getCharges, getFunding } from './economy.js';
 import './ui/game-screen.css';
@@ -59,7 +62,7 @@ import {
     closeRCard,
     isRCardOpen,
 } from './ui/panels.js';
-import { fillBriefing, showThreat, fillLessonCard, showVariantCallout } from './ui/briefing.js';
+import { fillBriefing, showThreat, fillLessonCard, showVariantCallout, showStarGoal } from './ui/briefing.js';
 import { variantCallout } from './sim/variants.js';
 import { renderLevelSelect } from './ui/level-select.js';
 import { AudioEngine } from './audio.js';
@@ -282,6 +285,7 @@ export class EpidemicSimulator {
         fillBriefing({ ...this.currentScenario, name: level.name, description: level.blurb });
         this.currentR0 = this.difficulties[level.difficultyId]?.R0 || '';
         showThreat({ pips: this.threat.pips, line: threatLine(this.threat.value), r0: this.currentR0 });
+        showStarGoal({ parDays: parDaysFor(level), best: levelRecord(this.save, level.id).stars || 0 });
         const lesson = lessonFor(level.id);
         fillLessonCard('briefing-lesson', lesson?.title, lesson?.brief);
         showVariantCallout(variantCallout(level.variant));
@@ -668,6 +672,7 @@ export class EpidemicSimulator {
                 stars,
                 baseFunding: fundingEarned,
                 chests,
+                meter: starProgress(outcome, stats, this.currentLevel),
                 sound: (kind, i = 0) => this.playTallySound(kind, i),
             });
         }
