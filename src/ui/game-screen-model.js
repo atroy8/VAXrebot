@@ -166,3 +166,11 @@ export function rScalePos(r) {
     if (r == null || !Number.isFinite(r)) return '0';
     return Math.max(0, Math.min(1, r / 3)).toFixed(3);
 }
+
+// Round 18: when the phone leaves the game mid-level (a call, the home
+// button, the app switcher), pause it so the player comes back to the
+// Paused card instead of a day that ticked on without them. Not during the
+// Spread stopped! fast-forward (no decisions left) or once the level is over.
+export function shouldAutoPause({ hidden, screen, gameState, wrapUp = null } = {}) {
+    return Boolean(hidden && screen === 'game' && gameState && !gameState.gameOver && !gameState.paused && !wrapUp);
+}
