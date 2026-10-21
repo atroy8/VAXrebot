@@ -1,0 +1,68 @@
+/* Round 18: iPhone app shell.
+ *
+ * The page now asks for viewport-fit=cover (index.html), which is what makes
+ * env(safe-area-inset-*) report the notch, Dynamic Island and home bar on
+ * iPhone. Without it every inset was 0, so earlier rounds' inset rules did
+ * nothing and, in the full-screen app, the level HUD would sit under the
+ * status bar. These rules pad the screens that were still missing an inset
+ * and make touches feel native: no double-tap zoom, no long-press text
+ * selection or callout on game UI, no rubber-band bounce of the whole page.
+ * On a desktop browser or a phone without a notch every inset is 0, so
+ * nothing moves there.
+ */
+
+html,
+body {
+    overscroll-behavior: none;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+}
+
+body {
+    touch-action: manipulation;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+/* Text people may want to copy or type still works. */
+input,
+textarea,
+.selectable {
+    -webkit-user-select: text;
+    user-select: text;
+}
+
+/* Left and right insets matter in landscape, top and bottom in portrait. */
+.screen {
+    padding-left: max(var(--space-24), env(safe-area-inset-left, 0px));
+    padding-right: max(var(--space-24), env(safe-area-inset-right, 0px));
+}
+
+@media (max-width: 768px) {
+    /* Briefing, results and other scrolling screens. */
+    .screen {
+        padding-top: calc(var(--space-16) + env(safe-area-inset-top, 0px));
+        padding-bottom: calc(var(--space-16) + env(safe-area-inset-bottom, 0px));
+        padding-left: calc(var(--space-8) + env(safe-area-inset-left, 0px));
+        padding-right: calc(var(--space-8) + env(safe-area-inset-right, 0px));
+    }
+    #game-screen.screen {
+        padding: 0;
+    }
+
+    /* In a level: keep the HUD below the status bar and the tray above the home bar. */
+    .game-layout {
+        padding-top: calc(8px + env(safe-area-inset-top, 0px));
+        padding-left: calc(8px + env(safe-area-inset-left, 0px));
+        padding-right: calc(8px + env(safe-area-inset-right, 0px));
+    }
+    /* Toasts on phones sit above the tool tray (game-screen.css), already
+       clear of the home bar, so they keep their bottom anchor. */
+}
+
+@media (min-width: 769px) {
+    #notification-container {
+        top: calc(20px + env(safe-area-inset-top, 0px));
+    }
+}
