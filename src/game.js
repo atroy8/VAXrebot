@@ -13,6 +13,7 @@ import { playResultsTally } from './ui/results-tally.js';
 import { starProgress } from './ui/star-meter.js';
 import { CHESTS } from './config/chests.js';
 import { mountSettings } from './ui/settings.js';
+import { createHaptics } from './ui/haptics.js';
 import {
     isLevelUnlocked,
     calculateStars,
@@ -26,7 +27,8 @@ import { isPowerUp, usePowerUp, getCharges, getFunding } from './economy.js';
 import './ui/game-screen.css';
 import './ui/averted.css';
 import './ui/variants.css';
-import { toolHint, dayBanner, rFellBelowOne, R_BELOW_ONE_TEXT } from './ui/game-screen-model.js';
+import './ui/app-shell.css'; // last: safe areas and native touch feel (round 18)
+import { toolHint, dayBanner, rFellBelowOne, R_BELOW_ONE_TEXT, shouldAutoPause } from './ui/game-screen-model.js';
 import { renderCareBox, flyToCareBox } from './ui/care-box.js';
 import { mountShop, renderShop } from './ui/shop.js';
 import { buildOutbreak } from './sim/setup.js';
@@ -99,6 +101,13 @@ export class EpidemicSimulator {
         // Progression: versioned save behind a swappable storage backend.
         this.storage = createStorage();
         this.save = loadSave(this.storage);
+        // Round 18: Taptic Engine on iPhone through the Capacitor bridge,
+        // navigator.vibrate elsewhere, off switch in Settings.
+        this.haptics = createHaptics({
+            capacitor: typeof window !== 'undefined' ? window.Capacitor : undefined,
+            navigator: typeof navigator !== 'undefined' ? navigator : undefined,
+            storage: this.storage,
+        });
 
         // Monetization: Remove Ads entitlement plus between-level ad pacing.
         // The web build uses a labeled sample ad; the App Store build swaps
@@ -136,6 +145,7 @@ export class EpidemicSimulator {
         this.setupIntro();
         this.settings = mountSettings({
             monetization: this.monetization,
+            haptics: this.haptics,
             notify: (msg) => showNotification(msg, 'info'),
             onResetProgress: () => {
                 this.save = resetSave(this.storage);
@@ -188,6 +198,12 @@ export class EpidemicSimulator {
         });
         document.getElementById('pause-game').addEventListener('click', () => this.togglePause());
         document.getElementById('resume-game').addEventListener('click', () => this.togglePause());
+        // Round 18: leaving the app mid-level pauses the game (see shouldAutoPause).
+        document.addEventListener('visibilitychange', () => {
+            if (shouldAutoPause({ hidden: document.hidden, screen: this.currentScreen, gameState: this.gameState, wrapUp: this.wrapUp })) {
+                this.togglePause();
+            }
+        });
         const tray = document.getElementById('tools-list');
         tray.addEventListener('scroll', () => {
             tray.classList.toggle('at-end', tray.scrollLeft + tray.clientWidth >= tray.scrollWidth - 4);
@@ -410,6 +426,9 @@ export class EpidemicSimulator {
             if (toolId === 'quarantine' && node.superSpreader) {
                 showNotification('Carrier isolated! The super-spreader cannot pass it on now.', 'success');
                 this.audio.playStinger?.('milestone');
+                this.haptics.play('milestone');
+            } else {
+                this.haptics.play('tool');
             }
             // Music hook: milestone stinger each time totalProtected crosses
             // 25, 50, or 75. Called with optional chaining; safe if the audio
@@ -436,8 +455,7 @@ export class EpidemicSimulator {
         addLogEntry(this.gameState.day, logMessage);
         if (this.audio.playSnip) this.audio.playSnip();
         else this.audio.playSound(400, 0.15, 'sawtooth');
-        // Haptic tick on phones (Capacitor Haptics replaces this natively).
-        if (navigator.vibrate) navigator.vibrate(18);
+        this.haptics.play('sever');
         this.updateUI();
         this.view.update(this.network.nodes, this.network.links);
         this.afterAction();
@@ -509,6 +527,7 @@ export class EpidemicSimulator {
             this.gameState.stats.rBelowOneDay = this.gameState.day - 1;
             showNotification(R_BELOW_ONE_TEXT, 'success');
             this.audio.playStinger?.('milestone');
+            this.haptics.play('milestone');
             document.getElementById('r-stat')?.classList.add('r-celebrate');
             setTimeout(() => document.getElementById('r-stat')?.classList.remove('r-celebrate'), 1600);
         }
@@ -521,6 +540,7 @@ export class EpidemicSimulator {
         // Music hook: spike stinger when a day produces 8+ new infections.
         if (count >= SPIKE_INFECTION_THRESHOLD) {
             this.audio.playStinger?.('spike');
+            this.haptics.play('spike');
         }
 
         for (const { node, outcome } of outcomes) {
@@ -612,6 +632,7 @@ export class EpidemicSimulator {
         // Music hook: 'win' for contained, 'loss' for everything else
         // (overwhelmed, timeout, burnout: none of them are victories).
         this.audio.playStinger?.(result === 'contained' ? 'win' : 'loss');
+        this.haptics.play(result === 'contained' ? 'win' : 'loss');
         this.audio.stopGameMusic?.();
         setTimeout(() => this.showGameOver(), 1000);
     }
