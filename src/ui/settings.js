@@ -15,7 +15,7 @@ export const SUPPORT_URL = './support.html';
 export const PUBLIC_PRIVACY_URL = 'https://atroy8.github.io/VAXrebot/privacy.html';
 export const PUBLIC_SUPPORT_URL = 'https://atroy8.github.io/VAXrebot/support.html';
 
-export function settingsMarkup({ adsRemoved }) {
+export function settingsMarkup({ adsRemoved, haptics = null }) {
     return `
         <div class="settings-sheet" role="dialog" aria-modal="true" aria-labelledby="settings-title">
             <div class="settings-head">
@@ -34,6 +34,17 @@ export function settingsMarkup({ adsRemoved }) {
                     <input type="checkbox" data-act="preview-owned" ${adsRemoved ? 'checked' : ''}>
                 </label>
             </section>
+            ${
+                haptics
+                    ? `<section class="settings-group">
+                <h3>Feel</h3>
+                <label class="settings-row settings-switch">
+                    <span>Vibration</span>
+                    <input type="checkbox" data-act="haptics" ${haptics.enabled ? 'checked' : ''}>
+                </label>
+            </section>`
+                    : ''
+            }
             <section class="settings-group">
                 <h3>About</h3>
                 <button type="button" class="settings-row" data-act="replay-story">Replay story</button>
@@ -47,7 +58,7 @@ export function settingsMarkup({ adsRemoved }) {
         </div>`;
 }
 
-export function mountSettings({ monetization, onResetProgress, notify = () => {} } = {}) {
+export function mountSettings({ monetization, haptics = null, onResetProgress, notify = () => {} } = {}) {
     if (typeof document === 'undefined' || document.querySelector('.settings-fab')) return null;
 
     const fab = document.createElement('button');
@@ -70,7 +81,7 @@ export function mountSettings({ monetization, onResetProgress, notify = () => {}
         if (backdrop) return;
         backdrop = document.createElement('div');
         backdrop.className = 'settings-backdrop';
-        backdrop.innerHTML = settingsMarkup({ adsRemoved: monetization?.adsRemoved === true });
+        backdrop.innerHTML = settingsMarkup({ adsRemoved: monetization?.adsRemoved === true, haptics });
         document.body.appendChild(backdrop);
         backdrop.addEventListener('click', (e) => {
             if (e.target === backdrop) return close();
@@ -99,6 +110,10 @@ export function mountSettings({ monetization, onResetProgress, notify = () => {}
             }
         });
         backdrop.addEventListener('change', (e) => {
+            if (e.target.dataset.act === 'haptics') {
+                haptics?.setEnabled(e.target.checked);
+                return;
+            }
             if (e.target.dataset.act !== 'preview-owned') return;
             monetization?.setAdsRemoved(e.target.checked);
             const status = backdrop.querySelector('[data-role="ads-status"]');
