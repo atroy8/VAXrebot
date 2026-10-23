@@ -13,10 +13,12 @@
 // the camera never flips), distance is how far the camera sits from the
 // target point (tx, ty, tz).
 
+// Item 15 (round 20): more room between people (rest length 3.2 -> 3.8,
+// repel 3.4 -> 4.0, collide 1.6 -> 1.9) so lines are easier to see and cut.
 export const LAYOUT_3D = Object.freeze({
-    restLength: 3.2,
+    restLength: 3.8,
     springK: 0.05,
-    repelDist: 3.4,
+    repelDist: 4.0,
     repelK: 0.2,
     gravity: 0.014,
     damping: 0.72,
@@ -24,8 +26,8 @@ export const LAYOUT_3D = Object.freeze({
     alphaDecay: 0.985,
     alphaMin: 0.01,
     reheatAlpha: 0.3,
-    maxRadius: 11,
-    collideDist: 1.6,
+    maxRadius: 13,
+    collideDist: 1.9,
     collideStrength: 0.7,
 });
 
@@ -406,4 +408,52 @@ export function yawToward(focus, all, fallbackYaw = 0) {
     // viewDirection(yaw) = (sin yaw, ., cos yaw) points from the centre
     // toward the camera, so match it to the focus direction.
     return Math.atan2(fx, fz);
+}
+
+// ---- Person size on a phone (item 14, round 20) ---------------------------
+// Every person must be at least 44 px wide on a 390 px phone, even the one
+// at the back of the web. People grow (faces, spheres, rings, badges) until
+// the farthest one is MIN_PERSON_PX wide on screen; the layout keeps them
+// from overlapping by growing the collision distance with them.
+export const MIN_PERSON_PX = 46;
+export const MAX_PERSON_SCALE = 4;
+
+// On-screen width in CSS px of something `worldSize` wide at `depth` in
+// front of a perspective camera with vertical field of view fovDeg.
+export function personPx(worldSize, depth, heightPx, fovDeg) {
+    const tanV = Math.tan((fovDeg * Math.PI) / 360);
+    return (worldSize * heightPx) / (2 * Math.max(1e-6, depth) * tanV);
+}
+
+// Depth of the farthest point the web can turn to, from the orbit camera:
+// the camera distance plus the web's radius around the target. Turning the
+// web never puts anyone farther back than this.
+export function backDepth(points, view) {
+    let r = 0;
+    for (const p of points) r = Math.max(r, Math.hypot(p.x - view.tx, p.y - view.ty, (p.z || 0) - (view.tz || 0)));
+    return view.distance + r;
+}
+
+// Scale factor for people so that one `faceWorld` wide at `depth` is at
+// least minPx on screen. Never shrinks people (minimum 1).
+export function personScaleFor({ faceWorld, depth, heightPx, fovDeg, minPx = MIN_PERSON_PX, max = MAX_PERSON_SCALE }) {
+    if (!(heightPx > 0) || !(depth > 0)) return 1;
+    const px = personPx(faceWorld, depth, heightPx, fovDeg);
+    return Math.min(max, Math.max(1, minPx / px));
+}
+
+// Layout parameters for people drawn `scale` times their base size: the
+// collision distance grows with them (so faces rarely overlap), springs and
+// repulsion grow a little so lines between big faces stay visible. Growing
+// spacing as fast as people would only push the camera back and shrink
+// everyone again, so spacing grows slower than faces.
+export function layoutForPersonScale(P, scale = 1) {
+    const s = Math.max(1, scale);
+    return {
+        ...P,
+        collideDist: P.collideDist * (1 + 0.6 * (s - 1)),
+        restLength: P.restLength * (1 + 0.25 * (s - 1)),
+        repelDist: P.repelDist * (1 + 0.25 * (s - 1)),
+        maxRadius: P.maxRadius * s,
+    };
 }
