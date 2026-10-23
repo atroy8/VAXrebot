@@ -76,7 +76,8 @@ describe('campaign ramp across 3 systems and 8 planets (round 14)', () => {
 
     it('random clicking rarely wins after the first system', () => {
         for (const level of LEVELS.filter((l) => l.systemId !== SYSTEMS[0].id && l.levelInPlanet % 3 === 0)) {
-            expect(summarize(level, 'random', SAMPLE, 17).winRate, level.id).toBeLessThanOrEqual(0.15);
+            // 120 runs: with 40 the rate swung 10 points between seeds near the line.
+            expect(summarize(level, 'random', 120, 17).winRate, level.id).toBeLessThanOrEqual(0.15);
         }
     });
 });
