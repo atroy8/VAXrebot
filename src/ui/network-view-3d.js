@@ -69,6 +69,11 @@ import {
     loadViewMode,
     saveViewMode,
     yawToward,
+    personScaleFor,
+    backDepth,
+    layoutForPersonScale,
+    MIN_PERSON_PX,
+    MAX_PERSON_SCALE,
 } from './web3d.js';
 
 // 3D web mode (round 15): deep space behind the web, and fog so far people
@@ -157,6 +162,10 @@ const ringGeometry = new THREE.RingGeometry(0.62, 0.78, 36);
 // through the crowd in front of them, like an x-ray alert.
 const pulseMaterial = new THREE.MeshBasicMaterial({ color: 0xff4d6d, transparent: true, opacity: 0.6, depthWrite: false, depthTest: false, fog: false });
 const PULSE_RENDER_ORDER = 6;
+// Red at-risk lines drawn over the faces in 3D (item 15): above faces, below
+// the badges (5) and the sick pulse ring (6).
+export const RISK_OVERLAY_RENDER_ORDER = 4;
+export const RISK_OVERLAY_OPACITY = 0.9;
 const particleMaterial = new THREE.MeshBasicMaterial({ color: 0xdc3545 });
 
 // Puzzle badges (round 14): a vermilion crown for the super-spreader and a
@@ -304,6 +313,9 @@ export class NetworkView {
         this.particles = [];
         this.effects = []; // sever snaps, sparks, flashes: { update(now) -> done }
         this.toolMode = null;
+        // Item 14 (round 20): people grow until the farthest one is at least
+        // MIN_PERSON_PX wide on screen. Set in frameNetwork.
+        this.personScale = 1;
         this.shakeUntil = 0;
         this.paused = false;
         this.physicsSettled = true;
@@ -597,13 +609,30 @@ export class NetworkView {
         // Frame the network and (re)run the layout when the population changes.
         const linkKey = this.links.length;
         if (countChanged || isInitial) {
-            if (this.is3d) settleLayout3d(this.layoutObjs(), this.layoutPairs(), { maxSteps: WARMUP_STEPS, P: this.layoutParams3d() });
-            else settleLayout(this.layoutObjs(), this.layoutPairs(), { maxSteps: WARMUP_STEPS, P: this.layoutParams() });
+            // Settle, frame, size people for the phone, and settle again with
+            // room for the bigger people (two passes are enough to converge).
+            if (isInitial) this.personScale = 1;
+            for (let pass = 0; pass < 5; pass++) {
+                if (this.is3d) settleLayout3d(this.layoutObjs(), this.layoutPairs(), { maxSteps: WARMUP_STEPS, P: this.layoutParams3d() });
+                else settleLayout(this.layoutObjs(), this.layoutPairs(), { maxSteps: WARMUP_STEPS, P: this.layoutParams() });
+                // Round 16: a level opens with the web turned so the first sick
+                // people face you, instead of hiding behind the crowd.
+                if (isInitial && this.is3d) this.faceTheSick();
+                this.frameNetwork();
+                const before = this.personScale;
+                this.updatePersonScale();
+                if (Math.abs(this.personScale - before) < 0.04) break;
+            }
+            // Last nudges without moving anyone: the fit padding grows with
+            // people, so check the size once more at the final framing.
+            for (let k = 0; k < 4; k++) {
+                this.frameNetwork();
+                const before = this.personScale;
+                this.updatePersonScale();
+                if (this.personScale - before < 0.01) break;
+            }
             this.alpha = 0;
             for (const o of this.nodeObjs.values()) o.vel.set(0, 0, 0);
-            // Round 16: a level opens with the web turned so the first sick
-            // people face you, instead of hiding behind the crowd.
-            if (isInitial && this.is3d) this.faceTheSick();
             this.frameNetwork();
             this.autoFit = true;
             this.physicsSettled = true;
@@ -628,6 +657,11 @@ export class NetworkView {
             this.linkMesh.geometry.dispose();
             this.linkMesh = null;
         }
+        if (this.riskMesh) {
+            this.scene.remove(this.riskMesh);
+            this.riskMesh.geometry.dispose();
+            this.riskMesh = null;
+        }
         const count = this.links.length;
         this.linkPositions = new Float32Array(count * 12);
         this.linkColors = new Float32Array(count * 12);
@@ -647,6 +681,23 @@ export class NetworkView {
         this.linkMesh.frustumCulled = false;
         this.linkMesh.renderOrder = -1;
         this.scene.add(this.linkMesh);
+
+        // Item 15 (round 20): in 3D the red at-risk lines are drawn a second
+        // time on top of everyone (no depth test), so a red line that passes
+        // behind a face still shows from any angle. Other lines stay behind.
+        this.riskPositions = new Float32Array(count * 12);
+        this.riskColors = new Float32Array(count * 12);
+        const rgeo = new THREE.BufferGeometry();
+        rgeo.setAttribute('position', new THREE.BufferAttribute(this.riskPositions, 3));
+        rgeo.setAttribute('color', new THREE.BufferAttribute(this.riskColors, 3));
+        rgeo.setIndex(index);
+        this.riskMesh = new THREE.Mesh(
+            rgeo,
+            new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: RISK_OVERLAY_OPACITY, depthWrite: false, depthTest: false, side: THREE.DoubleSide, fog: false })
+        );
+        this.riskMesh.frustumCulled = false;
+        this.riskMesh.renderOrder = RISK_OVERLAY_RENDER_ORDER;
+        this.scene.add(this.riskMesh);
         this.syncLinkPositions(performance.now());
     }
 
@@ -667,6 +718,9 @@ export class NetworkView {
         if (!this.linkMesh) return;
         const pos = this.linkPositions;
         const col = this.linkColors;
+        const rpos = this.riskPositions;
+        const rcol = this.riskColors;
+        const overlay = this.is3d && !!this.riskMesh;
         const severing = this.toolMode === 'severLink';
         const pulse = 0.65 + 0.35 * Math.abs(Math.sin(now / 260));
         let k = 0;
@@ -679,7 +733,9 @@ export class NetworkView {
             const kind = this.linkKind(link);
             const hidden = (a && a.boxed) || (b && b.boxed);
             const style = linkStyle(kind, severing);
-            const w = hidden ? 0 : style.width / 2;
+            // Lines grow with people, but more gently (square root), so a
+            // boss web of big faces does not turn into thick bars.
+            const w = hidden ? 0 : (style.width * Math.sqrt(this.personScale)) / 2;
             if (this.is3d) {
                 // Ribbons turn to face the camera so they keep their width
                 // from every angle.
@@ -701,12 +757,24 @@ export class NetworkView {
             }
             const base = LINK_COLORS[style.color];
             const m = style.pulse ? pulse : 1;
+            const onTop = overlay && kind === 'risk' && !hidden;
             for (let v = 0; v < 4; v++) {
+                // Overlay copy of this quad, or a zero-area quad when not red.
+                const at = k - 12 + v * 3;
+                rpos[at] = onTop ? pos[at] : pa.x;
+                rpos[at + 1] = onTop ? pos[at + 1] : pa.y;
+                rpos[at + 2] = onTop ? pos[at + 2] : pa.z;
+                rcol[c] = base.r * m; rcol[c + 1] = base.g * m; rcol[c + 2] = base.b * m;
                 col[c++] = base.r * m; col[c++] = base.g * m; col[c++] = base.b * m;
             }
         }
         this.linkMesh.geometry.attributes.position.needsUpdate = true;
         this.linkMesh.geometry.attributes.color.needsUpdate = true;
+        if (this.riskMesh) {
+            this.riskMesh.visible = overlay;
+            this.riskMesh.geometry.attributes.position.needsUpdate = true;
+            this.riskMesh.geometry.attributes.color.needsUpdate = true;
+        }
     }
 
     // Client (CSS pixel) position of a world point, for DOM effects.
@@ -722,13 +790,13 @@ export class NetworkView {
     fitTarget() {
         const pts = [];
         for (const o of this.nodeObjs.values()) if (!o.boxed) pts.push(o.pos);
-        return fitCamera(pts, { fovDeg: this.camera.fov, aspect: this.camera.aspect, pad: FIT_PAD });
+        return fitCamera(pts, { fovDeg: this.camera.fov, aspect: this.camera.aspect, pad: FIT_PAD + 0.6 * (this.personScale - 1) });
     }
 
     fitTarget3d() {
         const pts = [];
         for (const o of this.nodeObjs.values()) if (!o.boxed) pts.push(o.pos);
-        return fitOrbit(pts, { fovDeg: this.camera.fov, aspect: this.camera.aspect, pad: FIT_PAD, yaw: this.cam3.yaw, pitch: this.cam3.pitch });
+        return fitOrbit(pts, { fovDeg: this.camera.fov, aspect: this.camera.aspect, pad: FIT_PAD + 0.6 * (this.personScale - 1), yaw: this.cam3.yaw, pitch: this.cam3.pitch });
     }
 
     // Turn the 3D web so the sick people are on the camera's side.
@@ -845,6 +913,7 @@ export class NetworkView {
         this.updateModeButton();
         if (this.is3d) this.faceTheSick();
         this.frameNetwork();
+        this.updatePersonScale();
     }
 
     // While the layout is still spreading out, keep easing the camera so the
@@ -887,20 +956,37 @@ export class NetworkView {
 
     layoutParams() {
         const aspect = Math.round(this.viewAspect() * 20) / 20; // ignore tiny resizes
-        if (!this._layoutParams || this._layoutAspect !== aspect) {
+        if (!this._layoutParams || this._layoutAspect !== aspect || this._layoutScale !== this.personScale) {
             this._layoutAspect = aspect;
-            this._layoutParams = layoutForAspect(aspect);
+            this._layoutScale = this.personScale;
+            this._layoutParams = layoutForPersonScale(layoutForAspect(aspect), this.personScale);
         }
         return this._layoutParams;
     }
 
     layoutParams3d() {
         const aspect = Math.round(this.viewAspect() * 20) / 20;
-        if (!this._layout3d || this._layout3dAspect !== aspect) {
+        if (!this._layout3d || this._layout3dAspect !== aspect || this._layout3dScale !== this.personScale) {
             this._layout3dAspect = aspect;
-            this._layout3d = layout3dForAspect(aspect, LAYOUT_3D);
+            this._layout3dScale = this.personScale;
+            this._layout3d = layoutForPersonScale(layout3dForAspect(aspect, LAYOUT_3D), this.personScale);
         }
         return this._layout3d;
+    }
+
+    // Item 14: grow people until the farthest one is MIN_PERSON_PX wide at
+    // the fitted view (in 2D everyone sits at the camera distance).
+    updatePersonScale() {
+        const heightPx = this.container?.clientHeight || 0;
+        if (!heightPx || !this.camera) return;
+        const pts = [];
+        for (const o of this.nodeObjs.values()) if (!o.boxed) pts.push(o.pos);
+        if (!pts.length) return;
+        const view = this.is3d ? this.cam3 : { distance: this.cam.distance, tx: this.cam.cx, ty: this.cam.cy, tz: 0 };
+        const depth = this.is3d ? backDepth(pts, view) : view.distance;
+        // Ask for people at their current size: the factor compounds.
+        const want = personScaleFor({ faceWorld: FACE_SCALE * this.personScale, depth, heightPx, fovDeg: this.camera.fov, minPx: MIN_PERSON_PX });
+        this.personScale = Math.min(MAX_PERSON_SCALE, this.personScale * want);
     }
 
     layoutObjs() {
@@ -986,6 +1072,7 @@ export class NetworkView {
 
         for (const obj of this.nodeObjs.values()) {
             obj.group.position.copy(obj.pos);
+            obj.group.scale.setScalar(this.personScale);
             // In 3D each person (ring, halo, badge) turns to face the camera.
             if (this.is3d) obj.group.quaternion.copy(this.camera.quaternion);
             else obj.group.quaternion.identity();
@@ -1404,7 +1491,7 @@ export class NetworkView {
             const c = toScreen(obj.pos);
             // Radius on screen: offset along the camera's right vector so it
             // stays right in 3D at any angle.
-            _tmp2.set(NODE_RADIUS, 0, 0).applyQuaternion(this.camera.quaternion).add(obj.pos);
+            _tmp2.set(NODE_RADIUS * this.personScale, 0, 0).applyQuaternion(this.camera.quaternion).add(obj.pos);
             const edge = toScreen(_tmp2);
             screenOf.set(obj, c);
             nodes.push({ x: c.x, y: c.y, r: Math.hypot(edge.x - c.x, edge.y - c.y), node: obj.node });

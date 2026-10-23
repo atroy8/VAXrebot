@@ -7,7 +7,8 @@
 //
 // Level shape (unchanged from rounds 1 to 13, plus optional fields):
 //   { id, name, regionId, scenarioId, difficultyId, blurb, target, tuning,
-//     systemId, planetIndex, levelInPlanet, lessonId, variant? }
+//     systemId, planetIndex, levelInPlanet, lessonId, population, variant? }
+// population: [lo, hi] people for this level (item 14, PLANET_POPULATION).
 // Variants (puzzle levels, see src/sim/variants.js):
 //   superSpreader  one alien carrier with many contacts starts sick; stop it
 //   envoy          protect one marked person: if they fall ill, you lose
@@ -54,6 +55,27 @@ export const PLANET_DEFS = [
 ];
 
 export const LEVELS_PER_PLANET = 10;
+
+// Item 14 (Adam's Oct 21 notes): small webs you can read at a glance. Each
+// planet sets how many people its levels have, growing from 10 to 12 on the
+// first planet to 21 to 25 on the last. Ranges never shrink from one planet
+// to the next, and a planet's boss uses the top of its range.
+export const PLANET_POPULATION = [
+    [10, 12], // Mizuho
+    [11, 13], // Hanabi
+    [12, 15], // Tsukimi
+    [14, 17], // Kumoji
+    [15, 19], // Sango
+    [17, 21], // Yukimi
+    [19, 23], // Hotaru
+    [21, 25], // Kaminari
+];
+
+// The people range one level plays with: [lo, hi], both inclusive.
+export function populationFor(planetIndex, slot = {}) {
+    const [lo, hi] = PLANET_POPULATION[Math.min(PLANET_POPULATION.length - 1, Math.max(0, planetIndex))];
+    return slot.boss ? [hi, hi] : [lo, hi];
+}
 
 // What each slot on a planet plays like. Every planet keeps the same rhythm:
 // learn, play, a puzzle, play, a twist, play, protect someone, play, a twist,
@@ -140,9 +162,10 @@ export function defaultTuning(difficultyId, slot) {
 function variantFor(slot) {
     if (!slot.variant) return undefined;
     if (slot.variant === 'superSpreader') {
-        // The carrier gets extra contacts; on puzzle levels quarantine
-        // arrives a day early so isolating the carrier is possible in time.
-        return { type: 'superSpreader', degree: slot.boss ? 14 : 11, toolDays: { quarantine: 2 }, boss: !!slot.boss };
+        // The carrier knows about half the web (a bit more on a boss); on
+        // puzzle levels quarantine arrives a day early so isolating the
+        // carrier is possible in time.
+        return { type: 'superSpreader', degreeShare: slot.boss ? 0.56 : 0.5, toolDays: { quarantine: 2 }, boss: !!slot.boss };
     }
     if (slot.variant === 'envoy') return { type: 'envoy', minDistance: 3 };
     return { type: slot.variant };
@@ -183,6 +206,7 @@ export function buildCampaign() {
                 // Per-level star target (round 17, scripts/tune-stars.mjs).
                 target: STAR_TARGETS[id] ?? 800,
                 lessonId,
+                population: populationFor(pi, slot),
                 tuning: { ...defaultTuning(difficultyId, slot), ...(CAMPAIGN_TUNING[id] || {}) },
             };
             if (variant) level.variant = variant;

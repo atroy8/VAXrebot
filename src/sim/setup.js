@@ -12,7 +12,7 @@ export function buildOutbreak({ scenario, population, variant = null, rng = Math
     Math.random = rng;
     let links;
     try {
-        ({ links } = generateNetwork(scenario.networkType, population));
+        ({ links } = generateNetwork(scenario.networkType, population, rng));
     } finally {
         Math.random = saved;
     }
