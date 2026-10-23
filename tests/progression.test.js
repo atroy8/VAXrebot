@@ -49,6 +49,15 @@ function winStats(overrides = {}) {
 
 const LEVEL_0 = LEVELS[0].id;
 
+// Round 20: the small-web retune (item 17) gives every level its own star
+// target and a short par. These tests check the scoring formula itself, so
+// they pin the first planet to the classic 800 point target and 18 day par
+// (module state is per test file, so other tests see the real tuning).
+for (const level of LEVELS.filter((l) => l.regionId === REGIONS[0].id)) {
+    level.target = 800;
+    level.tuning.parDays = 18;
+}
+
 describe('save system', () => {
     it('round-trips a save through the memory backend', () => {
         const storage = createMemoryBackend();

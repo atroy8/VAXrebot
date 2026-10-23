@@ -11,13 +11,15 @@
 // at-risk lines get bolder while Sever is selected, plain lines thicken just
 // enough to show they can be cut, and protected lines fade back.
 
+// Item 15 (round 20): every line about 1.5x thicker, so lines read on a
+// phone and are easier to aim at. The view also scales them with people.
 export const LINK_WIDTHS = Object.freeze({
-    normal: 0.09,
-    risk: 0.15,
-    blocked: 0.09,
-    severNormal: 0.11,
-    severRisk: 0.24,
-    severBlocked: 0.07,
+    normal: 0.14,
+    risk: 0.22,
+    blocked: 0.12,
+    severNormal: 0.16,
+    severRisk: 0.34,
+    severBlocked: 0.1,
 });
 
 export function linkStyle(kind, severing = false) {
