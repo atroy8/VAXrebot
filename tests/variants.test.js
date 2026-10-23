@@ -6,7 +6,7 @@ import { levelRules } from '../src/config/level-rules.js';
 import { tools } from '../src/config/tools.js';
 import { scenarios } from '../src/config/scenarios.js';
 import { buildOutbreak } from '../src/sim/setup.js';
-import { placeSuperSpreader, placeEnvoy, distancesFromSick, adjacency, envoyLost, variantCallout } from '../src/sim/variants.js';
+import { placeSuperSpreader, placeEnvoy, distancesFromSick, adjacency, envoyLost, variantCallout, carrierDegree } from '../src/sim/variants.js';
 import { checkGameOver, canUseTool, toolAvailableDay, spreadIsOver } from '../src/sim/engine.js';
 import { actionsRemaining, advanceDay, endStayHome } from '../src/sim/actions.js';
 import { initGameState } from '../src/sim/state.js';
@@ -30,7 +30,7 @@ describe('super-spreader levels', () => {
                 expect(carriers[0].state).toBe('infected');
                 expect(run.state.superSpreaderId).toBe(carriers[0].id);
                 const adj = adjacency(run.network.nodes, run.network.links);
-                expect(adj.get(carriers[0].id).size).toBeGreaterThanOrEqual(level.variant.degree);
+                expect(adj.get(carriers[0].id).size).toBeGreaterThanOrEqual(carrierDegree(run.network.nodes.length, level.variant));
                 // Nobody has more contacts than the carrier.
                 for (const n of run.network.nodes) expect(adj.get(n.id).size).toBeLessThanOrEqual(adj.get(carriers[0].id).size);
                 // Starting cases still match the level's tuning.
@@ -42,7 +42,8 @@ describe('super-spreader levels', () => {
     it('bosses have the most connected carrier', () => {
         const boss = LEVELS[9];
         expect(boss.variant).toMatchObject({ type: 'superSpreader', boss: true });
-        expect(boss.variant.degree).toBeGreaterThan(LEVELS[2].variant.degree);
+        expect(boss.variant.degreeShare).toBeGreaterThan(LEVELS[2].variant.degreeShare);
+        expect(carrierDegree(25, LEVELS.at(-1).variant)).toBe(14);
     });
 
     it('quarantine arrives on day 2 on super-spreader levels, day 3 elsewhere', () => {

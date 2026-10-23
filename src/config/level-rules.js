@@ -16,6 +16,8 @@ export function levelRules(level) {
     const scenario = { ...scenarios[level.scenarioId] };
     if (t.initialInfected != null) scenario.initialInfected = t.initialInfected;
     if (t.caseCapFraction != null) scenario.caseCapFraction = t.caseCapFraction;
+    // Item 14: each planet sets its own web size (src/config/campaign.js).
+    if (Array.isArray(level.population)) scenario.populationRange = [...level.population];
     const difficulty = { ...difficulties[level.difficultyId] };
     if (t.transmissionMultiplier != null) difficulty.transmissionMultiplier = t.transmissionMultiplier;
     if (t.dailyLimits) difficulty.dailyLimits = { ...t.dailyLimits };

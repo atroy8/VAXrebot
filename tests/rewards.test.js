@@ -8,7 +8,9 @@ import { initGameState } from '../src/sim/state.js';
 import { tools } from '../src/config/tools.js';
 import { parDaysFor } from '../src/progress.js';
 
-const level = LEVELS[0];
+// Pinned to an 18 day par so the speed cap is reachable (round 20 tuning
+// gives level 1 a 6 day par).
+const level = { ...LEVELS[0], tuning: { ...LEVELS[0].tuning, parDays: 18 } };
 const par = parDaysFor(level);
 const stats = (o = {}) => ({ initialPopulation: 40, totalDead: 0, totalRecovered: 5, treated: 3, isolated: 2, daysUsed: par - 3, ...o });
 
