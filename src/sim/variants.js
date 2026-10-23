@@ -1,7 +1,7 @@
 // Puzzle level variants (round 14). Pure: no DOM, rng injectable.
 //
 // A level may carry `variant` (src/config/campaign.js):
-//   superSpreader { degree, toolDays, boss }  one carrier with many contacts
+//   superSpreader { degreeShare or degree, toolDays, boss }  one carrier with many contacts
 //                                            starts sick (node.superSpreader)
 //   envoy { minDistance }                     one marked person far from the
 //                                            first cases (node.envoy); if the
@@ -24,9 +24,17 @@ export function adjacency(nodes, links) {
     return adj;
 }
 
+// Contacts the carrier should have: `degreeShare` of the rest of the web
+// (item 14: about half), or a fixed `degree`.
+export function carrierDegree(population, { degree, degreeShare } = {}) {
+    if (degreeShare != null) return Math.max(2, Math.round(degreeShare * population));
+    return degree ?? 10;
+}
+
 // Pick the best connected person, give them extra contacts until they have
-// `degree` of them, and make them sick. Returns the carrier node.
-export function placeSuperSpreader(nodes, links, { degree = 10 } = {}, rng = Math.random) {
+// enough of them (carrierDegree), and make them sick. Returns the carrier node.
+export function placeSuperSpreader(nodes, links, opts = {}, rng = Math.random) {
+    const degree = carrierDegree(nodes.length, opts);
     const adj = adjacency(nodes, links);
     let carrier = nodes[0];
     for (const n of nodes) if (adj.get(n.id).size > adj.get(carrier.id).size) carrier = n;
