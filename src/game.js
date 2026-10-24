@@ -64,7 +64,7 @@ import {
     closeRCard,
     isRCardOpen,
 } from './ui/panels.js';
-import { fillBriefing, showThreat, fillLessonCard, showVariantCallout, showStarGoal } from './ui/briefing.js';
+import { fillBriefing, showThreat, fillLessonCard, showVariantCallout, showStarGoal, showToolkit } from './ui/briefing.js';
 import { variantCallout } from './sim/variants.js';
 import { renderLevelSelect } from './ui/level-select.js';
 import { AudioEngine } from './audio.js';
@@ -305,6 +305,7 @@ export class EpidemicSimulator {
         const lesson = lessonFor(level.id);
         fillLessonCard('briefing-lesson', lesson?.title, lesson?.brief);
         showVariantCallout(variantCallout(level.variant));
+        showToolkit(level.toolkit);
         // Start fetching the network view while the player reads the briefing.
         this.viewLoader.prefetch();
         this.showScreen('briefing');

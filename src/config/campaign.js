@@ -9,6 +9,7 @@
 //   { id, name, regionId, scenarioId, difficultyId, blurb, target, tuning,
 //     systemId, planetIndex, levelInPlanet, lessonId, population, variant? }
 // population: [lo, hi] people for this level (item 14, PLANET_POPULATION).
+// toolkit: { id, tools, why, toolDays? } (item 16, src/config/toolkits.js).
 // Variants (puzzle levels, see src/sim/variants.js):
 //   superSpreader  one alien carrier with many contacts starts sick; stop it
 //   envoy          protect one marked person: if they fall ill, you lose
@@ -18,6 +19,7 @@
 // scripts/tune-campaign.mjs); levels without an entry use the defaults below.
 import { CAMPAIGN_TUNING } from './campaign-tuning.js';
 import { STAR_TARGETS } from './star-targets.js';
+import { toolkitForSlot } from './toolkits.js';
 
 export const SYSTEMS = [
     {
@@ -120,6 +122,17 @@ const VARIANT_BLURB = {
 // Lessons rotate through the core ideas on normal levels; puzzle levels
 // teach the idea they are built around (see src/config/lessons.js).
 const CORE_LESSONS = ['act-early', 'isolation', 'hubs', 'keep-r-below-1', 'herd-immunity', 'cut-bridges', 'ring-vaccination', 'layers', 'flatten-curve'];
+// Item 16: a lesson that teaches a tool only goes to levels whose toolkit
+// has that tool (no ring vaccination lesson on a Sever-only festival).
+export const LESSON_NEEDS = {
+    isolation: ['quarantine'],
+    'herd-immunity': ['vaccinate'],
+    'ring-vaccination': ['vaccinate'],
+    layers: ['vaccinate', 'quarantine', 'severLink'],
+};
+export function lessonFits(lessonId, kitTools) {
+    return (LESSON_NEEDS[lessonId] || []).every((t) => kitTools.includes(t));
+}
 const VARIANT_LESSON = { superSpreader: 'super-spreaders', envoy: 'protect-vulnerable', noVaccines: 'contact-tracing', noQuarantine: 'ring-vaccination' };
 
 // Difficulty bands by planet: easy on the first system, medium in the
@@ -191,7 +204,19 @@ export function buildCampaign() {
             // Spread the place names so no two levels on a planet share a name.
             const place = planet.places[(k + Math.floor(k / 5)) % planet.places.length];
             const variant = variantFor(slot);
-            const lessonId = slot.variant ? VARIANT_LESSON[slot.variant] : CORE_LESSONS[(core++) % CORE_LESSONS.length];
+            const toolkit = toolkitForSlot(k);
+            let lessonId = slot.variant ? VARIANT_LESSON[slot.variant] : null;
+            if (!lessonId) {
+                // Next core lesson in the rotation that fits this toolkit.
+                for (let tries = 0; tries < CORE_LESSONS.length; tries++) {
+                    const pick = CORE_LESSONS[(core + tries) % CORE_LESSONS.length];
+                    if (lessonFits(pick, toolkit.tools)) {
+                        lessonId = pick;
+                        core += tries + 1;
+                        break;
+                    }
+                }
+            }
             const name = slot.boss ? `${planet.name} Carrier Showdown` : SITE[slot.scenarioId](place);
             const level = {
                 id,
@@ -207,6 +232,8 @@ export function buildCampaign() {
                 target: STAR_TARGETS[id] ?? 800,
                 lessonId,
                 population: populationFor(pi, slot),
+                // Item 16: the tools this level offers (src/config/toolkits.js).
+                toolkit,
                 tuning: { ...defaultTuning(difficultyId, slot), ...(CAMPAIGN_TUNING[id] || {}) },
             };
             if (variant) level.variant = variant;

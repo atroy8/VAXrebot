@@ -21,3 +21,30 @@
     line-height: 1.35;
     color: var(--color-text-secondary, #55617f);
 }
+
+/* Toolkit card on the briefing (item 16): the tools this level offers. */
+.toolkit-card {
+    margin: 0 0 var(--space-16, 16px);
+    padding: 10px 14px;
+    border-radius: 14px;
+    background: var(--ai-100, #e8eef8);
+    border: 1px solid var(--ai-200, #c7d6f0);
+    border-left: 4px solid var(--kin, #c9a227);
+    text-align: left;
+}
+.toolkit-card[hidden] { display: none; }
+.kit-title { display: block; font-size: 1rem; color: var(--ai-800, #13265a); }
+.kit-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 4px; }
+.kit-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-weight: 600;
+    font-size: 0.88rem;
+    color: #fff;
+    background: var(--kit-color);
+}
+.kit-chip small { font-weight: 500; opacity: 0.85; font-size: 0.72rem; }
+.kit-why { margin: 2px 0 0; font-size: 0.88rem; line-height: 1.35; color: var(--color-text-secondary, #55617f); }
