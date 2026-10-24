@@ -96,7 +96,8 @@ describe('level rules and daily actions', () => {
             const { scenario, difficulty } = levelRules(level);
             expect(scenario.caseCapFraction).toBeGreaterThan(0);
             expect(level.tuning.parDays).toBeGreaterThan(0);
-            expect(difficulty.dailyLimits.severLink).toBeGreaterThan(0);
+            // Item 16: every tool in the level's toolkit has at least 1 use a day.
+            for (const id of level.toolkit.tools) expect(difficulty.dailyLimits[id], `${level.id} ${id}`).toBeGreaterThan(0);
         }
     });
     it('level rules never mutate the shared scenario config', () => {
