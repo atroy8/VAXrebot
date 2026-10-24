@@ -29,8 +29,14 @@ export function toolHint(toolId, tools = {}) {
 // state: 'ready' | 'locked' (not yet available) | 'spent' (daily limit hit)
 //        | 'off' (none on this world: a puzzle level with a limit of 0)
 //        | 'empty' (power-up with no charges: tapping opens the shop)
+//
+// Item 16: when the level has a toolkit (difficulty.toolkit), classic tools
+// outside it get no chip at all, so the tray only shows what this level
+// offers. Power-ups always show.
 export function toolChips(tools, difficulty, day, dailyUsage, charges = {}) {
-    return Object.entries(tools).map(([id, tool]) => {
+    const kit = difficulty && Array.isArray(difficulty.toolkit) ? difficulty.toolkit : null;
+    const entries = Object.entries(tools).filter(([id, tool]) => tool.consumable || !kit || kit.includes(id));
+    return entries.map(([id, tool]) => {
         const label = plainName(tool.name);
         if (tool.consumable) {
             const left = charges[tool.chargeId || id] || 0;
