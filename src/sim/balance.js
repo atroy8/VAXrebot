@@ -18,7 +18,7 @@ import { tools } from '../config/tools.js';
 import { LEVELS } from '../config/levels.js';
 import { buildOutbreak } from './setup.js';
 import { initGameState } from './state.js';
-import { canUseTool } from './engine.js';
+import { canUseTool, toolDailyLimit } from './engine.js';
 import { applyNodeTool, severLink, advanceDay, neighbors, allActionsSpent } from './actions.js';
 import { calculateStars, calculateScore } from '../progress.js';
 
@@ -48,15 +48,24 @@ export function buildRun(level, rng) {
 }
 
 const degree = (network, id) => neighbors(network, id).length;
+
+// Classic tools this run offers: the level's toolkit, minus any tool with a
+// daily limit of 0. The bots only ever reach for these.
+export function offeredTools(run) {
+    const kit = run.difficulty.toolkit || ['vaccinate', 'quarantine', 'severLink'];
+    return kit.filter((id) => toolDailyLimit(tools[id], run.difficulty, id) > 0);
+}
 const byId = (network) => new Map(network.nodes.map((n) => [n.id, n]));
 
 function tryNode(run, toolId, node) {
+    if (run.difficulty.toolkit && !run.difficulty.toolkit.includes(toolId)) return false;
     const { allowed } = canUseTool(run.state, tools, toolId, run.difficulty, node);
     if (!allowed) return false;
     applyNodeTool(run.state, tools, toolId, node);
     return true;
 }
 function tryLink(run, link) {
+    if (run.difficulty.toolkit && !run.difficulty.toolkit.includes('severLink')) return false;
     const { allowed } = canUseTool(run.state, tools, 'severLink', run.difficulty);
     if (!allowed) return false;
     severLink(run.state, run.network, link);
@@ -129,12 +138,16 @@ export const BOTS = {
         const front = [...new Set(healthyContacts().map((c) => c.id))];
         for (const id of shuffled(front, rng)) tryNode(run, 'vaccinate', map.get(id));
     },
+    // Random taps with the tools this level offers (item 16: its toolkit).
     random(run, rng) {
+        const kit = offeredTools(run);
+        if (!kit.length) return;
         for (let guard = 0; guard < 40 && !allActionsSpent(run.state, tools, run.difficulty); guard++) {
             const live = run.network.nodes.filter((n) => !n.removed);
-            const pick = rng();
-            if (pick < 0.34 && run.network.links.length) tryLink(run, run.network.links[Math.floor(rng() * run.network.links.length)]);
-            else tryNode(run, pick < 0.67 ? 'vaccinate' : 'quarantine', live[Math.floor(rng() * live.length)]);
+            const toolId = kit[Math.floor(rng() * kit.length)];
+            if (toolId === 'severLink') {
+                if (run.network.links.length) tryLink(run, run.network.links[Math.floor(rng() * run.network.links.length)]);
+            } else tryNode(run, toolId, live[Math.floor(rng() * live.length)]);
         }
     },
     smart(run) {

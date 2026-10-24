@@ -11,6 +11,9 @@
 //   caseCapFraction  share of the web that may fall sick before you lose
 // and par days are the smart bot's median winning day.
 //
+// Item 16 (round 21): limits are only searched for the tools in a level's
+// toolkit (src/config/toolkits.js); every other tool stays at 0.
+//
 // Target smart win rate for level i of 80 (t = i / 79):
 //   base(t) = 0.92 - 0.42 t                 (0.92 on level 1, 0.50 at the end)
 //   + 0.03 on a planet's first level, sliding to -0.03 on its 9th
@@ -31,7 +34,7 @@ export function winTarget(i, n = LEVELS.length) {
 }
 export const randomCap = (i, n = LEVELS.length) => Math.max(0.06, 0.2 - 0.9 * (i / (n - 1)));
 
-// Daily uses per tool before a level's twist (no vaccines / no wards).
+// Daily uses per tool for a level with all three tools.
 export const LIMIT_PRESETS = [
     { vaccinate: 2, quarantine: 2, severLink: 2 },
     { vaccinate: 2, quarantine: 1, severLink: 2 },
@@ -43,19 +46,30 @@ export const LIMIT_PRESETS = [
     { vaccinate: 1, quarantine: 1, severLink: 1 },
 ];
 export const CAPS = [0.25, 0.35, 0.45, 0.55];
+const CLASSIC = ['vaccinate', 'quarantine', 'severLink'];
 
-export function limitsFor(preset, variant) {
+// Item 16 (round 21): candidate daily limits for a level's toolkit. Tools
+// outside the kit are 0. A smaller kit may use each of its tools more often
+// (1 to 3 a day with two tools, 1 to 4 with one), so a level with fewer
+// tools still gives about as many actions a day.
+export function presetsFor(kit = CLASSIC) {
+    const zero = { vaccinate: 0, quarantine: 0, severLink: 0 };
+    if (kit.length >= 3) return LIMIT_PRESETS.map((p) => ({ ...p }));
+    if (kit.length === 2) {
+        const out = [];
+        for (let a = 1; a <= 3; a++) for (let b = 1; b <= 3; b++) out.push({ ...zero, [kit[0]]: a, [kit[1]]: b });
+        return out;
+    }
+    return [1, 2, 3, 4].map((n) => ({ ...zero, [kit[0]]: n }));
+}
+export const maxActions = (kit = CLASSIC) => (kit.length === 1 ? 4 : 6);
+
+// Kept for older callers: a preset with a variant's missing tool set to 0.
+export function limitsFor(preset, variant, kit = CLASSIC) {
     const d = { ...preset };
-    if (variant?.type === 'noVaccines') {
-        d.vaccinate = 0;
-        d.severLink += 1;
-        d.quarantine += 1;
-    }
-    if (variant?.type === 'noQuarantine') {
-        d.quarantine = 0;
-        d.vaccinate += 1;
-        d.severLink += 1;
-    }
+    for (const id of CLASSIC) if (!kit.includes(id)) d[id] = 0;
+    if (variant?.type === 'noVaccines') d.vaccinate = 0;
+    if (variant?.type === 'noQuarantine') d.quarantine = 0;
     return d;
 }
 
@@ -77,8 +91,9 @@ export function tuneLevel(li, runs) {
     const t = li / (LEVELS.length - 1);
     const cands = [];
     const quick = Math.max(24, Math.round(runs / 2));
-    for (const preset of LIMIT_PRESETS) {
-        const dailyLimits = limitsFor(preset, base.variant);
+    const kit = base.toolkit ? base.toolkit.tools : CLASSIC;
+    for (const preset of presetsFor(kit)) {
+        const dailyLimits = limitsFor(preset, base.variant, kit);
         for (const cap of CAPS) {
             for (let inf = 1; inf <= 3; inf++) {
                 const make = (tm) => ({ ...base, tuning: { ...base.tuning, initialInfected: inf, transmissionMultiplier: +tm.toFixed(2), caseCapFraction: cap, dailyLimits } });
@@ -95,7 +110,7 @@ export function tuneLevel(li, runs) {
                 const r = rate(level, 'smart', runs, 7919);
                 // Early planets lean toward more actions a day, so the first
                 // levels feel like you are in control.
-                const fewer = 6 - (preset.vaccinate + preset.quarantine + preset.severLink);
+                const fewer = Math.max(0, maxActions(kit) - (preset.vaccinate + preset.quarantine + preset.severLink));
                 cands.push({ level, win: r.win, res: r.res, err: (r.win - target) ** 2 + 0.0015 * fewer * (1 - t) });
             }
         }
