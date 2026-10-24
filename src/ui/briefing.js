@@ -1,3 +1,5 @@
+import { toolkitCard } from '../config/toolkits.js';
+
 // Briefing screen. There is no difficulty picker any more: each play rolls
 // its own threat (src/config/difficulty-roll.js) and the briefing shows it
 // as one to five pips plus a plain line about how fast it is spreading.
@@ -73,4 +75,26 @@ export function starGoalLine({ parDays = 0, best = 0 } = {}) {
 export function showStarGoal(opts) {
     const el = document.getElementById('star-goal');
     if (el) el.textContent = starGoalLine(opts);
+}
+
+// Toolkit card (item 16): which tools this level offers and why, as chips in
+// the tool tray's colours. Pure markup so it is unit tested.
+const KIT_COLORS = { Vaccinate: '#7c3aed', Quarantine: '#f97316', Sever: '#0ea5e9' };
+const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+
+export function toolkitMarkup(toolkit) {
+    const card = toolkitCard(toolkit);
+    if (!card) return '';
+    const chips = card.tools
+        .map((t) => `<span class="kit-chip" style="--kit-color:${KIT_COLORS[t] || '#64748b'}">${esc(t)}${card.firstDay.includes(t) ? '<small>day 1</small>' : ''}</span>`)
+        .join('');
+    return `<strong class="kit-title">${esc(card.title)}</strong><div class="kit-chips">${chips}</div><p class="kit-why">${esc(card.why)}</p>`;
+}
+
+export function showToolkit(toolkit) {
+    const el = document.getElementById('briefing-toolkit');
+    if (!el) return;
+    const html = toolkitMarkup(toolkit);
+    el.innerHTML = html;
+    el.hidden = !html;
 }

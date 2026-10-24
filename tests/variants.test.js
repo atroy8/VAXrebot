@@ -158,12 +158,15 @@ describe('levels without a tool', () => {
         for (const level of byType('noQuarantine')) expect(levelRules(level).difficulty.dailyLimits.quarantine).toBe(0);
     });
 
-    it('a tool with no doses shows None here, cannot be used, and is never an unused action', () => {
+    it('a tool with no doses has no chip, cannot be used, and is never an unused action', () => {
         const d = levelRules(byType('noVaccines')[0]).difficulty;
         const state = initGameState(tools, 30);
         state.day = 5;
-        const chip = toolChips(tools, d, 5, state.dailyUsage).find((c) => c.id === 'vaccinate');
-        expect(chip).toMatchObject({ state: 'off', usage: 'None here' });
+        // Item 16: tools outside the toolkit are left out of the tray.
+        expect(toolChips(tools, d, 5, state.dailyUsage).find((c) => c.id === 'vaccinate')).toBeUndefined();
+        // Without a toolkit a 0 limit still shows as None here.
+        const bare = { ...d, toolkit: undefined };
+        expect(toolChips(tools, bare, 5, state.dailyUsage).find((c) => c.id === 'vaccinate')).toMatchObject({ state: 'off', usage: 'None here' });
         const res = canUseTool(state, tools, 'vaccinate', d, { id: 1, state: 'healthy' });
         expect(res.allowed).toBe(false);
         expect(res.reason).toBe('No vaccines on this world.');
