@@ -31,8 +31,5 @@ export function hexNum(hex) {
     return parseInt(hex.replace('#', ''), 16);
 }
 
-// Gold flakes and paper specks scattered on the land (were candy sprinkles).
-export const FLAKES = [THEME.kin100, THEME.kin300, '#ffffff', THEME.kin400, THEME.ai200];
-
 // Confetti for prize boxes: gold, paper, indigo, sky and one vermilion.
 export const CONFETTI = [THEME.kin400, THEME.kin100, '#ffffff', THEME.ai500, THEME.ai200, THEME.shu].map(hexNum);
