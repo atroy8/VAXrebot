@@ -1,5 +1,5 @@
 // Galaxy home screen (3D, round 14): three star systems, each a striped sun
-// with 2 or 3 glossy planets on circular orbits, seen from straight above so
+// with 2 or 3 cloisonne enamel planets on circular orbits, seen from straight above so
 // every orbit is a true circle. Tap a system to zoom in, tap a planet to fly
 // down to it and see its 10 levels on a winding road with bouncy level
 // buttons and wobbling prize boxes. Planets and suns are painted from Sanzo
@@ -29,6 +29,9 @@ import { orbitAngle, orbitPosition, systemCamera, galaxyCamera, planetStatus, sy
 import { planetPalette, starPalette, comboFor, hexToRgb } from '../config/planet-palettes.js';
 import { takeChestRequest, chestDestination } from './pending-chest.js';
 import { THEME, CONFETTI, hexNum } from '../config/theme.js';
+import { cloisonnePlan, paintCloisonne, TEXTURE_W, TEXTURE_H } from './cloisonne.js';
+import { buildingParts, buildingFor, buildingColors, leanWeights, buildingExtent, labelLift } from './buildings.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 // Level buttons: the planet's colour while open, gold once beaten.
 const LOCKED_COLOR = 0x9aa6bf;
@@ -66,126 +69,18 @@ function seedOf(id) {
     return h >>> 0;
 }
 
-// Planet texture: a sea gradient with seigaiha waves, glossy continents with
-// pale outlines and flakes, and striped poles. All colours from the planet's
-// Wada palette. Drawn locally on a canvas, no downloads.
-function makeWorldTexture({ seed, ocean, land, frost, wave }) {
-    const w = 1024;
-    const h = 512;
+// Planet texture: a cloisonne enamel ball (item 18). Gold wire cells filled
+// with the planet's Wada colours, painted by src/ui/cloisonne.js. Drawn
+// locally on a canvas, no downloads.
+function makeWorldTexture({ combo, seed, index }) {
     const canvas = document.createElement('canvas');
-    canvas.width = w;
-    canvas.height = h;
-    const ctx = canvas.getContext('2d');
-
-    const sea = ctx.createLinearGradient(0, 0, 0, h);
-    sea.addColorStop(0, ocean[1]);
-    sea.addColorStop(0.5, ocean[0]);
-    sea.addColorStop(1, ocean[1]);
-    ctx.fillStyle = sea;
-    ctx.fillRect(0, 0, w, h);
-    // Seigaiha: the classic overlapping wave scales, in pale lines.
-    const R = 26;
-    ctx.lineWidth = 2.2;
-    for (let row = 0, y = 30; y < h + R; row++, y += R * 0.5) {
-        const off = row % 2 ? R : 0;
-        for (let x = -R + off; x < w + R; x += R * 2) {
-            for (let k = 0; k < 3; k++) {
-                ctx.strokeStyle = k === 0 ? rgba(wave, 0.26) : rgba(wave, 0.15);
-                ctx.beginPath();
-                ctx.arc(x, y, R - k * 7, Math.PI, Math.PI * 2);
-                ctx.stroke();
-            }
-        }
-    }
-
-    const rand = mulberry32(seed);
-    const blobs = [];
-    for (let c = 0; c < 9; c++) {
-        const cx = rand() * w;
-        const cy = h * 0.2 + rand() * h * 0.6;
-        const base = 34 + rand() * 52;
-        const color = land[c % land.length];
-        const parts = [];
-        for (let b = 0; b < 18; b++) {
-            const ang = rand() * Math.PI * 2;
-            const dist = rand() * base * 1.4;
-            parts.push({ x: cx + Math.cos(ang) * dist, y: cy + Math.sin(ang) * dist * 0.7, r: base * (0.4 + rand() * 0.5) });
-        }
-        blobs.push({ color, parts });
-    }
-    // Outline first, then the fill, then a glossy highlight.
-    for (const { parts } of blobs) {
-        ctx.fillStyle = frost;
-        for (const p of parts) {
-            ctx.beginPath();
-            ctx.arc(p.x, p.y, p.r + 6, 0, Math.PI * 2);
-            ctx.fill();
-        }
-    }
-    for (const { color, parts } of blobs) {
-        ctx.fillStyle = color;
-        for (const p of parts) {
-            ctx.beginPath();
-            ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-            ctx.fill();
-        }
-        ctx.fillStyle = 'rgba(255,255,255,0.28)';
-        for (const p of parts.slice(0, 6)) {
-            ctx.beginPath();
-            ctx.ellipse(p.x - p.r * 0.25, p.y - p.r * 0.3, p.r * 0.45, p.r * 0.22, -0.4, 0, Math.PI * 2);
-            ctx.fill();
-        }
-    }
-    // Flakes on the land.
-    const flakes = [frost, '#ffffff', land[1], land[3] || land[0]];
-    for (const { parts } of blobs) {
-        for (let k = 0; k < 26; k++) {
-            const p = parts[Math.floor(rand() * parts.length)];
-            const a = rand() * Math.PI * 2;
-            const d = rand() * p.r * 0.8;
-            ctx.save();
-            ctx.translate(p.x + Math.cos(a) * d, p.y + Math.sin(a) * d);
-            ctx.rotate(rand() * Math.PI);
-            ctx.fillStyle = flakes[Math.floor(rand() * flakes.length)];
-            roundRect(ctx, -5, -1.6, 10, 3.2, 1.6);
-            ctx.fill();
-            ctx.restore();
-        }
-    }
-    // Striped poles.
-    for (const [y0, y1] of [[0, 34], [h - 40, h]]) {
-        ctx.fillStyle = ocean[1];
-        ctx.fillRect(0, y0, w, y1 - y0);
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(0, y0, w, y1 - y0);
-        ctx.clip();
-        ctx.fillStyle = land[0];
-        for (let x = -60; x < w + 60; x += 28) {
-            ctx.beginPath();
-            ctx.moveTo(x, y1);
-            ctx.lineTo(x + 14, y1);
-            ctx.lineTo(x + 14 + 40, y0);
-            ctx.lineTo(x + 40, y0);
-            ctx.fill();
-        }
-        ctx.restore();
-    }
-
+    canvas.width = TEXTURE_W;
+    canvas.height = TEXTURE_H;
+    paintCloisonne(canvas.getContext('2d'), cloisonnePlan({ combo, seed, index }));
     const tex = new THREE.CanvasTexture(canvas);
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.anisotropy = 4;
     return tex;
-}
-
-function roundRect(ctx, x, y, w, h, r) {
-    ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.arcTo(x + w, y, x + w, y + h, r);
-    ctx.arcTo(x + w, y + h, x, y + h, r);
-    ctx.arcTo(x, y + h, x, y, r);
-    ctx.arcTo(x, y, x + w, y, r);
-    ctx.closePath();
 }
 
 // Diagonal stripe texture for roads, orbits and suns.
@@ -482,7 +377,7 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
         const globe = new THREE.Mesh(
             new THREE.SphereGeometry(GLOBE_RADIUS, 64, 48),
             new THREE.MeshPhysicalMaterial({
-                map: makeWorldTexture({ seed: seedOf(def.def.id), ...pal }),
+                map: makeWorldTexture({ combo: comboFor(def.def), seed: seedOf(def.def.id), index: pi }),
                 roughness: 0.42,
                 clearcoat: 1,
                 clearcoatRoughness: 0.18,
@@ -624,10 +519,36 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
         return el;
     }
 
-    // Glossy button standing on the surface.
-    const buttonGeo = new THREE.CylinderGeometry(0.085, 0.095, 0.04, 40);
-    const capGeo = new THREE.SphereGeometry(0.085, 32, 12, 0, Math.PI * 2, 0, Math.PI / 2);
+    // Level stops are small Japanese buildings (item 19, src/ui/buildings.js):
+    // one merged geometry per building type and role, shared by every stop.
     const ringGeo = new THREE.RingGeometry(0.1, 0.12, 40);
+    const buildingGeoCache = new Map();
+    function partGeometry(part) {
+        let g;
+        if (part.shape === 'box') g = new THREE.BoxGeometry(...part.size);
+        else if (part.shape === 'roof') g = new THREE.CylinderGeometry(part.top * Math.SQRT2, part.bottom * Math.SQRT2, part.h, 4, 1, false, Math.PI / 4);
+        else g = new THREE.CylinderGeometry(part.r, part.r, part.h, 8);
+        g.translate(...part.pos);
+        return g;
+    }
+    function buildingGeometries(type) {
+        if (!buildingGeoCache.has(type)) {
+            const byRole = {};
+            for (const part of buildingParts(type)) (byRole[part.role] ||= []).push(partGeometry(part));
+            const merged = {};
+            for (const [role, geos] of Object.entries(byRole)) {
+                merged[role] = mergeGeometries(geos.map((g) => (g.index ? g.toNonIndexed() : g)));
+                geos.forEach((g) => g.dispose());
+            }
+            buildingGeoCache.set(type, merged);
+        }
+        return buildingGeoCache.get(type);
+    }
+    const BUILDING_WALL = hexNum(THEME.washi);
+    const BUILDING_TRIM = hexNum(THEME.shu);
+    const BUILDING_STONE = 0x8d8778;
+    const shadowGeo = new THREE.CircleGeometry(0.15, 32);
+    const shadowMat = new THREE.MeshBasicMaterial({ color: hexNum(THEME.ai900), transparent: true, opacity: 0.5, depthWrite: false });
 
     function markerColor(m) {
         if (!m.unlocked) return LOCKED_COLOR;
@@ -650,15 +571,24 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
         const grp = new THREE.Group();
         standOn(grp, stop);
 
-        const mat = new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.25, clearcoat: 1, clearcoatRoughness: 0.08, sheen: 0.4 });
-        const base = new THREE.Mesh(buttonGeo, mat);
-        base.position.y = 0.02;
-        const cap = new THREE.Mesh(capGeo, mat);
-        cap.scale.y = 0.45;
-        cap.position.y = 0.04;
+        const building = buildingFor(level);
         const body = new THREE.Group();
-        body.add(base, cap);
+        const mats = {};
+        for (const [role, geo] of Object.entries(buildingGeometries(building))) {
+            const mat = role === 'roof'
+                ? new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.1 })
+                : new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: role === 'stone' ? 0.8 : 0.5 });
+            mats[role] = mat;
+            body.add(new THREE.Mesh(geo, mat));
+        }
+        const mat = mats.roof;
         grp.add(body);
+
+        // Soft ground shadow, so a building stands out from busy enamel.
+        const shadow = new THREE.Mesh(shadowGeo, shadowMat);
+        shadow.rotation.x = -Math.PI / 2;
+        shadow.position.y = 0.003;
+        grp.add(shadow);
 
         const ring = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false }));
         ring.rotation.x = -Math.PI / 2;
@@ -673,7 +603,7 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
         pickables.push(hit);
 
         const label = addLabel('', '');
-        const marker = { kind: 'level', index, local, planet: pi, stop, level, grp, body, mat, ring, label, unlocked: false, done: false, squishAt: -1 };
+        const marker = { kind: 'level', index, local, planet: pi, stop, level, building, grp, body, mat, mats, ring, label, unlocked: false, done: false, squishAt: -1 };
         state.levelMarkers.push(marker);
         planet.world.add(grp);
         return marker;
@@ -683,9 +613,24 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
         const rec = levelRecord(state.save, m.level.id);
         m.unlocked = isLevelUnlocked(state.save, LEVELS, REGIONS, m.level.id);
         m.done = rec.completed;
-        m.mat.color.setHex(markerColor(m));
-        m.mat.emissive.setHex(markerColor(m));
-        m.mat.emissiveIntensity = m.unlocked ? 0.12 : 0;
+        const current = m.index === state.nextIndex && m.unlocked && !m.done;
+        const colors = buildingColors({
+            unlocked: m.unlocked,
+            done: m.done,
+            current,
+            button: markerColor(m),
+            gold: hexNum(THEME.kin600),
+            locked: LOCKED_COLOR,
+            wall: BUILDING_WALL,
+            trim: BUILDING_TRIM,
+            stone: BUILDING_STONE,
+        });
+        for (const [role, mat] of Object.entries(m.mats)) {
+            mat.color.setHex(colors[role]);
+            if (colors.dim) mat.color.multiplyScalar(0.72);
+            mat.emissive.setHex(colors[role]);
+            mat.emissiveIntensity = role === 'roof' || role === 'trim' ? colors.glow : 0;
+        }
         m.label.innerHTML = levelLabelHtml(m.index, { unlocked: m.unlocked, completed: m.done, stars: rec.stars });
         m.label.dataset.w = '';
         m.label.classList.toggle('locked', !m.unlocked);
@@ -1449,6 +1394,7 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
             }
             m.body.scale.set(sxz, sy, sxz);
             m.body.position.y = lift;
+            leanTowardViewer(m);
         }
         // Prize boxes wobble when ready, pop when tapped.
         for (const m of state.chestMarkers) {
@@ -1501,6 +1447,27 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
                 setTimeout(() => loading.remove(), 600);
             }
         }
+    }
+
+    // Buildings lean a little toward the viewer so their fronts show, like a
+    // picture map, instead of only their roofs from straight above.
+    const _lean = { up: new THREE.Vector3(), toCam: new THREE.Vector3(), n: new THREE.Vector3(), u: new THREE.Vector3(), f: new THREE.Vector3(), r: new THREE.Vector3(), m: new THREE.Matrix4(), q: new THREE.Quaternion(), gq: new THREE.Quaternion(), p: new THREE.Vector3() };
+    function leanTowardViewer(m) {
+        const L = _lean;
+        m.grp.getWorldPosition(L.p);
+        m.grp.getWorldQuaternion(L.gq);
+        L.n.set(0, 1, 0).applyQuaternion(L.gq);
+        L.toCam.copy(camera.position).sub(L.p).normalize();
+        L.up.set(0, 1, 0).applyQuaternion(camera.quaternion);
+        const w = leanWeights();
+        L.u.copy(L.n).multiplyScalar(w.normal).addScaledVector(L.toCam, w.camera).addScaledVector(L.up, w.screenUp).normalize();
+        L.f.copy(L.toCam).addScaledVector(L.u, -L.toCam.dot(L.u));
+        if (L.f.lengthSq() < 1e-6) L.f.set(0, 0, 1).applyQuaternion(L.gq);
+        L.f.normalize();
+        L.r.crossVectors(L.u, L.f).normalize();
+        L.m.makeBasis(L.r, L.u, L.f);
+        L.q.setFromRotationMatrix(L.m);
+        m.body.quaternion.copy(L.gq.invert().multiply(L.q));
     }
 
     // HTML labels: system names in the galaxy view, planet names in a
@@ -1558,7 +1525,9 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
             }
             m.grp.getWorldPosition(tmpC);
             const facing = tmpC.clone().sub(centre).normalize().dot(toCam) > 0.2;
-            if (!facing || !placeLabel(m.label, tmpC)) m.label.style.display = 'none';
+            // Level labels sit just above their building's roof line.
+            const lift = m.building ? labelLift(buildingExtent(m.building).height * planets[m.planet].radius * pxPerUnitAt(tmpC)) : 0;
+            if (!facing || !placeLabel(m.label, tmpC, lift)) m.label.style.display = 'none';
         }
     }
 

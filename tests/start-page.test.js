@@ -80,9 +80,10 @@ describe('indigo and gold theme (round 12)', () => {
         expect(CONFETTI).toContain(hexNum(THEME.kin400));
     });
 
-    it('the globe draws seigaiha waves and takes its colours from the theme', () => {
+    it('the globe draws Japanese patterns (cloisonne, item 18) and takes its colours from the theme', () => {
         const globe = read('src/ui/globe-view.js');
-        expect(globe).toContain('Seigaiha');
+        expect(globe).toContain('paintCloisonne');
+        expect(read('src/ui/cloisonne.js')).toContain('seigaiha');
         expect(globe).toContain("from '../config/theme.js'");
         expect(globe).not.toContain("'#ff6b9a'");
     });
