@@ -8,6 +8,11 @@ import { spriteFor } from '../sprites.js';
 // Sprite size in SVG units (nodes have radius 7; sprites sit slightly larger).
 const SPRITE_SIZE = 16;
 const SPRITE_HOVER_SIZE = 24;
+// Transparent tap target radius. The visible node is only 7 SVG units
+// (about 14px on a phone), too small to tap reliably, so each node gets
+// a larger invisible hit circle. It stays below typical node spacing
+// (link distance 50) so dense clusters still tap the intended node.
+const NODE_HIT_RADIUS = 16;
 
 export class NetworkView {
     constructor() {
@@ -18,6 +23,8 @@ export class NetworkView {
         this.particleGroup = null;
         this.onNodeClick = null;
         this.onLinkClick = null;
+        this.resizeObserver = null;
+        this.paused = false;
     }
 
     setup({ onNodeClick, onLinkClick }) {
@@ -35,6 +42,15 @@ export class NetworkView {
         this.linkGroup = this.visGroup.append('g').attr('class', 'links');
         this.nodeGroup = this.visGroup.append('g').attr('class', 'nodes');
         this.particleGroup = this.visGroup.append('g').attr('class', 'particles');
+
+        // Phones change size when rotated or when the browser chrome
+        // expands and collapses. Without this, the force center stays at
+        // the old container center and the network ends up off-center
+        // after a rotation. setup() runs on every game start, so drop
+        // any observer from the previous game first.
+        if (this.resizeObserver) this.resizeObserver.disconnect();
+        this.resizeObserver = new ResizeObserver(() => this.recenter());
+        this.resizeObserver.observe(container);
 
         const view = this;
         const zoom = d3
@@ -123,6 +139,16 @@ export class NetworkView {
 
         entered.append('circle').attr('class', (d) => `node ${d.state}`).attr('r', 0);
 
+        // Transparent hit target, appended after the visible circle so
+        // the hover and state transitions that select('circle') still
+        // target the visible one. The sprite already has pointer-events
+        // none, so this circle is the tap target on phones.
+        entered
+            .append('circle')
+            .attr('class', 'node-hit')
+            .attr('r', NODE_HIT_RADIUS)
+            .attr('fill', 'transparent');
+
         entered
             .append('image')
             .attr('class', 'node-sprite')
@@ -194,7 +220,21 @@ export class NetworkView {
             });
     }
 
+    // Move the force center to the container's current center after a
+    // resize (rotation, browser chrome). Skips restarting while paused
+    // so a resize never silently unpauses the game; the recenter applies
+    // on the next resume instead.
+    recenter() {
+        if (!this.simulation) return;
+        const container = document.querySelector('.network-container');
+        if (!container) return;
+        const center = this.simulation.force('center');
+        if (center) center.x(container.clientWidth / 2).y(container.clientHeight / 2);
+        if (!this.paused) this.simulation.alpha(0.2).restart();
+    }
+
     setPaused(paused) {
+        this.paused = paused;
         if (!this.simulation) return;
         if (paused) this.simulation.stop();
         else this.simulation.alpha(0.3).restart();

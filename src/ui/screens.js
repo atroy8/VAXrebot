@@ -12,11 +12,25 @@ export function showScreen(screenName) {
 // element and its first-tap ambient music listener keeps working. Tapping an
 // unlocked level node calls onPlayLevel, which main.js wires to
 // game.selectLevel, so levels start through the existing briefing flow.
+//
+// If the globe cannot start (no WebGL, failed chunk load), the static
+// welcome screen is restored with a working Start button. Without this
+// fallback the player would be stranded: the globe replace destroys the
+// original Start button before the renderer exists.
 let globeMounted = false;
-export function mountGlobeHome({ onPlayLevel } = {}) {
+let welcomeSnapshot = null;
+export function mountGlobeHome({ onPlayLevel, onStartFallback } = {}) {
     const screen = document.getElementById('welcome-screen');
     if (!screen || globeMounted) return Promise.resolve();
     globeMounted = true;
+    welcomeSnapshot = screen.innerHTML;
     // Lazy import: keeps three.js out of the initial bundle path.
-    return import('./globe-view.js').then((m) => m.initGlobeView(screen, { onPlayLevel }));
+    return import('./globe-view.js')
+        .then((m) => m.initGlobeView(screen, { onPlayLevel }))
+        .catch(() => {
+            if (welcomeSnapshot !== null) screen.innerHTML = welcomeSnapshot;
+            globeMounted = false;
+            const startBtn = document.getElementById('start-game-btn');
+            if (startBtn && onStartFallback) startBtn.addEventListener('click', onStartFallback);
+        });
 }
