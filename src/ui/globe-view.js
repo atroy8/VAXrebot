@@ -30,7 +30,7 @@ import { planetPalette, starPalette, comboFor, hexToRgb } from '../config/planet
 import { takeChestRequest, chestDestination } from './pending-chest.js';
 import { THEME, CONFETTI, hexNum } from '../config/theme.js';
 import { cloisonnePlan, paintCloisonne, TEXTURE_W, TEXTURE_H } from './cloisonne.js';
-import { buildingParts, buildingFor, buildingColors, leanWeights, buildingExtent, labelLift } from './buildings.js';
+import { buildingParts, buildingFor, buildingColors, leanWeights, buildingExtent, labelLift, roofSurface, beamLift } from './buildings.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 // Level buttons: the planet's colour while open, gold once beaten.
@@ -526,8 +526,22 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
     function partGeometry(part) {
         let g;
         if (part.shape === 'box') g = new THREE.BoxGeometry(...part.size);
-        else if (part.shape === 'roof') g = new THREE.CylinderGeometry(part.top * Math.SQRT2, part.bottom * Math.SQRT2, part.h, 4, 1, false, Math.PI / 4);
-        else g = new THREE.CylinderGeometry(part.r, part.r, part.h, 8);
+        else if (part.shape === 'roof' && part.straight) g = new THREE.CylinderGeometry(part.top * Math.SQRT2, part.bottom * Math.SQRT2, part.h, 4, 1, false, Math.PI / 4);
+        else if (part.shape === 'roof') {
+            // Curved roof with swept-up corners (round 23).
+            const { positions, indices } = roofSurface(part);
+            g = new THREE.BufferGeometry();
+            g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+            g.setAttribute('uv', new THREE.Float32BufferAttribute(new Array((positions.length / 3) * 2).fill(0), 2));
+            g.setIndex(indices);
+            g.computeVertexNormals();
+        } else if (part.shape === 'beam') {
+            const [w, h, d] = part.size;
+            g = new THREE.BoxGeometry(w, h, d, 12, 1, 1);
+            const pos = g.attributes.position;
+            for (let i = 0; i < pos.count; i++) pos.setY(i, pos.getY(i) + beamLift(pos.getX(i), w, part.bend));
+            g.computeVertexNormals();
+        } else g = new THREE.CylinderGeometry(part.r, part.r, part.h, 8);
         g.translate(...part.pos);
         return g;
     }
@@ -547,6 +561,7 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
     const BUILDING_WALL = hexNum(THEME.washi);
     const BUILDING_TRIM = hexNum(THEME.shu);
     const BUILDING_STONE = 0x8d8778;
+    const BUILDING_DARK = hexNum(THEME.ai900);
     const shadowGeo = new THREE.CircleGeometry(0.15, 32);
     const shadowMat = new THREE.MeshBasicMaterial({ color: hexNum(THEME.ai900), transparent: true, opacity: 0.5, depthWrite: false });
 
@@ -576,8 +591,10 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
         const mats = {};
         for (const [role, geo] of Object.entries(buildingGeometries(building))) {
             const mat = role === 'roof'
-                ? new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.1 })
-                : new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: role === 'stone' ? 0.8 : 0.5 });
+                ? new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.1, side: THREE.DoubleSide })
+                : role === 'gold'
+                  ? new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3, metalness: 0.3 })
+                  : new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: role === 'stone' ? 0.8 : 0.5 });
             mats[role] = mat;
             body.add(new THREE.Mesh(geo, mat));
         }
@@ -624,12 +641,14 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
             wall: BUILDING_WALL,
             trim: BUILDING_TRIM,
             stone: BUILDING_STONE,
+            dark: BUILDING_DARK,
+            finial: hexNum(THEME.kin400),
         });
         for (const [role, mat] of Object.entries(m.mats)) {
             mat.color.setHex(colors[role]);
             if (colors.dim) mat.color.multiplyScalar(0.72);
             mat.emissive.setHex(colors[role]);
-            mat.emissiveIntensity = role === 'roof' || role === 'trim' ? colors.glow : 0;
+            mat.emissiveIntensity = role === 'roof' || role === 'trim' || role === 'gold' ? colors.glow : 0;
         }
         m.label.innerHTML = levelLabelHtml(m.index, { unlocked: m.unlocked, completed: m.done, stars: rec.stars });
         m.label.dataset.w = '';
@@ -1492,6 +1511,7 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
         return vh / 2 / (d * Math.tan((camera.fov * Math.PI) / 360));
     }
 
+    const tmpTop = new THREE.Vector3();
     function projectLabels() {
         const flying = flight.dur > 0;
         const galaxyView = state.mode === 'galaxy' && !flying;
@@ -1525,8 +1545,17 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
             }
             m.grp.getWorldPosition(tmpC);
             const facing = tmpC.clone().sub(centre).normalize().dot(toCam) > 0.2;
-            // Level labels sit just above their building's roof line.
-            const lift = m.building ? labelLift(buildingExtent(m.building).height * planets[m.planet].radius * pxPerUnitAt(tmpC)) : 0;
+            // Level labels sit on their building's ridge: project the ridge
+            // (the building's top, after the lean) and lift by the gap.
+            let lift = 0;
+            if (m.building) {
+                // 0.85: tuck under thin spires and finials, onto the roof itself.
+                tmpTop.set(0, buildingExtent(m.building).height * 0.85, 0);
+                m.body.localToWorld(tmpTop).project(camera);
+                tmpV.copy(tmpC).project(camera);
+                const vh = renderer.domElement.clientHeight;
+                lift = labelLift((-tmpV.y * 0.5 + 0.5) * vh, (-tmpTop.y * 0.5 + 0.5) * vh);
+            }
             if (!facing || !placeLabel(m.label, tmpC, lift)) m.label.style.display = 'none';
         }
     }
