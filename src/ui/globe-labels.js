@@ -17,7 +17,9 @@ export function starRow(stars) {
 export function levelLabelHtml(index, { unlocked, completed, stars }) {
     const num = `<span class="globe-label-num">${index + 1}</span>`;
     if (completed) return `${num}<span class="globe-label-stars" aria-label="${stars} of 3 stars">${starRow(stars)}</span>`;
-    if (!unlocked) return `${num}<span class="globe-label-lock" aria-label="Locked">${LOCK_ICON}</span>`;
+    // Round 23: the padlock sits inside the number pill instead of in a
+    // second bubble below it, so locked labels stop covering their buildings.
+    if (!unlocked) return `<span class="globe-label-num">${index + 1}<span class="globe-label-lock" aria-label="Locked">${LOCK_ICON}</span></span>`;
     return num;
 }
 

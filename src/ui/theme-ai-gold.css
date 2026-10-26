@@ -365,3 +365,12 @@ html .r-card-one::before {
     background: var(--ai-900);
 }
 html .r-card-close { width: 100%; min-height: 48px; margin-top: 12px; }
+
+/* Round 23: stop labels give the buildings room. The padlock sits inside the
+   number pill, and locked labels are a touch smaller. */
+html .candy .globe-label-num .globe-label-lock { margin: 0 0 0 1px; padding: 0; background: none; }
+html .candy .globe-label-num .globe-label-lock svg { width: 0.8em; height: 0.8em; }
+/* Scale the children, not the label: the label's own transform carries its
+   screen position, and scaling it would pull labels toward the corner.
+   Only locked labels shrink: a scaled star row drifts off its number. */
+html .candy .globe-marker-label.locked > * { scale: 0.86; }
