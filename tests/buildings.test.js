@@ -29,7 +29,7 @@ describe('Japanese buildings at the level stops (item 19)', () => {
             expect(parts.length).toBeGreaterThanOrEqual(4);
             for (const p of parts) {
                 expect(ROLES).toContain(p.role);
-                expect(['box', 'roof', 'post']).toContain(p.shape);
+                expect(['box', 'roof', 'post', 'beam']).toContain(p.shape);
             }
             expect(parts.some((p) => p.role === 'roof')).toBe(true);
             expect(buildingExtent(type).bottom).toBeCloseTo(0, 6);
@@ -82,12 +82,82 @@ describe('buildings lean toward the viewer (item 19)', () => {
     });
 });
 
-describe('stop labels clear their buildings (item 19)', () => {
-    it('lift grows with the building and stays a fraction of its height', async () => {
-        const { labelLift } = await import('../src/ui/buildings.js');
-        expect(labelLift(0)).toBe(0);
-        expect(labelLift(60)).toBeGreaterThan(labelLift(30));
-        expect(labelLift(60)).toBeLessThan(60);
+describe('stop labels clear their buildings (item 19, round 23)', () => {
+    it('lift puts the label on the ridge: it grows with the building on screen and never goes negative', async () => {
+        const { labelLift, LABEL_TUCK } = await import('../src/ui/buildings.js');
+        expect(labelLift(500, 500)).toBe(0);
+        expect(labelLift(500, 520)).toBe(0);
+        expect(labelLift(500, 460)).toBe(40 - LABEL_TUCK);
+        expect(labelLift(500, 440)).toBeGreaterThan(labelLift(500, 460));
+        expect(labelLift(NaN, 400)).toBe(0);
         expect(globe).toContain('placeLabel(m.label, tmpC, lift)');
+        // The ridge is projected through the leaning body, not estimated.
+        expect(globe).toContain('m.body.localToWorld(tmpTop)');
+    });
+
+    it('locked labels carry the padlock inside the number pill, not in a second bubble', async () => {
+        const { levelLabelHtml } = await import('../src/ui/globe-labels.js');
+        const html = levelLabelHtml(4, { unlocked: false, completed: false, stars: 0 });
+        expect(html).toMatch(/^<span class="globe-label-num">5<span class="globe-label-lock"[^>]*><svg[\s\S]*<\/span><\/span>$/);
+    });
+});
+
+describe('curved roofs and small details (item 19, round 23)', () => {
+    it('roof corners sweep up at the eaves while the middle of each side stays low', async () => {
+        const { roofHeight } = await import('../src/ui/buildings.js');
+        const h = 0.05;
+        expect(roofHeight(0, 0, h)).toBeCloseTo(-h / 2, 9);
+        expect(roofHeight(0, 1, h)).toBeGreaterThan(roofHeight(0, 0, h) + 0.3 * h);
+        expect(roofHeight(1, 0, h)).toBeCloseTo(h / 2, 9);
+        // Concave like a real Japanese roof: below the straight line halfway up.
+        expect(roofHeight(0.5, 0, h)).toBeLessThan(0);
+        // Never pokes above the ridge.
+        for (let t = 0; t <= 1; t += 0.1) for (let c = 0; c <= 1; c += 0.25) expect(roofHeight(t, c, h)).toBeLessThanOrEqual(h / 2 + 1e-12);
+    });
+
+    it('the roof mesh is a closed-top square shell inside its part bounds with valid triangles', async () => {
+        const { roofSurface } = await import('../src/ui/buildings.js');
+        const part = { bottom: 0.1, top: 0.03, h: 0.04 };
+        const { positions, indices } = roofSurface(part);
+        const n = positions.length / 3;
+        expect(indices.length % 3).toBe(0);
+        for (const i of indices) expect(i).toBeGreaterThanOrEqual(0), expect(i).toBeLessThan(n);
+        for (let i = 0; i < n; i++) {
+            const [x, y, z] = positions.slice(i * 3, i * 3 + 3);
+            expect(Math.abs(x)).toBeLessThanOrEqual(part.bottom + 1e-9);
+            expect(Math.abs(z)).toBeLessThanOrEqual(part.bottom + 1e-9);
+            expect(Math.abs(y)).toBeLessThanOrEqual(part.h / 2 + 1e-9);
+        }
+        // An eave corner is higher than the middle of an eave side.
+        const eave = positions.slice(0, 3);
+        const mid = positions.slice(3 * 3, 3 * 3 + 3);
+        expect(eave[1]).toBeGreaterThan(mid[1]);
+    });
+
+    it('torii top beams sweep up at both ends and stay level in the middle', async () => {
+        const { beamLift } = await import('../src/ui/buildings.js');
+        expect(beamLift(0, 0.2, 0.01)).toBe(0);
+        expect(beamLift(0.1, 0.2, 0.01)).toBeCloseTo(0.01, 9);
+        expect(beamLift(-0.1, 0.2, 0.01)).toBeCloseTo(0.01, 9);
+        expect(beamLift(0.05, 0.2, 0.01)).toBeLessThan(0.002);
+    });
+
+    it('every building has dark doors or windows; pagodas and castles have gold finials', () => {
+        for (const type of BUILDING_TYPES) expect(buildingParts(type).some((p) => p.role === 'dark')).toBe(true);
+        for (const type of ['pagoda', 'castle']) expect(buildingParts(type).some((p) => p.role === 'gold')).toBe(true);
+        expect(buildingParts('torii').some((p) => p.shape === 'beam')).toBe(true);
+        // The castle's stone base keeps straight sloped walls.
+        expect(buildingParts('castle').find((p) => p.role === 'stone').straight).toBe(true);
+    });
+
+    it('locked stops are fully grey, finials included; open stops keep gold finials', () => {
+        const base = { button: 1, gold: 2, locked: 3, wall: 4, trim: 5, stone: 6, dark: 7, finial: 8 };
+        const locked = buildingColors({ ...base, unlocked: false, done: false, current: false });
+        expect(locked.dark).toBe(3);
+        expect(locked.gold).toBe(3);
+        const open = buildingColors({ ...base, unlocked: true, done: false, current: false });
+        expect(open.dark).toBe(7);
+        expect(open.gold).toBe(8);
+        expect(globe).toContain('roofSurface(part)');
     });
 });
