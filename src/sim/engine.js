@@ -6,6 +6,7 @@
 
 const nodeId = (ref) => (ref && typeof ref === 'object' ? ref.id : ref);
 import { envoyLost } from './variants.js';
+import { dailyDeathChance, personFatality } from './fatality.js';
 
 // One day of spread. Returns { events: [{ source, target }], count }.
 // `transmissionRate` is the fully computed per-contact probability
@@ -43,7 +44,11 @@ export function simulateSpread(state, network, transmissionRate, rng = Math.rand
     return { events, count: events.length };
 }
 
-// Resolve recoveries/deaths for nodes past their recovery time.
+// Resolve deaths and recoveries for one day. Item 20 (round 24): a sick
+// person may die on any day of their illness (daysInfected 1 up to
+// recoveryTime), at a daily chance that adds up to `fatalityRate` over the
+// whole illness; sick people in a ward get care and face half that
+// (src/sim/fatality.js). Anyone who reaches recoveryTime alive recovers.
 // Returns an ordered list of { node, outcome: 'died' | 'recovered' }.
 // Dead nodes are removed from the network (nodes and their links).
 export function updateOutcomes(state, network, recoveryTime, fatalityRate, rng = Math.random) {
@@ -54,13 +59,16 @@ export function updateOutcomes(state, network, recoveryTime, fatalityRate, rng =
         // they tick daysInfected (see simulateSpread) and recover or die here.
         const stillSick =
             node.state === 'infected' || (node.state === 'quarantined' && node.sickWhileQuarantined);
-        if (!stillSick || node.daysInfected < recoveryTime) continue;
-        if (rng() < fatalityRate) {
+        if (!stillSick || node.daysInfected < 1) continue;
+        const daily = dailyDeathChance(personFatality(node, fatalityRate), recoveryTime);
+        if (daily > 0 && rng() < daily) {
+            const inWard = node.state === 'quarantined';
+            if (inWard) state.stats.diedInWard = (state.stats.diedInWard || 0) + 1;
             node.state = 'dead';
             node.removed = true;
             state.stats.totalDead++;
-            outcomes.push({ node, outcome: 'died' });
-        } else {
+            outcomes.push({ node, outcome: 'died', inWard });
+        } else if (node.daysInfected >= recoveryTime) {
             node.state = 'recovered';
             node.sickWhileQuarantined = false; // isolation served its purpose
             state.stats.totalRecovered++;
@@ -68,14 +76,48 @@ export function updateOutcomes(state, network, recoveryTime, fatalityRate, rng =
         }
     }
 
-    if (outcomes.some((o) => o.outcome === 'died')) {
-        const deadIds = new Set(outcomes.filter((o) => o.outcome === 'died').map((o) => o.node.id));
-        network.nodes = network.nodes.filter((n) => !n.removed);
-        network.links = network.links.filter(
-            (l) => !deadIds.has(nodeId(l.source)) && !deadIds.has(nodeId(l.target))
-        );
-    }
+    removeDead(network, outcomes);
+    return outcomes;
+}
 
+function removeDead(network, outcomes) {
+    if (!outcomes.some((o) => o.outcome === 'died')) return;
+    const deadIds = new Set(outcomes.filter((o) => o.outcome === 'died').map((o) => o.node.id));
+    network.nodes = network.nodes.filter((n) => !n.removed);
+    network.links = network.links.filter(
+        (l) => !deadIds.has(nodeId(l.source)) && !deadIds.has(nodeId(l.target))
+    );
+}
+
+// Outcomes that end with people still sick: the outbreak got away.
+export const LOSS_RESULTS = ['overwhelmed', 'envoy-lost', 'timeout'];
+
+// Item 20: when a level is lost with people still sick, their illness does
+// not stop with the level. Each one's remaining days are rolled at once (no
+// more spread), so the results show what the outbreak really cost. Only the
+// stats change: the web stays as it was when the level ended, so nobody is
+// seen flying to the Cured box on a loss. Runs once per level
+// (state.aftermathDone). Deaths count in totalDead and stats.aftermathDead.
+// Returns [{ node, outcome }] like updateOutcomes.
+export function resolveAftermath(state, network, recoveryTime, fatalityRate, rng = Math.random) {
+    if (state.aftermathDone) return [];
+    state.aftermathDone = true;
+    const outcomes = [];
+    for (const node of network.nodes) {
+        const stillSick =
+            node.state === 'infected' || (node.state === 'quarantined' && node.sickWhileQuarantined);
+        if (!stillSick) continue;
+        const daysLeft = Math.max(1, recoveryTime - Math.max(0, node.daysInfected));
+        const daily = dailyDeathChance(personFatality(node, fatalityRate), recoveryTime);
+        if (rng() < 1 - Math.pow(1 - daily, daysLeft)) {
+            state.stats.totalDead++;
+            state.stats.aftermathDead = (state.stats.aftermathDead || 0) + 1;
+            outcomes.push({ node, outcome: 'died' });
+        } else {
+            state.stats.totalRecovered++;
+            outcomes.push({ node, outcome: 'recovered' });
+        }
+    }
     return outcomes;
 }
 

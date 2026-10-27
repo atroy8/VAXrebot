@@ -360,15 +360,18 @@ export function normalizedDepths(distances) {
     return distances.map((d) => (d - lo) / span);
 }
 
-// Saved choice of view, per device. Default: 3D on.
+// Saved choice of view, per device. Item 21 (round 24): the flat 2D web is
+// the default, because it is easier to read and tap on a phone. 3D stays one
+// tap away on the 2D/3D switch, and a saved 3D choice is kept.
 export const VIEW_MODE_KEY = 'galactic-outbreak.view-3d.v1';
+export const DEFAULT_VIEW_MODE = '2d';
 
 export function loadViewMode(storage) {
     try {
         const v = storage?.getItem(VIEW_MODE_KEY);
-        return v === '2d' ? '2d' : '3d';
+        return v === '3d' || v === '2d' ? v : DEFAULT_VIEW_MODE;
     } catch {
-        return '3d';
+        return DEFAULT_VIEW_MODE;
     }
 }
 

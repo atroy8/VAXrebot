@@ -4,6 +4,17 @@
 export function showScreen(screenName) {
     document.querySelectorAll('.screen').forEach((s) => s.classList.remove('active'));
     document.getElementById(`${screenName}-screen`).classList.add('active');
+    resetShellScroll(document.querySelector('.app-container'));
+}
+
+// Round 24 playtest fix: the app shell clips its screens (overflow hidden),
+// but a hidden overflow can still be scrolled by focus or scrollIntoView.
+// Tapping Begin Containment left the shell scrolled 10 px left and 21 px up,
+// so the game header was cut off on phones for the whole level.
+export function resetShellScroll(el) {
+    if (!el) return;
+    if (el.scrollLeft) el.scrollLeft = 0;
+    if (el.scrollTop) el.scrollTop = 0;
 }
 
 // Welcome-flow section: the 3D globe is the home/start screen, replacing the
