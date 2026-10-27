@@ -33,7 +33,8 @@ import { renderCareBox, flyToCareBox } from './ui/care-box.js';
 import { mountShop, renderShop } from './ui/shop.js';
 import { buildOutbreak } from './sim/setup.js';
 import { initGameState } from './sim/state.js';
-import { checkGameOver as resolveGameOver, canUseTool, canAdvanceDay, spreadIsOver } from './sim/engine.js';
+import { checkGameOver as resolveGameOver, canUseTool, canAdvanceDay, spreadIsOver, resolveAftermath, LOSS_RESULTS } from './sim/engine.js';
+import { deathToast, resultsDeathLines } from './ui/deaths.js';
 import {
     applyNodeTool,
     severLink,
@@ -550,11 +551,22 @@ export class EpidemicSimulator {
                 outcome === 'died' ? `Person ${node.id} has died from the infection.` : `Person ${node.id} has recovered.`
             );
         }
-        const died = outcomes.filter((o) => o.outcome === 'died').length;
+        const deaths = outcomes.filter((o) => o.outcome === 'died');
+        const died = deaths.length;
         if (!result) {
             showDayBanner(dayBanner({ day: this.gameState.day - 1, newCases: count, recovered: outcomes.length - died, died }));
         }
         if (died > 0) {
+            // Item 20: a gentle death moment, then the person leaves the web.
+            for (const { node } of deaths) this.view.animateDeath?.(node);
+            const first = !this.gameState.stats.deathToastShown;
+            this.gameState.stats.deathToastShown = true;
+            if (!result) {
+                const inWard = deaths.every((d) => d.inWard);
+                showNotification(deathToast({ count: died, firstThisLevel: first, inWard }), 'info');
+            }
+            this.audio.playSound(196, 0.6, 'sine');
+            this.haptics.play('tool');
             this.view.update(this.network.nodes, this.network.links);
         }
 
@@ -625,6 +637,10 @@ export class EpidemicSimulator {
 
     finishGame(result) {
         if (this.gameState.gameOver) return;
+        // Item 20: a loss mid-day (from a power-up) still settles the sick.
+        if (LOSS_RESULTS.includes(result)) {
+            resolveAftermath(this.gameState, this.network, this.difficulty.recoveryTime, this.difficulty.fatalityRate);
+        }
         this.autoAdvance.cancel();
         closeRCard();
         this.gameState.gameOver = true;
@@ -686,6 +702,7 @@ export class EpidemicSimulator {
             livesSaved,
             caseCap: caseCapFor(this.gameState, this.currentScenario),
             tally: showTally,
+            deathLines: resultsDeathLines({ outcome, stats, scenario: this.currentScenario, fatalityRate: this.difficulty?.fatalityRate }),
         });
         if (showTally) {
             playResultsTally(document.getElementById('results-tally'), {
@@ -810,6 +827,7 @@ export class EpidemicSimulator {
             caseCap: caseCapFor(this.gameState, this.currentScenario),
             r: this.lastR,
             actionsLeft: actionsRemaining(this.gameState, this.tools, this.difficulty),
+            deaths: this.gameState.stats.totalDead || 0,
         });
         renderCareBox(this.network.nodes);
         renderTools(this.tools, difficulty, this.gameState.day, this.gameState.dailyUsage, {

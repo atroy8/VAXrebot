@@ -21,7 +21,7 @@ const ICONS = {
 };
 const TOOL_COLORS = { vaccinate: '#7c3aed', quarantine: '#f97316', severLink: '#0ea5e9' };
 
-export function renderHeader({ scenarioName, difficultyName, difficultyId, threatPips = null, day, infected, protected: protectedCount, population, paused = false, cases = null, caseCap = Infinity, r = null, actionsLeft = null }) {
+export function renderHeader({ scenarioName, difficultyName, difficultyId, threatPips = null, day, infected, protected: protectedCount, population, paused = false, cases = null, caseCap = Infinity, r = null, actionsLeft = null, deaths = 0 }) {
     document.getElementById('game-scenario-name').textContent = scenarioName;
     const badge =
         threatPips != null
@@ -54,6 +54,18 @@ export function renderHeader({ scenarioName, difficultyName, difficultyId, threa
     }
     const aEl = document.getElementById('actions-left');
     if (aEl && actionsLeft != null) aEl.textContent = actionsLeft;
+    // Item 20: deaths so far, shown once someone has died.
+    const lost = document.getElementById('lost-stat');
+    if (lost) {
+        const was = Number(document.getElementById('deaths-count').textContent) || 0;
+        lost.hidden = !(deaths > 0);
+        document.getElementById('deaths-count').textContent = deaths;
+        if (deaths > was) {
+            lost.classList.remove('lost-new');
+            void lost.offsetWidth;
+            lost.classList.add('lost-new');
+        }
+    }
 }
 
 // Bottom tool tray: one button per tool plus a Shop button. Power-ups with
@@ -145,7 +157,7 @@ export function showNotification(message, type = 'info') {
     }, 3000);
 }
 
-export function renderGameOver({ outcome, stats, difficultyId, threatPips = null, stars = 0, fundingEarned = 0, livesSaved = 0, caseCap = Infinity, tally = false }) {
+export function renderGameOver({ outcome, stats, difficultyId, threatPips = null, stars = 0, fundingEarned = 0, livesSaved = 0, caseCap = Infinity, tally = false, deathLines = [] }) {
     const attackRate = stats.initialPopulation > 0 ? (stats.totalInfected / stats.initialPopulation) * 100 : 0;
     const caseFatalityRate = stats.totalInfected > 0 ? (stats.totalDead / stats.totalInfected) * 100 : 0;
 
@@ -165,7 +177,9 @@ export function renderGameOver({ outcome, stats, difficultyId, threatPips = null
                 : 'Simulation Over';
     const message =
         outcome === 'contained'
-            ? 'Excellent work! Your strategic interventions stopped the spread.'
+            ? stats.totalDead > 0
+                ? `You stopped the spread. ${stats.totalDead === 1 ? '1 person' : `${stats.totalDead} people`} did not survive, and everyone else is safe.`
+                : 'Excellent work! Your strategic interventions stopped the spread.'
             : outcome === 'overwhelmed'
               ? lossReason({ totalInfected: stats.totalInfected, caseCap })
               : outcome === 'envoy-lost'
@@ -183,6 +197,17 @@ export function renderGameOver({ outcome, stats, difficultyId, threatPips = null
     document.getElementById('people-protected').textContent = stats.totalProtected;
 
     document.getElementById('game-over-message').textContent = message;
+    const notes = document.getElementById('final-death-notes');
+    if (notes) {
+        notes.replaceChildren(
+            ...deathLines.map((t) => {
+                const li = document.createElement('li');
+                li.textContent = t;
+                return li;
+            })
+        );
+        notes.hidden = deathLines.length === 0;
+    }
 
     // Progression rewards: stars, funding, and lives saved on a win.
     // Rendered only when provided so the pre-progression callers keep working.

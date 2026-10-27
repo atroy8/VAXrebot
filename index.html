@@ -67,6 +67,7 @@
                     <strong>Disease Profile:</strong>
                     <div class="dynamics-grid">
                         <div><strong>Disease:</strong> <span id="briefing-disease"></span></div>
+                        <div id="briefing-cfr-row"><strong>Real death rate:</strong> <span id="briefing-cfr"></span></div>
                         <div><strong>Agent:</strong> <span id="briefing-agent"></span></div>
                         <div><strong>Vector:</strong> <span id="briefing-vector"></span></div>
                         <div><strong>Est. R₀:</strong> <span id="briefing-r0"></span></div>
@@ -119,6 +120,10 @@
                             <span class="stat-label">R <span class="r-info" aria-hidden="true">?</span></span>
                             <span class="stat-value" id="r-value">–</span>
                         </button>
+                        <div class="stat stat--lost" id="lost-stat" hidden title="People who did not survive this outbreak.">
+                            <span class="stat-label">Lost</span>
+                            <span class="stat-value lost" id="deaths-count">0</span>
+                        </div>
                         <div class="stat">
                             <span class="stat-label">Actions</span>
                             <span class="stat-value" id="actions-left">0</span>
@@ -212,6 +217,7 @@
                     </div>
                     </details>
                     <p id="game-over-message" class="game-over-message"></p>
+                    <ul id="final-death-notes" class="final-death-notes" hidden></ul>
                     <div class="averted" id="averted" role="status" hidden></div>
                     <div class="lesson-card lesson-card--debrief" id="game-over-lesson" hidden>
                         <span class="lesson-kicker">Lesson</span>

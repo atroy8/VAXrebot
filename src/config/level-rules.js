@@ -12,6 +12,7 @@
 import { scenarios } from './scenarios.js';
 import { difficulties } from './difficulties.js';
 import { CLASSIC_TOOLS } from './toolkits.js';
+import { gameFatality } from '../sim/fatality.js';
 
 export function levelRules(level) {
     const t = level.tuning || {};
@@ -21,6 +22,9 @@ export function levelRules(level) {
     // Item 14: each planet sets its own web size (src/config/campaign.js).
     if (Array.isArray(level.population)) scenario.populationRange = [...level.population];
     const difficulty = { ...difficulties[level.difficultyId] };
+    // Item 20: the death rate follows the disease's real CFR, scaled for
+    // small webs (src/sim/fatality.js), not the difficulty.
+    if (scenario.realCfr != null) difficulty.fatalityRate = gameFatality(scenario.realCfr);
     if (t.transmissionMultiplier != null) difficulty.transmissionMultiplier = t.transmissionMultiplier;
     if (t.dailyLimits) difficulty.dailyLimits = { ...t.dailyLimits };
     // Item 16: a level's toolkit decides which classic tools exist at all.

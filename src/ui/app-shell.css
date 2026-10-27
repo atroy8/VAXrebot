@@ -66,3 +66,7 @@ textarea,
         top: calc(20px + env(safe-area-inset-top, 0px));
     }
 }
+
+/* Round 24: clip instead of hide, so focus and scrollIntoView can never
+   scroll the shell sideways (screens.js resets it too, for older Safari). */
+.app-container { overflow: hidden; overflow: clip; }
