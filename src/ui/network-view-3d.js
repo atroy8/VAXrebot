@@ -100,6 +100,8 @@ const faceModules = import.meta.glob('../assets/faces/*/*.png', {
     import: 'default',
 });
 
+// Item 20: length of the gentle death moment (animateDeath).
+export const DEATH_MS = 1600;
 const STATES = ['healthy', 'exposed', 'infected', 'recovered', 'vaccinated', 'quarantined', 'dead'];
 
 // Third frame is named by content (see src/assets/faces/README.md).
@@ -1265,6 +1267,61 @@ export class NetworkView {
         this.alpha = Math.max(this.alpha || 0, LAYOUT.reheatAlpha);
         this.shakeUntil = start + 140;
         this.lastTouch = start;
+    }
+
+    // Item 20 (round 24): a gentle death moment. The person's face turns
+    // grey and drifts up as it fades, with one slow pale ring, before the
+    // person leaves the web. About 1.6 s, no flash, no shake.
+    animateDeath(node) {
+        if (!this.scene) return;
+        const obj = this.nodeObjs.get(node && node.id);
+        if (!obj) return;
+        const start = performance.now();
+        const scene = this.scene;
+        const pos = obj.pos.clone();
+        const scale = (obj.group.scale && obj.group.scale.x) || 1;
+        const up = new THREE.Vector3(0, 1, 0);
+        if (this.is3d) up.applyQuaternion(this.camera.quaternion);
+        const mat = new THREE.SpriteMaterial({
+            map: faceTextures.dead?.idle || faceTextures.recovered?.idle || faceTextures.healthy.idle,
+            color: 0xdfe6f2,
+            transparent: true,
+            depthWrite: false,
+        });
+        const ghost = new THREE.Sprite(mat);
+        ghost.scale.set(FACE_SCALE * scale, FACE_SCALE * scale, 1);
+        ghost.position.copy(pos);
+        if (!this.is3d) ghost.position.setZ(0.3);
+        ghost.renderOrder = 6;
+        scene.add(ghost);
+        const ringMat = new THREE.MeshBasicMaterial({ color: 0xcfe0ff, transparent: true, depthWrite: false });
+        const ring = new THREE.Mesh(ringGeometry, ringMat);
+        ring.position.copy(pos);
+        if (this.is3d) ring.quaternion.copy(this.camera.quaternion);
+        else ring.position.setZ(0.05);
+        scene.add(ring);
+        const ease = (t) => 1 - Math.pow(1 - t, 3);
+        this.effects.push({
+            update: (now) => {
+                const t = Math.min(1, (now - start) / DEATH_MS);
+                const e = ease(t);
+                ghost.position.copy(pos).addScaledVector(up, 1.3 * scale * e);
+                if (!this.is3d) ghost.position.setZ(0.3);
+                const g = FACE_SCALE * scale * (1 + 0.15 * e);
+                ghost.scale.set(g, g, 1);
+                mat.opacity = 0.95 * (1 - t);
+                const tr = Math.min(1, t / 0.7);
+                ring.scale.setScalar(scale * (0.6 + 1.6 * ease(tr)));
+                ringMat.opacity = 0.55 * (1 - tr);
+                return t >= 1;
+            },
+            dispose: () => {
+                scene.remove(ghost);
+                scene.remove(ring);
+                mat.dispose();
+                ringMat.dispose();
+            },
+        });
     }
 
     // ---- Tool hookup: tap to select / apply ---------------------------------
