@@ -179,14 +179,19 @@ describe('view choice', () => {
         const m = new Map();
         return { getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, val) => m.set(k, val) };
     };
-    it('defaults to 3D, remembers 2D, and survives blocked storage', () => {
+    it('a fresh save opens in 2D, a saved 3D choice is kept, and blocked storage falls back to 2D (item 21)', () => {
         const s = mem();
+        expect(loadViewMode(s)).toBe('2d');
+        saveViewMode(s, '3d');
+        expect(s.getItem(VIEW_MODE_KEY)).toBe('3d');
         expect(loadViewMode(s)).toBe('3d');
         saveViewMode(s, '2d');
-        expect(s.getItem(VIEW_MODE_KEY)).toBe('2d');
         expect(loadViewMode(s)).toBe('2d');
+        const junk = mem();
+        junk.setItem(VIEW_MODE_KEY, 'banana');
+        expect(loadViewMode(junk)).toBe('2d');
         const blocked = { getItem: () => { throw new Error('no'); }, setItem: () => { throw new Error('no'); } };
-        expect(loadViewMode(blocked)).toBe('3d');
+        expect(loadViewMode(blocked)).toBe('2d');
         expect(() => saveViewMode(blocked, '2d')).not.toThrow();
     });
 

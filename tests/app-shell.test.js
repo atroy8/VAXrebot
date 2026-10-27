@@ -76,3 +76,15 @@ describe('auto-pause when the app goes to the background (round 18)', () => {
         expect(src.slice(at, at + 400)).toContain('this.togglePause()');
     });
 });
+
+describe('shell scroll (round 24 playtest fix)', () => {
+    it('showing a screen resets a scrolled shell, and the shell clips', async () => {
+        const { resetShellScroll } = await import('../src/ui/screens.js');
+        const el = { scrollLeft: 10, scrollTop: 21 };
+        resetShellScroll(el);
+        expect(el).toEqual({ scrollLeft: 0, scrollTop: 0 });
+        expect(() => resetShellScroll(null)).not.toThrow();
+        const css = (await import('node:fs')).readFileSync(new URL('../src/ui/app-shell.css', import.meta.url), 'utf8');
+        expect(css).toMatch(/\.app-container \{ overflow: hidden; overflow: clip; \}/);
+    });
+});

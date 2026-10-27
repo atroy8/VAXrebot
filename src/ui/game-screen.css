@@ -79,6 +79,16 @@
 .game-stats .stat-label { font-size: 0.72rem; line-height: 1.1; white-space: nowrap; }
 .game-stats .stat-value { font-size: 1.2rem; line-height: 1.2; }
 .game-stats .case-meter-bar { width: 80%; }
+/* Item 20: the Lost stat appears with the first death. */
+.game-stats .stat[hidden] { display: none; }
+.game-stats .stat-value.lost { color: #a9b4c8; }
+.game-stats .stat--lost.lost-new { animation: lost-glow 1.6s ease-out; }
+@keyframes lost-glow {
+    0% { box-shadow: 0 0 0 0 rgba(207, 224, 255, 0.7); }
+    100% { box-shadow: 0 0 0 10px rgba(207, 224, 255, 0); }
+}
+.final-death-notes { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; text-align: left; }
+.final-death-notes li { font-size: 0.9rem; line-height: 1.35; padding: 8px 10px; border-radius: 12px; background: rgba(207, 224, 255, 0.1); }
 
 /* ---- Network ---- */
 .network-container { grid-area: network; min-height: 0; }
@@ -244,6 +254,7 @@
     }
     .game-header { flex-wrap: nowrap; padding: 8px 10px; gap: 6px; }
     .game-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .game-stats:has(.stat--lost:not([hidden])) { grid-template-columns: repeat(5, minmax(0, 1fr)); }
     .game-stats .stat--extra { display: none; }
     .game-stats .stat-value { font-size: 1.1rem; }
     .network-container { flex: 1 1 auto; height: auto; min-height: 0; }

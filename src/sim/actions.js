@@ -1,7 +1,7 @@
 // Pure player actions and the day step, shared by the game (src/game.js),
 // the balance bot (scripts/balance.mjs) and the tests. No DOM, no audio.
 // Keeping one code path means the bot measures the same rules people play.
-import { simulateSpread, updateOutcomes, checkGameOver, toolDailyLimit, toolAvailableDay } from './engine.js';
+import { simulateSpread, updateOutcomes, checkGameOver, toolDailyLimit, toolAvailableDay, resolveAftermath, LOSS_RESULTS } from './engine.js';
 
 const nodeId = (ref) => (ref && typeof ref === 'object' ? ref.id : ref);
 
@@ -41,7 +41,11 @@ export function advanceDay(state, network, { scenario, difficulty, rng = Math.ra
     const spread = simulateSpread(state, network, rate, rng);
     const outcomes = updateOutcomes(state, network, difficulty.recoveryTime, difficulty.fatalityRate, rng);
     const result = checkGameOver(state, network, scenario.duration, caseCapFor(state, scenario));
-    return { spread, outcomes, result, activeBefore };
+    // Item 20: a lost level still costs the lives of those left sick.
+    const aftermath = LOSS_RESULTS.includes(result)
+        ? resolveAftermath(state, network, difficulty.recoveryTime, difficulty.fatalityRate, rng)
+        : [];
+    return { spread, outcomes, result, activeBefore, aftermath };
 }
 
 // Stay Home Pay (src/economy.js) sends sick people home for a few days.

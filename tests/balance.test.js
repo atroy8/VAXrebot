@@ -36,7 +36,9 @@ describe('difficulty ramp', () => {
 });
 
 describe('campaign ramp across 3 systems and 8 planets (round 14)', () => {
-    const SAMPLE = 40;
+    // Round 24: 80 runs (was 40). Deaths spread scores out, and 40 runs left
+    // the 3 star share about 3 points off its true value on some planets.
+    const SAMPLE = 80;
     const planetSmart = REGIONS.map((r) => {
         const lv = LEVELS.filter((l) => l.regionId === r.id);
         const sums = lv.map((l) => summarize(l, 'smart', SAMPLE, 13));
