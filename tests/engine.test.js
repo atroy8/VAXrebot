@@ -163,9 +163,10 @@ describe('updateOutcomes', () => {
     it('mixed rolls split deaths and recoveries', () => {
         const state = freshState();
         const network = sickNetwork();
-        const rolls = [0.01, 0.99, 0.02]; // fatality 0.03: die, live, die
+        // Item 20: the daily chance for 30% over 7 days is about 0.0497.
+        const rolls = [0.01, 0.99, 0.02]; // die, live (recovers on day 7), die
         let i = 0;
-        const outcomes = updateOutcomes(state, network, 7, 0.03, () => rolls[i++]);
+        const outcomes = updateOutcomes(state, network, 7, 0.3, () => rolls[i++]);
         expect(outcomes.filter((o) => o.outcome === 'died')).toHaveLength(2);
         expect(outcomes.filter((o) => o.outcome === 'recovered')).toHaveLength(1);
         expect(state.stats.totalDead).toBe(2);
