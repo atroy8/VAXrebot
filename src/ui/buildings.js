@@ -207,19 +207,61 @@ export function buildingParts(type) {
     });
 }
 
-// How each building leans toward the viewer: its up direction is a blend of
-// the planet surface normal, the direction to the camera and screen up. The
-// blend tips buildings about 36 degrees from the line of sight, so the front
-// shows under the roof.
-export function leanWeights() {
-    return { normal: 0.5, camera: 0.35, screenUp: 0.62 };
+// How each building stands (item 23, round 25). The planet view now looks
+// from a tilted angle, so most buildings stand straight up on the planet and
+// the camera sees their walls. Only a building that faces the camera almost
+// head on (where you would see just its roof) tips back, just enough that
+// the line of sight meets it at least MIN_VIEW_DEG from its up direction.
+// Before round 25 every building leaned about 36 degrees toward the viewer.
+export const MIN_VIEW_DEG = 54;
+
+const dot = (a, b) => a.x * b.x + a.y * b.y + a.z * b.z;
+const len = (a) => Math.hypot(a.x, a.y, a.z);
+const add = (a, b, k = 1) => ({ x: a.x + b.x * k, y: a.y + b.y * k, z: a.z + b.z * k });
+const scale = (a, k) => ({ x: a.x * k, y: a.y * k, z: a.z * k });
+const unit = (a) => scale(a, 1 / (len(a) || 1));
+const perpTo = (v, axis) => add(v, axis, -dot(v, axis));
+
+const cross = (a, b) => ({ x: a.y * b.z - a.z * b.y, y: a.z * b.x - a.x * b.z, z: a.x * b.y - a.y * b.x });
+
+// n: surface normal, toCam: direction to the camera, screenUp: the camera's
+// up, all unit vectors. Returns the building's up direction (unit).
+// A building's top may tip sideways and toward the top of the screen, never
+// toward the bottom (that would show its roof and back), and the line of
+// sight meets it at least minDeg from its up. A building already seen from
+// the side and leaning up the screen (the far rows) keeps its true normal.
+export function standingUp(n, toCam, screenUp, minDeg = MIN_VIEW_DEG) {
+    const min = (minDeg * Math.PI) / 180;
+    const a = Math.acos(Math.max(-1, Math.min(1, dot(n, toCam))));
+    const pu = unit(perpTo(screenUp, toCam));
+    const pr = unit(cross(pu, toCam));
+    const pn = perpTo(n, toCam);
+    const aUp = dot(pn, pu);
+    const aSide = dot(pn, pr);
+    // Sideways tip fades as a building nears head on, so stops on the sides
+    // of the road do not look like they are falling over.
+    const side = 0.35 + 0.65 * Math.min(1, a / min);
+    // Near head on, screen up takes over smoothly (no flip as the normal
+    // swings past the line of sight).
+    const lift = 0.6 * Math.sin(min) * Math.max(0, 1 - a / min);
+    let dir = add(scale(pu, Math.max(aUp, 0.5 * len(pn), lift, 1e-6)), pr, aSide * side);
+    dir = unit(dir);
+    const t = Math.max(a, min);
+    return unit(add(scale(toCam, Math.cos(t)), dir, Math.sin(t)));
 }
 
-// Angle in degrees between a building's up and the line of sight for a stop
-// facing the camera head on (normal = camera direction, screen up at 90 deg).
-export function leanAngleAtCentre(w = leanWeights()) {
-    const a = w.normal + w.camera;
-    return (Math.atan2(w.screenUp, a) * 180) / Math.PI;
+// Angle in degrees between the line of sight and a building's up, for a stop
+// at angle viewDeg from the line of sight (0 = facing the camera head on).
+export function viewAngle(viewDeg, minDeg = MIN_VIEW_DEG) {
+    const r = (viewDeg * Math.PI) / 180;
+    const n = { x: 0, y: Math.sin(r), z: Math.cos(r) };
+    const u = standingUp(n, { x: 0, y: 0, z: 1 }, { x: 0, y: 1, z: 0 }, minDeg);
+    return (Math.acos(Math.max(-1, Math.min(1, u.z))) * 180) / Math.PI;
+}
+
+// Kept for the round 19 test: the angle for a stop facing you head on.
+export function leanAngleAtCentre() {
+    return viewAngle(0);
 }
 
 const BY_SCENARIO = { care: 'temple', school: 'teahouse', urban: 'pagoda', festival: 'torii', global: 'pagoda' };

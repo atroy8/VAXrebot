@@ -34,6 +34,9 @@
 // Perf: pixel ratio capped at 2, shared geometry/materials, one
 // LineSegments draw for all links, per-node work is O(1) per frame.
 import * as THREE from 'three';
+import { WEB_INK, backdropPlan, applyBackdrop, planetDefFor } from './web-backdrop.js';
+import { comboFor } from '../config/planet-palettes.js';
+import { PLANET_DEFS } from '../config/levels.js';
 import {
     cameraUp,
     panView,
@@ -130,6 +133,8 @@ const FACE_SCALE = 1.15;
 // World units kept free around the network when framing it. People are 1.1
 // wide, so 1.2 keeps the outer ring clear of the edges without wasting space.
 const FIT_PAD = 1.2;
+// Height of the button row at the top of the web (Key, 2D/3D), in CSS px.
+export const TOP_BUTTONS_PX = 54;
 
 // Link ribbon widths and colour keys come from link-style.js.
 const LINK_COLORS = {
@@ -139,6 +144,16 @@ const LINK_COLORS = {
     // Plain lines while Sever is selected: a touch deeper than normal so they
     // read as cuttable without drowning out the red at-risk lines.
     cuttable: new THREE.Color(0x6f86a8),
+};
+// Item 22 (round 25): on the paper-light 2D scene the 3D colours were faint
+// (red lines 2.9:1 against the old cream). 2D draws deeper ink instead, so
+// lines keep their contrast on every planet's tinted paper (see
+// web-backdrop.js and tests/web-backdrop.test.js).
+const LINK_COLORS_2D = {
+    normal: new THREE.Color(WEB_INK.normal2d),
+    blocked: new THREE.Color(0x56627a),
+    risk: new THREE.Color(WEB_INK.risk2d),
+    cuttable: new THREE.Color(0x5f7699),
 };
 
 // Physics lives in force-layout.js (stable, cools to rest).
@@ -335,6 +350,13 @@ export class NetworkView {
         return this.mode === '3d';
     }
 
+    // Item 22 (round 25): paint the planet's scene behind the web. Called
+    // before setup so the 3D fog can match the planet's night sky.
+    paintBackdrop(regionId) {
+        const def = planetDefFor(regionId, PLANET_DEFS);
+        applyBackdrop(document.querySelector('.network-container'), def ? backdropPlan(comboFor(def)) : null);
+    }
+
     setup({ onNodeClick, onLinkClick, onBoxed = null }) {
         this.onNodeClick = onNodeClick;
         this.onBoxed = onBoxed;
@@ -446,7 +468,17 @@ export class NetworkView {
             this.physicsSettled = false;
             this.autoFit = true;
         }
-        if (this.nodeObjs.size) this.frameNetwork();
+        if (this.nodeObjs.size) {
+            // Round 25: the first level can be set up before the game screen
+            // has its real size; size people again for the real view so
+            // nobody drops under 44 px.
+            for (let k = 0; k < 4; k++) {
+                this.frameNetwork();
+                const before = this.personScale;
+                this.updatePersonScale();
+                if (Math.abs(this.personScale - before) < 0.01) break;
+            }
+        }
     }
 
     // ---- Node / link management -------------------------------------------
@@ -757,7 +789,7 @@ export class NetworkView {
                 pos[k++] = pb.x + nx; pos[k++] = pb.y + ny; pos[k++] = -0.1;
                 pos[k++] = pb.x - nx; pos[k++] = pb.y - ny; pos[k++] = -0.1;
             }
-            const base = LINK_COLORS[style.color];
+            const base = (this.is3d ? LINK_COLORS : LINK_COLORS_2D)[style.color];
             const m = style.pulse ? pulse : 1;
             const onTop = overlay && kind === 'risk' && !hidden;
             for (let v = 0; v < 4; v++) {
@@ -792,7 +824,14 @@ export class NetworkView {
     fitTarget() {
         const pts = [];
         for (const o of this.nodeObjs.values()) if (!o.boxed) pts.push(o.pos);
-        return fitCamera(pts, { fovDeg: this.camera.fov, aspect: this.camera.aspect, pad: FIT_PAD + 0.6 * (this.personScale - 1) });
+        return fitCamera(pts, { fovDeg: this.camera.fov, aspect: this.camera.aspect, pad: FIT_PAD + 0.6 * (this.personScale - 1), topReserve: this.topReserve() });
+    }
+
+    // Share of the view's height the Key and 2D/3D buttons cover at the top
+    // (they sit 8 px down and are 44 px tall), plus a little air.
+    topReserve() {
+        const h = this.container?.clientHeight || 0;
+        return h > 0 ? Math.min(0.2, TOP_BUTTONS_PX / h) : 0;
     }
 
     fitTarget3d() {
@@ -894,7 +933,9 @@ export class NetworkView {
     applyModeLook() {
         if (this.is3d) this.showOrbitHintOnce();
         this.container?.classList.toggle('is-3d', this.is3d);
-        if (this.scene) this.scene.fog = this.is3d ? new THREE.Fog(SPACE_FOG, 14, 60) : null;
+        // Fog fades the back of the 3D web into the planet's night sky (item 22).
+        const sky = this.container ? getComputedStyle(this.container).getPropertyValue('--bd-night-top').trim() : '';
+        if (this.scene) this.scene.fog = this.is3d ? new THREE.Fog(sky || SPACE_FOG, 14, 60) : null;
         this.reduceMotion = !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
     }
 
