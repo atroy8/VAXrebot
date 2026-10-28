@@ -23,14 +23,14 @@ import './globe-candy.css';
 import './start-page.css';
 import { startPageMarkup, layoutPeople, bindPeopleTaps } from './start-page.js';
 import { starRow, levelLabelHtml, clampLabelX, LOCK_ICON as LOCK_SVG } from './globe-labels.js';
-import { latLngToXYZ, windingPath, chestStop, globeFitDistance, faceRotation, angleDelta, slerp, facesCamera } from './globe-math.js';
+import { latLngToXYZ, windingPath, chestStop, globeFitDistance, faceRotation, angleDelta, slerp, facesCamera, tiltedOffset, PLANET_VIEW_AIM_UP } from './globe-math.js';
 import { PLANETS, SYSTEM_LAYOUTS, PLANET_LEVEL_POSITIONS, SUN_RADIUS } from '../config/solar-system.js';
 import { orbitAngle, orbitPosition, systemCamera, galaxyCamera, planetStatus, systemStatus } from './solar-math.js';
 import { planetPalette, starPalette, comboFor, hexToRgb } from '../config/planet-palettes.js';
 import { takeChestRequest, chestDestination } from './pending-chest.js';
 import { THEME, CONFETTI, hexNum } from '../config/theme.js';
 import { cloisonnePlan, paintCloisonne, TEXTURE_W, TEXTURE_H } from './cloisonne.js';
-import { buildingParts, buildingFor, buildingColors, leanWeights, buildingExtent, labelLift, roofSurface, beamLift } from './buildings.js';
+import { buildingParts, buildingFor, buildingColors, standingUp, buildingExtent, labelLift, roofSurface, beamLift } from './buildings.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 // Level buttons: the planet's colour while open, gold once beaten.
@@ -973,9 +973,13 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
         return globeFitDistance({ radius: 1.06 * planets[pi].radius, fovDeg: camera.fov, aspect: camera.aspect, margin: 1.0 });
     }
 
+    // Item 23: seen from a tilted angle (globe-math.js tiltedOffset), not
+    // straight down, so buildings show their walls.
     function planetCameraSpot(pi) {
         const c = planetCentre(pi);
-        return { pos: c.clone().add(new THREE.Vector3(0, planetFitDistance(pi), 0)), look: c };
+        const o = tiltedOffset(planetFitDistance(pi));
+        const aim = c.clone().add(new THREE.Vector3(0, 0, -PLANET_VIEW_AIM_UP * planets[pi].radius));
+        return { pos: aim.clone().add(new THREE.Vector3(o.x, o.y, o.z)), look: aim };
     }
 
     function flyToPlanet(pi, { focusIndex = null, dur = 1100 } = {}) {
@@ -1468,8 +1472,8 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
         }
     }
 
-    // Buildings lean a little toward the viewer so their fronts show, like a
-    // picture map, instead of only their roofs from straight above.
+    // Buildings turn their fronts to the viewer and stand up on the planet;
+    // one seen almost head on tips back a little (buildings.js standingUp).
     const _lean = { up: new THREE.Vector3(), toCam: new THREE.Vector3(), n: new THREE.Vector3(), u: new THREE.Vector3(), f: new THREE.Vector3(), r: new THREE.Vector3(), m: new THREE.Matrix4(), q: new THREE.Quaternion(), gq: new THREE.Quaternion(), p: new THREE.Vector3() };
     function leanTowardViewer(m) {
         const L = _lean;
@@ -1478,8 +1482,8 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
         L.n.set(0, 1, 0).applyQuaternion(L.gq);
         L.toCam.copy(camera.position).sub(L.p).normalize();
         L.up.set(0, 1, 0).applyQuaternion(camera.quaternion);
-        const w = leanWeights();
-        L.u.copy(L.n).multiplyScalar(w.normal).addScaledVector(L.toCam, w.camera).addScaledVector(L.up, w.screenUp).normalize();
+        const u = standingUp(L.n, L.toCam, L.up);
+        L.u.set(u.x, u.y, u.z);
         L.f.copy(L.toCam).addScaledVector(L.u, -L.toCam.dot(L.u));
         if (L.f.lengthSq() < 1e-6) L.f.set(0, 0, 1).applyQuaternion(L.gq);
         L.f.normalize();

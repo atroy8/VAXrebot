@@ -69,6 +69,23 @@ describe('game screen model (item 7)', () => {
         expect(fitCamera([], {}).distance).toBeGreaterThan(0);
     });
 
+    it('keeps people out from under the Key and 2D/3D buttons at the top (round 25)', () => {
+        const pts = [];
+        for (let i = 0; i < 25; i++) pts.push({ x: Math.cos(i * 1.7) * 8, y: Math.sin(i * 2.3) * 12 });
+        const aspect = 304 / 515; // the web's area on a 390x844 phone
+        const reserve = 54 / 515;
+        const { cx, cy, distance } = fitCamera(pts, { fovDeg: 48, aspect, pad: 1.2, topReserve: reserve });
+        const t = Math.tan((48 * Math.PI) / 360);
+        for (const p of pts) {
+            const sy = (p.y - cy) / (distance * t); // -1 bottom, +1 top
+            expect(sy).toBeLessThanOrEqual(1 - 2 * reserve + 1e-9);
+            expect(sy).toBeGreaterThanOrEqual(-1);
+            expect(Math.abs(p.x - cx) / (distance * t * aspect)).toBeLessThanOrEqual(1);
+        }
+        // No reserve: the old, centred fit.
+        expect(fitCamera(pts, { fovDeg: 48, aspect, pad: 1.2 }).cy).toBeCloseTo((Math.min(...pts.map((p) => p.y)) + Math.max(...pts.map((p) => p.y))) / 2, 6);
+    });
+
     it('explains which rule ended a lost level', () => {
         expect(lossReason({ totalInfected: 18, caseCap: 18 })).toContain('cap of 18');
         expect(lossReason({ totalInfected: 3, caseCap: 18 })).toContain('Deaths');
