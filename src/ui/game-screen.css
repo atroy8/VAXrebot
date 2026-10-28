@@ -692,3 +692,83 @@ html .network-container.is-3d {
 .star-meter-why { margin: 5px 0 0; font-size: 0.72rem; color: var(--color-text-secondary, #55617f); line-height: 1.3; }
 .star-goal { margin: 6px 0 0; font-size: 0.82rem; color: var(--kin-700, #8a6417); line-height: 1.3; }
 .star-goal:empty { display: none; }
+
+/* Item 22 (round 25): each planet paints its own scene behind the web
+   (src/ui/web-backdrop.js sets the colours). 2D: tinted washi paper, a soft
+   sun, slow mist, faint seigaiha waves along the bottom and a vignette.
+   3D: a night sky from the planet's darkest colour with a soft nebula. */
+html .network-container.has-backdrop {
+    background:
+        radial-gradient(ellipse at 50% 42%, transparent 58%, var(--bd-edge) 100%),
+        linear-gradient(180deg, var(--bd-top) 0%, var(--bd-bottom) 100%);
+}
+html .network-container.has-backdrop.is-3d {
+    background:
+        radial-gradient(circle at 18% 22%, var(--bd-star) 0 1px, transparent 2px) 0 0 / 38px 38px,
+        radial-gradient(circle at 70% 64%, rgba(255, 255, 255, 0.35) 0 1px, transparent 2px) 0 0 / 27px 27px,
+        linear-gradient(180deg, var(--bd-night-top) 0%, var(--bd-night-bottom) 100%);
+}
+.web-backdrop {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+}
+.web-backdrop > i { position: absolute; display: block; pointer-events: none; }
+.web-backdrop .bd-sun {
+    width: 46%;
+    aspect-ratio: 1;
+    right: -8%;
+    top: -6%;
+    border-radius: 50%;
+    background: radial-gradient(circle, var(--bd-sun) 0 34%, transparent 70%);
+}
+.web-backdrop .bd-mist {
+    inset: -10% -40%;
+    background:
+        radial-gradient(ellipse 30% 12% at 30% 34%, var(--bd-mist), transparent 70%),
+        radial-gradient(ellipse 26% 10% at 72% 62%, var(--bd-mist), transparent 70%),
+        radial-gradient(ellipse 34% 11% at 44% 86%, var(--bd-mist), transparent 70%);
+    animation: bdMistDrift 38s ease-in-out infinite alternate;
+    will-change: transform;
+}
+.web-backdrop .bd-waves {
+    left: -40px;
+    right: 0;
+    bottom: 0;
+    height: 30%;
+    background: var(--bd-wave-tile) repeat 0 100% / 40px 20px;
+    -webkit-mask-image: linear-gradient(0deg, #000 0%, transparent 100%);
+    mask-image: linear-gradient(0deg, #000 0%, transparent 100%);
+    animation: bdWaveRoll 24s linear infinite;
+    will-change: transform;
+}
+.web-backdrop .bd-nebula {
+    inset: -20%;
+    display: none;
+    background:
+        radial-gradient(ellipse 40% 30% at 30% 35%, var(--bd-nebula), transparent 70%),
+        radial-gradient(ellipse 35% 28% at 70% 70%, var(--bd-nebula), transparent 70%);
+    animation: bdMistDrift 60s ease-in-out infinite alternate;
+}
+.network-container.is-3d .web-backdrop .bd-sun,
+.network-container.is-3d .web-backdrop .bd-mist,
+.network-container.is-3d .web-backdrop .bd-waves { display: none; }
+.network-container.is-3d .web-backdrop .bd-nebula { display: block; }
+@keyframes bdMistDrift {
+    from { transform: translateX(-6%); }
+    to { transform: translateX(6%); }
+}
+/* Transform only, so the browser moves a ready layer instead of
+   repainting the waves every frame. */
+@keyframes bdWaveRoll {
+    from { transform: translateX(0); }
+    to { transform: translateX(40px); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .web-backdrop .bd-mist,
+    .web-backdrop .bd-waves,
+    .web-backdrop .bd-nebula { animation: none; }
+}
+/* Paused: the scene holds still with the game. */
+#game-screen.is-paused .web-backdrop > i { animation-play-state: paused; }

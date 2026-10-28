@@ -77,7 +77,10 @@ export function dayBanner({ day, newCases = 0, recovered = 0, died = 0 }) {
 // Camera fit for the flat network: the smallest distance that shows every
 // point (plus padding) at the given vertical field of view and aspect.
 // points: [{x, y}], returns { cx, cy, distance }.
-export function fitCamera(points, { fovDeg = 48, aspect = 1, pad = 1.4 } = {}) {
+// topReserve (round 25 playtest fix): the fraction of the view's height kept
+// clear at the top for the Key and 2D/3D buttons, so no person sits under
+// them (a tap there opened the key instead of hitting the person).
+export function fitCamera(points, { fovDeg = 48, aspect = 1, pad = 1.4, topReserve = 0 } = {}) {
     if (!points.length) return { cx: 0, cy: 0, distance: 10 };
     let minX = Infinity;
     let maxX = -Infinity;
@@ -92,8 +95,10 @@ export function fitCamera(points, { fovDeg = 48, aspect = 1, pad = 1.4 } = {}) {
     const halfW = (maxX - minX) / 2 + pad;
     const halfH = (maxY - minY) / 2 + pad;
     const t = Math.tan((fovDeg * Math.PI) / 360);
-    const distance = Math.max(halfH / t, halfW / (t * Math.max(0.2, aspect)));
-    return { cx: (minX + maxX) / 2, cy: (minY + maxY) / 2, distance };
+    const f = Math.min(0.3, Math.max(0, topReserve));
+    const distance = Math.max(halfH / (t * (1 - f)), halfW / (t * Math.max(0.2, aspect)));
+    // Screen up is world +y: aim a little higher so the people sit lower.
+    return { cx: (minX + maxX) / 2, cy: (minY + maxY) / 2 + f * distance * t, distance };
 }
 
 // Results copy for a loss: say which rule ended the run.
