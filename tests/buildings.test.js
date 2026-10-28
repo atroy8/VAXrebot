@@ -72,12 +72,12 @@ describe('Japanese buildings at the level stops (item 19)', () => {
     });
 });
 
-describe('buildings lean toward the viewer (item 19)', () => {
-    it('lean about 30 degrees, enough to show the front but never lying flat', async () => {
+describe('buildings show their fronts (item 19, retuned for the tilted view in item 23)', () => {
+    it('a stop seen head on is still seen from the side, never from straight above or lying flat', async () => {
         const { leanAngleAtCentre } = await import('../src/ui/buildings.js');
         const a = leanAngleAtCentre();
-        expect(a).toBeGreaterThan(20);
-        expect(a).toBeLessThan(45);
+        expect(a).toBeGreaterThan(40);
+        expect(a).toBeLessThan(65);
         expect(globe).toContain('leanTowardViewer(m)');
     });
 });

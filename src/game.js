@@ -350,6 +350,10 @@ export class EpidemicSimulator {
         this.closeShop();
         document.getElementById('game-screen').classList.remove('is-paused');
         document.getElementById('pause-game').setAttribute('aria-pressed', 'false');
+        // Item 22: the scene behind the web comes from the level's planet. The
+        // view chunk (loaded lazily) holds the palette code, so the entry
+        // bundle stays small.
+        this.view.paintBackdrop?.(this.currentLevel?.regionId);
         this.view.setup({
             onNodeClick: (event, node) => this.handleNodeClick(event, node),
             onLinkClick: (event, link) => this.handleLinkClick(event, link),

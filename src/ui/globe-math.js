@@ -98,3 +98,19 @@ export function facesCamera(markerPos, centre, cameraPos) {
     const cx = cameraPos.x - centre.x, cy = cameraPos.y - centre.y, cz = cameraPos.z - centre.z;
     return mx * cx + my * cy + mz * cz > 0;
 }
+
+// Item 23 (round 25): the planet view looks at the planet from a lower,
+// tilted angle instead of straight down, so buildings show their walls,
+// doors and roofs. The camera swings from straight above (world +y) toward
+// the bottom of the screen (world +z, since screen up is world -z) by
+// tiltDeg, at the same distance, so the planet still fits the screen.
+export const PLANET_VIEW_TILT_DEG = 22;
+export function tiltedOffset(distance, tiltDeg = PLANET_VIEW_TILT_DEG) {
+    const t = tiltDeg * D2R;
+    return { x: 0, y: distance * Math.cos(t), z: distance * Math.sin(t) };
+}
+
+// With the tilt the road sits high on the planet and the pole shows below
+// it, so the camera aims a little above the centre (toward world -z) and
+// the planet moves down the screen, away from the HUD. In planet radii.
+export const PLANET_VIEW_AIM_UP = 0.1;
