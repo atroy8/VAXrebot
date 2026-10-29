@@ -4,7 +4,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { LEVELS } from '../src/config/levels.js';
 import { levelRules } from '../src/config/level-rules.js';
-import { TOOLKITS, CLASSIC_TOOLS, SLOT_TOOLKITS, toolkitCard, toolsOf } from '../src/config/toolkits.js';
+import { TOOLKITS, CLASSIC_TOOLS, SLOT_TOOLKITS, toolkitCard, toolsOf, toolOpenDays, DEFAULT_TOOL_DAYS } from '../src/config/toolkits.js';
 import { lessonFits } from '../src/config/campaign.js';
 import { tools } from '../src/config/tools.js';
 import { toolChips } from '../src/ui/game-screen-model.js';
@@ -121,7 +121,7 @@ describe('briefing toolkit card', () => {
         const kit = byKit('rollout')[0].toolkit;
         const card = toolkitCard(kit);
         expect(card.title).toBe('Your tools: Vaccinate, Sever');
-        expect(card.firstDay).toEqual(['Vaccinate']);
+        expect(card.firstDay).toEqual(['Vaccinate', 'Sever']);
         const html = toolkitMarkup(kit);
         expect(html).toContain('Vaccinate<small>day 1</small>');
         expect(html).toContain('Ebola');
@@ -132,6 +132,42 @@ describe('briefing toolkit card', () => {
 
     it('the briefing has a toolkit slot and game.js fills it on every level', () => {
         expect(read('index.html')).toContain('id="briefing-toolkit"');
-        expect(read('src/game.js')).toContain('showToolkit(level.toolkit)');
+        expect(read('src/game.js')).toContain('showToolkit(level.toolkit, level.variant?.toolDays)');
+    });
+});
+
+describe('briefing says when each tool opens (round 26)', () => {
+    it('every level: each chip day matches the day the engine opens that tool', () => {
+        for (const level of LEVELS) {
+            const { difficulty } = levelRules(level);
+            const open = toolOpenDays(level.toolkit, level.variant?.toolDays);
+            for (const id of level.toolkit.tools) {
+                expect(open[id], `${level.id} ${id}`).toBe(toolAvailableDay(tools[id], difficulty, id));
+            }
+            const html = toolkitMarkup(level.toolkit, level.variant?.toolDays);
+            for (const { label, day } of toolkitCard(level.toolkit, level.variant?.toolDays).days) {
+                expect(html).toContain(`${label}<small>day ${day}</small>`);
+            }
+        }
+    });
+
+    it('default tool days mirror the tool definitions', () => {
+        for (const id of CLASSIC_TOOLS) expect(DEFAULT_TOOL_DAYS[id]).toBe(tools[id].availableDay);
+    });
+
+    it('level 1 shows Sever on day 1, Vaccinate on day 2 and Quarantine on day 3', () => {
+        const html = toolkitMarkup(LEVELS[0].toolkit, LEVELS[0].variant?.toolDays);
+        expect(html).toContain('Sever<small>day 1</small>');
+        expect(html).toContain('Vaccinate<small>day 2</small>');
+        expect(html).toContain('Quarantine<small>day 3</small>');
+        expect(html.indexOf('Sever<small>')).toBeLessThan(html.indexOf('Vaccinate<small>'));
+        expect(html.indexOf('Vaccinate<small>')).toBeLessThan(html.indexOf('Quarantine<small>'));
+        expect(LEVELS[0].toolkit.why).not.toMatch(/on hand/);
+    });
+
+    it('a super-spreader level brings Quarantine forward to day 2', () => {
+        const level = LEVELS.find((l) => l.variant?.type === 'superSpreader' && l.toolkit.tools.includes('quarantine'));
+        expect(level).toBeTruthy();
+        expect(toolkitMarkup(level.toolkit, level.variant.toolDays)).toContain('Quarantine<small>day 2</small>');
     });
 });
