@@ -374,3 +374,28 @@ html .candy .globe-label-num .globe-label-lock svg { width: 0.8em; height: 0.8em
    screen position, and scaling it would pull labels toward the corner.
    Only locked labels shrink: a scaled star row drifts off its number. */
 html .candy .globe-marker-label.locked > * { scale: 0.86; }
+
+/* ---- How to play (round 26): washi cards with ink headings. The cards
+   used --color-background, which this theme makes deep indigo, so the
+   dark step titles all but vanished. ---- */
+html .onboarding-dialog {
+    background: #fffdf7;
+    border: 2px solid var(--kin-300);
+    border-radius: 18px;
+    box-shadow: 0 8px 0 var(--kin-600), 0 18px 40px rgba(0, 0, 0, 0.45);
+}
+html .onboarding-dialog h2 { color: var(--ai-800); }
+html .onboarding-card {
+    background: var(--washi);
+    border: 1px solid var(--washi-edge);
+    border-left: 4px solid var(--kin-500);
+    border-radius: 12px;
+}
+html .onboarding-card h3 { color: var(--ai-800); }
+html .onboarding-card p { color: #3d4866; }
+html .onboarding-step {
+    background: var(--indigo-lacquer);
+    color: #fff;
+    border: 2px solid var(--kin-400);
+    box-sizing: border-box;
+}

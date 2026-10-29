@@ -444,7 +444,19 @@
 .wrapup-title { font-size: 1.1rem; }
 .wrapup-text { font-size: 0.85rem; line-height: 1.3; }
 @keyframes wrapupIn { from { opacity: 0; transform: translate(-50%, 16px) scale(0.9); } to { opacity: 1; transform: translate(-50%, 0) scale(1); } }
-.wrapping-up .tools-panel { opacity: 0.45; pointer-events: none; transition: opacity 0.3s; }
+.wrapping-up .tools-panel { pointer-events: none; }
+.wrapping-up .tools-panel > :not(.wrapup-card) { opacity: 0.2; transition: opacity 0.3s; }
+/* Round 26: during wrap-up the card covers the idle tray, clear of toasts. */
+.tools-panel { position: relative; }
+.tools-panel > .wrapup-card {
+    top: 50%;
+    bottom: auto;
+    width: calc(100% - 16px);
+    max-width: 360px;
+    animation-name: wrapupInTray;
+    transform: translate(-50%, -50%);
+}
+@keyframes wrapupInTray { from { opacity: 0; transform: translate(-50%, -40%) scale(0.9); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
 
 /* Face tokens: the network's faces on a glossy ball (face-token.js). */
 .face-token {

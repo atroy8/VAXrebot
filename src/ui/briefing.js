@@ -88,19 +88,20 @@ export function showStarGoal(opts) {
 const KIT_COLORS = { Vaccinate: '#7c3aed', Quarantine: '#f97316', Sever: '#0ea5e9' };
 const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
-export function toolkitMarkup(toolkit) {
-    const card = toolkitCard(toolkit);
+export function toolkitMarkup(toolkit, variantToolDays = null) {
+    const card = toolkitCard(toolkit, variantToolDays);
     if (!card) return '';
-    const chips = card.tools
-        .map((t) => `<span class="kit-chip" style="--kit-color:${KIT_COLORS[t] || '#64748b'}">${esc(t)}${card.firstDay.includes(t) ? '<small>day 1</small>' : ''}</span>`)
+    // Each chip says the day its tool opens, the same "Day N" the tray shows.
+    const chips = card.days
+        .map(({ label, day }) => `<span class="kit-chip" style="--kit-color:${KIT_COLORS[label] || '#64748b'}">${esc(label)}<small>day ${day}</small></span>`)
         .join('');
     return `<strong class="kit-title">${esc(card.title)}</strong><div class="kit-chips">${chips}</div><p class="kit-why">${esc(card.why)}</p>`;
 }
 
-export function showToolkit(toolkit) {
+export function showToolkit(toolkit, variantToolDays = null) {
     const el = document.getElementById('briefing-toolkit');
     if (!el) return;
-    const html = toolkitMarkup(toolkit);
+    const html = toolkitMarkup(toolkit, variantToolDays);
     el.innerHTML = html;
     el.hidden = !html;
 }
