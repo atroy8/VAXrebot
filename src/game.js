@@ -306,7 +306,7 @@ export class EpidemicSimulator {
         const lesson = lessonFor(level.id);
         fillLessonCard('briefing-lesson', lesson?.title, lesson?.brief);
         showVariantCallout(variantCallout(level.variant));
-        showToolkit(level.toolkit);
+        showToolkit(level.toolkit, level.variant?.toolDays);
         // Start fetching the network view while the player reads the briefing.
         this.viewLoader.prefetch();
         this.showScreen('briefing');
@@ -365,6 +365,11 @@ export class EpidemicSimulator {
         this.view.update(this.network.nodes, this.network.links, true);
         this.updateUI();
         this.showScreen('game');
+        // Round 26: a new player sees How to play once, on their first level.
+        // It was built but never wired, so the rules only showed behind "?".
+        if (this.currentLevel && this.currentLevel.id === LEVELS[0].id) {
+            import('./ui/onboarding.js').then((m) => m.maybeShowOnboarding());
+        }
         addLogEntry(this.gameState.day, `Simulation started for ${this.currentScenario.name}.`, true);
     }
 
@@ -605,7 +610,10 @@ export class EpidemicSimulator {
         card.innerHTML = `
             <strong class="wrapup-title">Spread stopped!</strong>
             <span class="wrapup-text">No sick person is in contact with anyone who can catch it. Fast-forwarding while the last patients recover.</span>`;
-        document.querySelector('.network-container')?.appendChild(card);
+        // Round 26: the card sits over the idle tool tray, not the bottom of
+        // the web, so the toasts above the tray (a death, R below 1) never
+        // cover it.
+        (document.getElementById('tool-tray') || document.querySelector('.network-container'))?.appendChild(card);
         this.audio.playStinger?.('milestone');
         const step = () => {
             if (!this.wrapUp || !this.gameState || this.gameState.gameOver) return this.endWrapUp();

@@ -18,13 +18,18 @@
 
 export const CLASSIC_TOOLS = Object.freeze(['vaccinate', 'quarantine', 'severLink']);
 
+// First day of each classic tool when nothing brings it forward. Mirrors
+// availableDay in src/config/tools.js (kept here to avoid an import cycle
+// through economy.js; tests/toolkits.test.js checks they agree).
+export const DEFAULT_TOOL_DAYS = Object.freeze({ vaccinate: 2, quarantine: 3, severLink: 1 });
+
 export const TOOL_LABELS = Object.freeze({ vaccinate: 'Vaccinate', quarantine: 'Quarantine', severLink: 'Sever' });
 
 export const TOOLKITS = Object.freeze({
     full: {
         id: 'full',
         tools: ['vaccinate', 'quarantine', 'severLink'],
-        why: 'Everything is on hand here: vaccines, isolation rooms and visiting rules. Try each tool and see what it does.',
+        why: 'Every tool comes here: visiting rules from the start, then vaccines and isolation rooms as they arrive. Try each tool and see what it does.',
     },
     market: {
         id: 'market',
@@ -82,15 +87,34 @@ export function toolsOf(level) {
     return level && level.toolkit ? [...level.toolkit.tools] : [...CLASSIC_TOOLS];
 }
 
-// Briefing card text: { title, tools: [labels], why }.
-export function toolkitCard(toolkit) {
+// The day each kit tool opens on this level: the toolkit or the puzzle
+// variant can bring a tool forward (the variant wins a tie, as in
+// src/config/level-rules.js); otherwise the tool's own first day applies.
+export function toolOpenDays(toolkit, variantToolDays = null) {
+    const out = {};
+    for (const id of toolkit ? toolkit.tools : []) {
+        const pinned = variantToolDays?.[id] ?? toolkit.toolDays?.[id];
+        out[id] = pinned ?? DEFAULT_TOOL_DAYS[id] ?? 1;
+    }
+    return out;
+}
+
+// Briefing card text: { title, tools: [labels], firstDay, days, why }.
+// days pairs each tool label with the day it opens, so the briefing matches
+// the tray (round 26: level 1 said everything was on hand while two tools
+// stayed locked until day 2 and day 3).
+export function toolkitCard(toolkit, variantToolDays = null) {
     if (!toolkit) return null;
     const labels = toolkit.tools.map((t) => TOOL_LABELS[t]);
-    const firstDay = toolkit.toolDays ? Object.entries(toolkit.toolDays).filter(([, d]) => d <= 1).map(([t]) => TOOL_LABELS[t]) : [];
+    const open = toolOpenDays(toolkit, variantToolDays);
+    // Chips run in the order the tools open (stable for ties).
+    const days = toolkit.tools.map((t) => ({ label: TOOL_LABELS[t], day: open[t] })).sort((a, b) => a.day - b.day);
+    const firstDay = days.filter((d) => d.day <= 1).map((d) => d.label);
     return {
         title: labels.length === 1 ? `Your tool: ${labels[0]}` : `Your tools: ${labels.join(', ')}`,
         tools: labels,
         firstDay,
+        days,
         why: toolkit.why,
     };
 }
