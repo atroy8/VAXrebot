@@ -28,7 +28,7 @@ import './ui/game-screen.css';
 import './ui/averted.css';
 import './ui/variants.css';
 import './ui/app-shell.css'; // last: safe areas and native touch feel (round 18)
-import { toolHint, dayBanner, rFellBelowOne, R_BELOW_ONE_TEXT, shouldAutoPause } from './ui/game-screen-model.js';
+import { toolHint, dayBanner, rFellBelowOne, R_BELOW_ONE_TEXT, shouldAutoPause, toolChips, autoToolForTap, noToolTapHint, idleTapMode } from './ui/game-screen-model.js';
 import { renderCareBox, flyToCareBox } from './ui/care-box.js';
 import { mountShop, renderShop } from './ui/shop.js';
 import { buildOutbreak } from './sim/setup.js';
@@ -357,6 +357,7 @@ export class EpidemicSimulator {
         this.view.setup({
             onNodeClick: (event, node) => this.handleNodeClick(event, node),
             onLinkClick: (event, link) => this.handleLinkClick(event, link),
+            idleTapMode: () => (this.gameState ? idleTapMode(this.currentChips()) : null),
             // Isolated, in treatment or cured: faces fly to the care box.
             onBoxed: (leaving) => {
                 flyToCareBox(leaving, { onLand: () => this.audio.playSound(1046, 0.08, 'sine') });
@@ -391,7 +392,8 @@ export class EpidemicSimulator {
 
     handleNodeClick(event, node) {
         if (this.selectedTool === 'severLink') return; // Sever tool only works on links
-        if (!this.selectedTool || node.removed) return;
+        if (node.removed) return;
+        if (!this.selectedTool && !this.autoPickTool('node', node.state)) return;
 
         const { allowed, reason } = canUseTool(
             this.gameState,
@@ -407,7 +409,25 @@ export class EpidemicSimulator {
         this.applyToolToNode(this.selectedTool, node);
     }
 
+    currentChips() {
+        return toolChips(this.tools, this.difficulty, this.gameState.day, this.gameState.dailyUsage, getCharges());
+    }
+
+    // No tool chosen yet: pick the one that fits the tap (round 27), or say
+    // which tool would. Returns true when a tool is now selected.
+    autoPickTool(kind, nodeState) {
+        const chips = this.currentChips();
+        const toolId = autoToolForTap(kind, nodeState, chips);
+        if (!toolId) {
+            showNotification(noToolTapHint(kind, chips), 'info');
+            return false;
+        }
+        this.selectTool(toolId);
+        return true;
+    }
+
     handleLinkClick(event, link) {
+        if (!this.selectedTool && !this.autoPickTool('link')) return;
         if (this.selectedTool !== 'severLink') return;
         const { allowed, reason } = canUseTool(
             this.gameState,
