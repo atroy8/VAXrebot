@@ -32,6 +32,30 @@ describe('auto-advance countdown', () => {
         expect(aa.isRunning()).toBe(false);
     });
 
+    it('clears the countdown display when it fires, before the day turns (round 27)', () => {
+        const order = [];
+        const { aa, calls } = make({ onStop: (why) => order.push(`stop:${why}`), onFire: () => order.push('fire') });
+        aa.start();
+        vi.advanceTimersByTime(3100);
+        expect(order).toEqual(['stop:fired', 'fire']);
+        expect(calls.fire).toBe(0);
+    });
+
+    it('a cancel from inside onFire (nextDay) is harmless after it fired', () => {
+        const stops = [];
+        let aa;
+        aa = createAutoAdvance({
+            delayMs: 1000,
+            onFire: () => aa.cancel(),
+            onStop: (why) => stops.push(why),
+            timers: { setInterval, clearInterval, now: () => Date.now() },
+        });
+        aa.start();
+        vi.advanceTimersByTime(1200);
+        expect(stops).toEqual(['fired']);
+        expect(aa.isRunning()).toBe(false);
+    });
+
     it('reports time left on each tick, counting down to zero', () => {
         const { aa, calls } = make();
         aa.start();
@@ -62,7 +86,7 @@ describe('auto-advance countdown', () => {
         expect(calls.fire).toBe(0);
         vi.advanceTimersByTime(600);
         expect(calls.fire).toBe(1);
-        expect(calls.stops).toEqual(['cancelled']);
+        expect(calls.stops).toEqual(['cancelled', 'fired']);
     });
 
     it('hold and cancel are no-ops when nothing is running', () => {

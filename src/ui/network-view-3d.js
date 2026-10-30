@@ -357,13 +357,17 @@ export class NetworkView {
         applyBackdrop(document.querySelector('.network-container'), def ? backdropPlan(comboFor(def)) : null);
     }
 
-    setup({ onNodeClick, onLinkClick, onBoxed = null }) {
+    setup({ onNodeClick, onLinkClick, onBoxed = null, idleTapMode = null }) {
         this.onNodeClick = onNodeClick;
+        this.idleTapMode = idleTapMode;
         this.onBoxed = onBoxed;
         this.onLinkClick = onLinkClick;
         this.teardown();
 
         this.container = document.querySelector('.network-container');
+        // Like the globe's mountEl.__globe: lets Playwright playtests find
+        // people and lines on screen. Not used by the game itself.
+        this.container.__net = this;
         // The D3 svg stays in the DOM (network-view.js is kept unwired);
         // hide it so only the WebGL canvas shows.
         const svg = document.getElementById('network-svg');
@@ -1597,7 +1601,8 @@ export class NetworkView {
         }
         if (this.is3d) normalizedDepths(camDist).forEach((d, i) => (nodes[i].depth = d));
         const links = [];
-        const tool = this.toolMode;
+        // No tool chosen: the game may ask for lines first (round 27).
+        const tool = this.toolMode || (this.idleTapMode?.() === 'link' ? 'severLink' : null);
         if (!tool || tool === 'severLink') {
             for (const link of this.links) {
                 const a = this.nodeObjs.get(link.source && link.source.id);

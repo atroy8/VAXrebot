@@ -7,6 +7,7 @@
 //   aa.start();   // begin (or restart) the countdown
 //   aa.hold();    // stop it; the player advances manually
 //   aa.cancel();  // stop it silently (day advanced, game over, paused)
+//   onStop(why)   // why: 'held' | 'cancelled' | 'fired' (just before onFire)
 export function createAutoAdvance({
     delayMs = 3000,
     tickMs = 100,
@@ -35,6 +36,10 @@ export function createAutoAdvance({
         onTick(left, 1 - left / delayMs);
         if (left <= 0) {
             clear();
+            // Round 27: tell the button the countdown is over before the day
+            // turns. Without this, nextDay's cancel() saw no timer and never
+            // called onStop, so "Next day in 0" and Hold stayed up all day.
+            onStop('fired');
             onFire();
         }
     }

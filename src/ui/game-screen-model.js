@@ -25,6 +25,41 @@ export function toolHint(toolId, tools = {}) {
     return tool ? plainName(tool.name) : '';
 }
 
+// Playtest fix (round 27): on level 1 no tool starts selected, so a new
+// player's first taps on a red line or a sick face did nothing at all. A tap
+// with no tool chosen now picks the tool that fits what was tapped, if it is
+// ready today. chips = toolChips(...). kind: 'link' | 'node'.
+// Returns a tool id, or null when nothing ready fits.
+export function autoToolForTap(kind, nodeState, chips = []) {
+    const ready = (id) => chips.some((c) => c.id === id && !c.powerUp && c.state === 'ready');
+    if (kind === 'link') return ready('severLink') ? 'severLink' : null;
+    if (kind !== 'node') return null;
+    if (nodeState === 'healthy') {
+        if (ready('vaccinate')) return 'vaccinate';
+        if (ready('quarantine')) return 'quarantine';
+        return null;
+    }
+    if (nodeState === 'infected' || nodeState === 'exposed') return ready('quarantine') ? 'quarantine' : null;
+    return null;
+}
+
+// How the web should read a tap while no tool is chosen: when Sever is the
+// only classic tool ready (day 1 of level 1), every tap goes to the nearest
+// line, as if Sever were picked. Otherwise null: people first, then lines.
+export function idleTapMode(chips = []) {
+    const ready = (id) => chips.some((c) => c.id === id && !c.powerUp && c.state === 'ready');
+    return ready('severLink') && !ready('vaccinate') && !ready('quarantine') ? 'link' : null;
+}
+
+// What to say when a tap with no tool chosen has nothing ready that fits.
+// Points at the tool that would work, so the tap still teaches something.
+export function noToolTapHint(kind, chips = []) {
+    const ready = (id) => chips.some((c) => c.id === id && !c.powerUp && c.state === 'ready');
+    if (kind === 'node' && ready('severLink')) return 'Sever cuts lines, not people. Tap a red line.';
+    if (kind === 'link' && (ready('vaccinate') || ready('quarantine'))) return 'Tap a person to use your tool.';
+    return 'Pick a tool from the tray first.';
+}
+
 // One chip per tool for the bottom tray.
 // state: 'ready' | 'locked' (not yet available) | 'spent' (daily limit hit)
 //        | 'off' (none on this world: a puzzle level with a limit of 0)
