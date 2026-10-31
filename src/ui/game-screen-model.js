@@ -71,7 +71,7 @@ export function noToolTapHint(kind, chips = []) {
 export function toolChips(tools, difficulty, day, dailyUsage, charges = {}) {
     const kit = difficulty && Array.isArray(difficulty.toolkit) ? difficulty.toolkit : null;
     const entries = Object.entries(tools).filter(([id, tool]) => tool.consumable || !kit || kit.includes(id));
-    return entries.map(([id, tool]) => {
+    const chips = entries.map(([id, tool]) => {
         const label = plainName(tool.name);
         if (tool.consumable) {
             const left = charges[tool.chargeId || id] || 0;
@@ -84,7 +84,7 @@ export function toolChips(tools, difficulty, day, dailyUsage, charges = {}) {
         }
         const firstDay = toolAvailableDay(tool, difficulty, id);
         if (day < firstDay) {
-            return { id, label, usage: `Day ${firstDay}`, state: 'locked', powerUp: false, color: null };
+            return { id, label, usage: `Day ${firstDay}`, state: 'locked', powerUp: false, color: null, firstDay };
         }
         return {
             id,
@@ -93,8 +93,27 @@ export function toolChips(tools, difficulty, day, dailyUsage, charges = {}) {
             state: used >= limit ? 'spent' : 'ready',
             powerUp: false,
             color: null,
+            firstDay,
         };
     });
+    return orderChips(chips);
+}
+
+// Round 28 playtest fix: level 1 opened with two locked chips (Vaccinate
+// day 2, Quarantine day 3) ahead of Sever, the only tool ready on day 1, so
+// the first thing a new player saw in the tray was greyed out. Classic tools
+// now run in the order they open, the same order as the briefing chips
+// (stable for ties), tools with none on this world go last among them, and
+// power-ups keep their fixed order after the tools. The order depends only
+// on the level, never on the day, so chips do not jump under a finger.
+function orderChips(chips) {
+    const rank = (c) => (c.state === 'off' ? Infinity : c.firstDay ?? 1);
+    const classic = chips
+        .map((c, i) => ({ c, i }))
+        .filter(({ c }) => !c.powerUp)
+        .sort((a, b) => rank(a.c) - rank(b.c) || a.i - b.i)
+        .map(({ c }) => c);
+    return [...classic, ...chips.filter((c) => c.powerUp)];
 }
 
 // The day banner replaces the old text log: one line after each day.

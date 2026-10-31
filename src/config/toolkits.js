@@ -111,7 +111,8 @@ export function toolkitCard(toolkit, variantToolDays = null) {
     const days = toolkit.tools.map((t) => ({ label: TOOL_LABELS[t], day: open[t] })).sort((a, b) => a.day - b.day);
     const firstDay = days.filter((d) => d.day <= 1).map((d) => d.label);
     return {
-        title: labels.length === 1 ? `Your tool: ${labels[0]}` : `Your tools: ${labels.join(', ')}`,
+        // Round 28: the title lists tools in the same opening order as the chips.
+        title: labels.length === 1 ? `Your tool: ${labels[0]}` : `Your tools: ${days.map((d) => d.label).join(', ')}`,
         tools: labels,
         firstDay,
         days,

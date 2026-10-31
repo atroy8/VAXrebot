@@ -56,7 +56,12 @@ export function starProgress(outcome, stats, level) {
 
 export function starHint(p) {
     if (!p) return '';
-    if (!p.next) return 'Top marks! Fast, and nearly everyone made it.';
+    if (!p.next) {
+        // Round 28: a flawless win no longer says "nearly everyone".
+        const f = p.facts || {};
+        const all = f.pop > 0 && f.survivors >= f.pop;
+        return all ? 'Top marks! Fast, and everyone made it.' : 'Top marks! Fast, and nearly everyone made it.';
+    }
     const head = `${p.next.gap} more ${p.next.gap === 1 ? 'point' : 'points'} for ${plural(p.next.star, 'star')}`;
     if (!p.next.ways.length) return `${head}. Act on day 1 to keep more people well.`;
     return `${head}: ${p.next.ways.join(' or ')}.`;
