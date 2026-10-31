@@ -112,3 +112,14 @@ describe('cloisonne planets (item 18)', () => {
         for (const css of ['src/ui/globe-candy.css', 'src/ui/start-page.css']) expect(read(css)).not.toMatch(/sprinkle/i);
     });
 });
+
+describe('sharp planet scale', async () => {
+    const { sharpScale, SHARP_MAX_SCALE } = await import('../src/ui/cloisonne.js');
+    it('paints up to 4x, never past the GPU texture limit', () => {
+        expect(sharpScale(16384)).toBe(SHARP_MAX_SCALE);
+        expect(sharpScale(4096)).toBe(4);
+        expect(sharpScale(2048)).toBe(2);
+        expect(sharpScale(1024)).toBe(1);
+        expect(sharpScale(undefined)).toBe(1);
+    });
+});

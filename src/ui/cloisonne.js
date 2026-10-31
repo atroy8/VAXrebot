@@ -266,7 +266,18 @@ export function medallionCentres() {
     return out;
 }
 
-// Paint a whole planet. ctx: a CanvasRenderingContext2D of TEXTURE_W x TEXTURE_H.
+// How many times TEXTURE_W to paint the planet the camera is close to, so
+// the gold wire stays crisp when zoomed in: up to 4x (4096 x 2048), never
+// past the GPU's texture limit. Only one planet is painted this large at a time.
+export const SHARP_MAX_SCALE = 4;
+export function sharpScale(maxTextureSize) {
+    const fit = Math.floor((maxTextureSize || TEXTURE_W) / TEXTURE_W);
+    return Math.max(1, Math.min(SHARP_MAX_SCALE, fit));
+}
+
+// Paint a whole planet. ctx: a CanvasRenderingContext2D of TEXTURE_W x TEXTURE_H
+// (or a multiple of it with ctx.scale applied; everything is vector, so it
+// stays sharp at any size).
 export function paintCloisonne(ctx, plan) {
     ctx.fillStyle = plan.ground;
     ctx.fillRect(0, 0, TEXTURE_W, TEXTURE_H);

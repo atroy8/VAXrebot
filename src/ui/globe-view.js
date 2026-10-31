@@ -29,7 +29,7 @@ import { orbitAngle, orbitPosition, systemCamera, galaxyCamera, planetStatus, sy
 import { planetPalette, starPalette, comboFor, hexToRgb } from '../config/planet-palettes.js';
 import { takeChestRequest, chestDestination } from './pending-chest.js';
 import { THEME, CONFETTI, hexNum } from '../config/theme.js';
-import { cloisonnePlan, paintCloisonne, TEXTURE_W, TEXTURE_H } from './cloisonne.js';
+import { cloisonnePlan, paintCloisonne, sharpScale, TEXTURE_W, TEXTURE_H } from './cloisonne.js';
 import { buildingParts, buildingFor, buildingColors, standingUp, buildingExtent, labelLift, roofSurface, beamLift } from './buildings.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
@@ -72,14 +72,18 @@ function seedOf(id) {
 // Planet texture: a cloisonne enamel ball (item 18). Gold wire cells filled
 // with the planet's Wada colours, painted by src/ui/cloisonne.js. Drawn
 // locally on a canvas, no downloads.
-function makeWorldTexture({ combo, seed, index }) {
+// scale > 1 repaints the same vector design on a larger canvas for the
+// planet being viewed up close (see syncSharpPlanet).
+function makeWorldTexture({ combo, seed, index }, { scale = 1, anisotropy = 4 } = {}) {
     const canvas = document.createElement('canvas');
-    canvas.width = TEXTURE_W;
-    canvas.height = TEXTURE_H;
-    paintCloisonne(canvas.getContext('2d'), cloisonnePlan({ combo, seed, index }));
+    canvas.width = TEXTURE_W * scale;
+    canvas.height = TEXTURE_H * scale;
+    const ctx = canvas.getContext('2d');
+    ctx.scale(scale, scale);
+    paintCloisonne(ctx, cloisonnePlan({ combo, seed, index }));
     const tex = new THREE.CanvasTexture(canvas);
     tex.colorSpace = THREE.SRGBColorSpace;
-    tex.anisotropy = 4;
+    tex.anisotropy = anisotropy;
     return tex;
 }
 
@@ -270,6 +274,10 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
     // ---- Renderer / scene ------------------------------------------------
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    const maxAniso = renderer.capabilities.getMaxAnisotropy();
+    const SHARP_SCALE = sharpScale(renderer.capabilities.maxTextureSize);
+    // The one planet painted at SHARP_SCALE: { index, base } (base = its everyday texture).
+    let sharp = null;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.05;
 
@@ -374,10 +382,12 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
         tilt.add(scaled);
         const world = new THREE.Group();
         scaled.add(world);
+        const textureSpec = { combo: comboFor(def.def), seed: seedOf(def.def.id), index: pi };
+        // 128 x 96 keeps the rim round when the planet fills the screen.
         const globe = new THREE.Mesh(
-            new THREE.SphereGeometry(GLOBE_RADIUS, 64, 48),
+            new THREE.SphereGeometry(GLOBE_RADIUS, 128, 96),
             new THREE.MeshPhysicalMaterial({
-                map: makeWorldTexture({ combo: comboFor(def.def), seed: seedOf(def.def.id), index: pi }),
+                map: makeWorldTexture(textureSpec, { anisotropy: maxAniso }),
                 roughness: 0.42,
                 clearcoat: 1,
                 clearcoatRoughness: 0.18,
@@ -428,6 +438,7 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
             scaled,
             world,
             globe,
+            textureSpec,
             atmosphere,
             hit,
             halo,
@@ -969,6 +980,29 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
         flight.arc = hop > 6 ? Math.min(14, hop * 0.5) : 0;
     }
 
+    // Zoomed-in planet view: swap in a SHARP_SCALE repaint of the planet in
+    // front of the camera, and put the light texture back on the one before,
+    // so only one big texture is ever held. Runs between flights, never
+    // mid-flight, so the repaint does not stutter the camera move.
+    function syncSharpPlanet() {
+        if (SHARP_SCALE <= 1) return;
+        const want = state.mode === 'planet' || state.mode === 'title' ? state.planet : -1;
+        if ((sharp ? sharp.index : -1) === want) return;
+        if (sharp) {
+            const mat = planets[sharp.index].globe.material;
+            mat.map.dispose();
+            mat.map = sharp.base;
+            mat.needsUpdate = true;
+            sharp = null;
+        }
+        if (want < 0 || !planets[want]) return;
+        const p = planets[want];
+        const mat = p.globe.material;
+        sharp = { index: want, base: mat.map };
+        mat.map = makeWorldTexture(p.textureSpec, { scale: SHARP_SCALE, anisotropy: maxAniso });
+        mat.needsUpdate = true;
+    }
+
     function planetFitDistance(pi) {
         return globeFitDistance({ radius: 1.06 * planets[pi].radius, fovDeg: camera.fov, aspect: camera.aspect, margin: 1.0 });
     }
@@ -1364,6 +1398,7 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
         }
         for (const l of lanes) l.visible = state.mode === 'galaxy' || flight.dur > 0;
 
+        if (flight.dur === 0) syncSharpPlanet();
         // Camera flight.
         if (flight.dur > 0) {
             const k = Math.min(1, (now - flight.start) / flight.dur);
