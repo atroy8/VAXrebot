@@ -144,11 +144,26 @@ ART['galaxy-bright'] = ART.galaxy.replace('pro-art--galaxy', 'pro-art--galaxy pr
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
-export function prologueMarkup(cards = PROLOGUE_CARDS) {
+// Painted art (art/ARTCRAFT.md): src/assets/prologue/<card id>.webp, made
+// in ArtCraft and processed by npm run art:import. A card with a painting
+// shows it in a gold-rimmed plaque; a card without one keeps its SVG. Only
+// the URLs are bundled; the images load when the story is shown.
+const paintingModules = import.meta.glob('../assets/prologue/*.webp', { eager: true, query: '?url', import: 'default' });
+export const PROLOGUE_PAINTINGS = Object.fromEntries(
+    Object.entries(paintingModules).map(([path, url]) => [path.replace(/^.*\/(.+)\.webp$/, '$1'), url])
+);
+
+export function cardArtMarkup(card, paintings = PROLOGUE_PAINTINGS) {
+    const url = paintings[card.id];
+    if (url) return `<img class="pro-paint" src="${esc(url)}" alt="" decoding="async" draggable="false">`;
+    return ART[card.art] || '';
+}
+
+export function prologueMarkup(cards = PROLOGUE_CARDS, paintings = PROLOGUE_PAINTINGS) {
     const slides = cards
         .map(
             (c, i) => `<section class="pro-card${i === 0 ? ' on' : ''}" data-i="${i}" aria-hidden="${i === 0 ? 'false' : 'true'}">
-                <div class="pro-art-wrap">${ART[c.art] || ''}</div>
+                <div class="pro-art-wrap">${cardArtMarkup(c, paintings)}</div>
                 <h2 class="pro-title">${esc(c.title)}</h2>
                 ${c.text ? `<p class="pro-text">${esc(c.text)}</p>` : ''}
                 ${c.final ? '<button type="button" class="pro-begin" data-act="begin">Begin</button>' : ''}

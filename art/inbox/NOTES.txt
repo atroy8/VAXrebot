@@ -1,0 +1,2 @@
+Drop ArtCraft picks here, named as in art/ARTCRAFT.md, then run npm run art:import.
+Model used: 

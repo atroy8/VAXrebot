@@ -1,2 +1,5 @@
 node_modules/
 dist/
+art/inbox/*
+!art/inbox/NOTES.txt
+art/out/
