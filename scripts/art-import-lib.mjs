@@ -146,7 +146,11 @@ export async function processFace(input, { size = FACE_SIZE } = {}) {
             cut[i] = Math.round(cut[i] * k);
         }
     }
-    return sharp(cut, { raw: { width: size, height: size, channels: 4 } }).png({ compressionLevel: 9 }).toBuffer();
+    // Palette PNG: flat enamel quantizes cleanly and the files shrink to
+    // roughly a third, which matters because the game bundles all 21.
+    return sharp(cut, { raw: { width: size, height: size, channels: 4 } })
+        .png({ compressionLevel: 9, palette: true, quality: 92, effort: 10 })
+        .toBuffer();
 }
 
 // Square-crops a painting to PROLOGUE_SIZE WebP, lowering quality until it

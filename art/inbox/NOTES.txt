@@ -1,2 +1,2 @@
 Drop ArtCraft picks here, named as in art/ARTCRAFT.md, then run npm run art:import.
-Model used: 
+Model used: none. Round 1 art is hand-built vectors (art/source/*.mjs), drawn with npm run art:draw.

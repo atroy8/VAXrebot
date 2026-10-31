@@ -95,6 +95,19 @@ without a painting keeps its SVG.
   21 tokens look like the same family.
 - Make 3 or 4 variants per prompt and keep the best one.
 
+## 4b. Vector route (what round 1 actually used)
+
+The ArtCraft install on Adam's PC is the design suite (VectorCraft,
+PhotoCraft, EffectCraft, PdfCraft), with no image-generation model, so the
+first set is drawn as code-built vectors that follow this style bible:
+
+- `art/source/citizens.mjs` and `art/source/prologue.mjs` draw every frame.
+- `npm run art:draw` writes editable SVGs to `art/source/svg/` and 1024 px
+  PNGs into `art/inbox/`, then `npm run art:import` takes over as below.
+- To hand-refine one: open its SVG in VectorCraft, export a 1024 px PNG with
+  a white background (paintings fill the square) under the inbox name, and
+  re-run `npm run art:import`.
+
 ## 5. Workflow
 
 1. Generate in ArtCraft with the prompts in `art/prompts/`.
