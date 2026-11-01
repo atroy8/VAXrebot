@@ -99,9 +99,36 @@ export function showToolHint(text) {
     if (!el) return;
     el.textContent = text || '';
     el.hidden = !text;
+    // Round 29: the newest message wins the bottom of the web. Picking a
+    // tool means the player has moved on, so toasts still showing fade out
+    // instead of sitting on top of the hint.
+    if (text) dismissToasts();
     // The hint teaches once, then gets out of the way of the network.
     clearTimeout(showToolHint.timer);
     if (text) showToolHint.timer = setTimeout(() => { el.hidden = true; }, 4500);
+}
+
+// Round 29: a toast and the tool hint share the bottom of the web on phones,
+// so whichever came second covered the other and left half a sentence
+// showing behind it. A toast now clears the hint, and a hint clears toasts.
+export function hideToolHint() {
+    const el = document.getElementById('tool-hint');
+    if (!el) return;
+    clearTimeout(showToolHint.timer);
+    el.hidden = true;
+}
+
+// Fade out every toast still on screen (see showToolHint).
+export function dismissToasts() {
+    const container = document.getElementById('notification-container');
+    if (!container) return;
+    for (const n of [...container.children]) {
+        if (n.dataset.leaving) continue;
+        clearTimeout(n._timer);
+        n.dataset.leaving = '1';
+        n.style.animation = 'fadeOutRight 0.25s forwards';
+        setTimeout(() => n.remove(), 250);
+    }
 }
 
 // Day banner (replaces the old text log): one line, fades on its own.
@@ -141,6 +168,7 @@ export function showNotification(message, type = 'info') {
     const container = document.getElementById('notification-container');
     if (!container) return;
     const text = String(message).replace(/[\p{Extended_Pictographic}\ufe0f\u200d]\s*/gu, '').trim();
+    hideToolHint();
     let notification = [...container.children].find((n) => n.textContent === text && !n.dataset.leaving);
     if (!notification) {
         notification = document.createElement('div');
