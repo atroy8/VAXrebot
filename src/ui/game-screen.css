@@ -588,6 +588,20 @@
     padding: 10px 8px calc(10px + env(safe-area-inset-bottom, 0px));
     background: linear-gradient(180deg, rgba(255, 255, 255, 0) 0, #fff 14px);
 }
+/* Round 30: the screen's bottom padding (16 px plus the home bar inset)
+   left a strip under the sticky buttons where results text scrolled past,
+   cut in half. A paper skirt below the buttons closes that strip. */
+#game-over-screen.has-tally .game-over-actions::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 100%;
+    height: calc(var(--space-16) + env(safe-area-inset-bottom, 0px) + 2px);
+    background: var(--results-paper, #fff);
+    pointer-events: none;
+    z-index: -1; /* under the button shadows */
+}
 .tally-skip { margin-top: 4px; font-size: 0.72rem; color: #9ca3af; text-align: center; }
 .tally.done .tally-skip { visibility: hidden; }
 .final-stats-wrap { margin-top: 6px; }

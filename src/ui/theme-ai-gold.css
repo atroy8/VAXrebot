@@ -172,6 +172,7 @@ html .threat-pip.on {
 }
 html .final-stat { background: var(--washi); }
 html #game-over-screen.has-tally .game-over-actions { background: linear-gradient(180deg, rgba(255, 253, 247, 0) 0, #fffdf7 14px); }
+html #game-over-screen { --results-paper: #fffdf7; }
 
 /* ---- In-level dashboard ---- */
 html .game-header {
