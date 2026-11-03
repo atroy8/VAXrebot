@@ -55,9 +55,42 @@ export function idleTapMode(chips = []) {
 // Points at the tool that would work, so the tap still teaches something.
 export function noToolTapHint(kind, chips = []) {
     const ready = (id) => chips.some((c) => c.id === id && !c.powerUp && c.state === 'ready');
+    const spent = (id) => chips.some((c) => c.id === id && !c.powerUp && c.state === 'spent');
     if (kind === 'node' && ready('severLink')) return 'Sever cuts lines, not people. Tap a red line.';
+    if (kind === 'link' && spent('severLink')) {
+        const next = nextToolLine(chips, 'severLink');
+        if (next) return `Sever is used up for today. ${next}`;
+    }
     if (kind === 'link' && (ready('vaccinate') || ready('quarantine'))) return 'Tap a person to use your tool.';
     return 'Pick a tool from the tray first.';
+}
+
+// Round 31 playtest fix: once the chosen tool hit its daily limit it stayed
+// chosen, so every further tap on a red line drew the same red error toast
+// (Daily limit for Sever Link reached) while Vaccinate sat ready in the tray.
+// The game now lets go of a tool the moment it is used up and says what is
+// still ready. Returns that line, or null when nothing else is ready today
+// (the Next day countdown says the rest).
+const NEXT_STEP = {
+    vaccinate: 'Tap a healthy person to vaccinate them.',
+    quarantine: 'Tap a sick person to isolate them.',
+    severLink: 'Tap a red line to cut it.',
+};
+
+function nextToolLine(chips, usedUpId) {
+    for (const c of chips) {
+        if (c.powerUp || c.id === usedUpId || c.state !== 'ready') continue;
+        if (NEXT_STEP[c.id]) return NEXT_STEP[c.id];
+    }
+    return null;
+}
+
+export function usedUpNudge(toolId, chips = []) {
+    const chip = chips.find((c) => c.id === toolId && !c.powerUp);
+    if (!chip || chip.state !== 'spent') return null;
+    const next = nextToolLine(chips, toolId);
+    if (!next) return null;
+    return `${chip.label || plainName(toolId)} is used up for today. ${next}`;
 }
 
 // One chip per tool for the bottom tray.
