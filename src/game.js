@@ -28,7 +28,7 @@ import './ui/game-screen.css';
 import './ui/averted.css';
 import './ui/variants.css';
 import './ui/app-shell.css'; // last: safe areas and native touch feel (round 18)
-import { toolHint, dayBanner, rFellBelowOne, R_BELOW_ONE_TEXT, shouldAutoPause, toolChips, autoToolForTap, noToolTapHint, idleTapMode } from './ui/game-screen-model.js';
+import { toolHint, dayBanner, rFellBelowOne, R_BELOW_ONE_TEXT, shouldAutoPause, toolChips, autoToolForTap, noToolTapHint, idleTapMode, usedUpNudge } from './ui/game-screen-model.js';
 import { renderCareBox, flyToCareBox } from './ui/care-box.js';
 import { mountShop, renderShop } from './ui/shop.js';
 import { buildOutbreak } from './sim/setup.js';
@@ -498,7 +498,22 @@ export class EpidemicSimulator {
         if (!this.gameState || this.gameState.gameOver) return;
         this.maybeWrapUp();
         if (this.wrapUp || this.gameState.paused) return;
+        this.releaseUsedUpTool();
         if (allActionsSpent(this.gameState, this.tools, this.difficulty)) this.autoAdvance.start();
+    }
+
+    // Round 31: a tool that just hit its daily limit lets go, so the next tap
+    // auto-picks a tool that is still ready (round 27) instead of drawing a
+    // red limit error, and a toast says what is ready.
+    releaseUsedUpTool() {
+        const toolId = this.selectedTool;
+        if (!toolId || isPowerUp(toolId)) return;
+        const chips = this.currentChips();
+        const chip = chips.find((c) => c.id === toolId);
+        if (!chip || chip.state !== 'spent') return;
+        this.selectTool(toolId); // deselect
+        const nudge = usedUpNudge(toolId, chips);
+        if (nudge) showNotification(nudge, 'info');
     }
 
     // Countdown display on the Next day button; null clears it.
