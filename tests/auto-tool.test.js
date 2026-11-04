@@ -73,3 +73,25 @@ describe('wiring', () => {
         expect(view).toMatch(/this\.idleTapMode\?\.\(\) === 'link'/);
     });
 });
+
+// Round 32 playtest fix: a tap that picks a tool and uses it at once no
+// longer pops the tool hint ("Tap a link to cut it...") over the bottom of
+// the web, where it covered the sick person for 4.5 s right after the cut.
+describe('auto-picked tools stay quiet', () => {
+    const src = readFileSync(new URL('../src/game.js', import.meta.url), 'utf8');
+    const method = (name) => {
+        const start = src.indexOf(`\n    ${name}(`);
+        return src.slice(start, src.indexOf('\n    }\n', start));
+    };
+    it('autoPickTool selects without the hint', () => {
+        expect(method('autoPickTool')).toMatch(/this\.selectTool\(toolId, \{ hint: false \}\)/);
+    });
+    it('selectTool still shows the hint when the player taps a tool in the tray', () => {
+        const sel = method('selectTool');
+        expect(sel).toMatch(/\{ hint = true \} = \{\}/);
+        expect(sel).toMatch(/showToolHint\(this\.selectedTool && hint \? toolHint\(/);
+    });
+    it('the tray buttons call selectTool with no options', () => {
+        expect(src).toMatch(/this\.selectTool\(toolId\);/);
+    });
+});
