@@ -422,7 +422,7 @@ export class EpidemicSimulator {
             showNotification(noToolTapHint(kind, chips), 'info');
             return false;
         }
-        this.selectTool(toolId);
+        this.selectTool(toolId, { hint: false });
         return true;
     }
 
@@ -802,7 +802,11 @@ export class EpidemicSimulator {
         else if (kind === 'prize') a.playStinger ? a.playStinger('milestone') : a.playSound(1318, 0.4, 'sine');
     }
 
-    selectTool(toolId) {
+    // hint: false when a tap picked the tool and used it in the same moment
+    // (round 32). The player has just done what the hint would say, and on a
+    // phone the hint sat over the bottom of the web for 4.5 s, often on top
+    // of the sick person they were working on.
+    selectTool(toolId, { hint = true } = {}) {
         this.selectedTool = this.selectedTool === toolId ? null : toolId;
         this.view.setToolMode?.(this.selectedTool);
         document.querySelectorAll('.tool-item').forEach((item) => {
@@ -810,7 +814,7 @@ export class EpidemicSimulator {
             item.classList.toggle('selected', on);
             item.setAttribute('aria-pressed', String(on));
         });
-        showToolHint(this.selectedTool ? toolHint(this.selectedTool, this.tools) : '');
+        showToolHint(this.selectedTool && hint ? toolHint(this.selectedTool, this.tools) : '');
     }
 
     // Power-up flow: hand the economy module the gameApi it needs, spend
