@@ -675,9 +675,10 @@ export class NetworkView {
             this.autoFit = true;
             this.physicsSettled = true;
         } else if (linkKey !== this.lastLinkKey) {
-            // A link was severed: let the network relax gently. Vaccinate
-            // changes no links, so the people you are tapping stay put.
-            this.alpha = Math.max(this.alpha || 0, LAYOUT.reheatAlpha);
+            // A link was severed: let the network relax very gently, so the
+            // next line you aim at stays under your thumb (round 32).
+            // Vaccinate changes no links, so the people you tap stay put.
+            this.alpha = Math.max(this.alpha || 0, this.is3d ? LAYOUT_3D.severAlpha : LAYOUT.severAlpha);
             this.physicsSettled = false;
         } else if (boxChanged) {
             // Someone left for the care box: close the gap very gently.
@@ -1305,11 +1306,13 @@ export class NetworkView {
         // 4. The two nodes recoil apart, and the screen ticks.
         const away = _tmp2.subVectors(b.pos, a.pos);
         if (!this.is3d) away.setZ(0);
-        away.normalize().multiplyScalar(0.55);
+        // Round 32: a small recoil and a gentle reheat, so the rest of the
+        // web stays where the player is aiming next.
+        away.normalize().multiplyScalar(LAYOUT.severRecoil);
         b.vel.add(away);
         a.vel.sub(away);
         this.physicsSettled = false;
-        this.alpha = Math.max(this.alpha || 0, LAYOUT.reheatAlpha);
+        this.alpha = Math.max(this.alpha || 0, this.is3d ? LAYOUT_3D.severAlpha : LAYOUT.severAlpha);
         this.shakeUntil = start + 140;
         this.lastTouch = start;
     }
