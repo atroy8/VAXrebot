@@ -21,6 +21,15 @@ export const LAYOUT = Object.freeze({
     alphaDecay: 0.985,
     alphaMin: 0.01,
     reheatAlpha: 0.3,
+    // A severed link reheats much less (round 32). At 0.3 a cut moved people
+    // up to 40 px on a 390 px phone (90 px in one web of ten), so the second
+    // Sever tap of the day often landed on whatever line slid under the
+    // thumb. At this heat a cut nudges the web by a few px.
+    severAlpha: 0.05,
+    // The two cut ends still spring apart a little so the cut feels physical
+    // (item 2), but a kick of 0.55 carried each end about 1.4 units, more
+    // than a person's width, so it is now small.
+    severRecoil: 0.12,
     maxRadius: 15,
     // Nodes are 1.1 units wide; keep centres at least this far apart so no
     // two people overlap and every one stays tappable.
