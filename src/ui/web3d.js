@@ -26,6 +26,7 @@ export const LAYOUT_3D = Object.freeze({
     alphaDecay: 0.985,
     alphaMin: 0.01,
     reheatAlpha: 0.3,
+    severAlpha: 0.05,
     maxRadius: 13,
     collideDist: 1.9,
     collideStrength: 0.7,
