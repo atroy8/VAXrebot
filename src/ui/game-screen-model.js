@@ -13,10 +13,14 @@ export function plainName(name) {
 
 // Short instruction shown over the network while a tool is selected.
 // One line, plain words, teaches the idea behind the tool.
+// Round 33: each hint fits one line on a 360 px phone (HINT_MAX_CHARS), so
+// the strip the web keeps clear at the bottom (fitCamera's bottomReserve)
+// is always tall enough and the hint never sits on a person.
+export const HINT_MAX_CHARS = 32;
 const HINTS = {
-    vaccinate: 'Tap a healthy person to vaccinate them. Busy people first.',
-    quarantine: 'Tap a person to isolate them. Isolating the sick stops them spreading.',
-    severLink: 'Tap a link to cut it. Red links are where the virus spreads next.',
+    vaccinate: 'Vaccinate busy, healthy people.',
+    quarantine: 'Isolate the sick to stop spread.',
+    severLink: 'Red links spread it. Tap to cut.',
 };
 
 export function toolHint(toolId, tools = {}) {
@@ -167,7 +171,10 @@ export function dayBanner({ day, newCases = 0, recovered = 0, died = 0 }) {
 // topReserve (round 25 playtest fix): the fraction of the view's height kept
 // clear at the top for the Key and 2D/3D buttons, so no person sits under
 // them (a tap there opened the key instead of hitting the person).
-export function fitCamera(points, { fovDeg = 48, aspect = 1, pad = 1.4, topReserve = 0 } = {}) {
+// bottomReserve (round 33 playtest fix): the same at the bottom, where the
+// tool hint shows. On level 1 the hint used to cover the lowest person and
+// their links for 4.5 s right after a tool was picked.
+export function fitCamera(points, { fovDeg = 48, aspect = 1, pad = 1.4, topReserve = 0, bottomReserve = 0 } = {}) {
     if (!points.length) return { cx: 0, cy: 0, distance: 10 };
     let minX = Infinity;
     let maxX = -Infinity;
@@ -183,9 +190,11 @@ export function fitCamera(points, { fovDeg = 48, aspect = 1, pad = 1.4, topReser
     const halfH = (maxY - minY) / 2 + pad;
     const t = Math.tan((fovDeg * Math.PI) / 360);
     const f = Math.min(0.3, Math.max(0, topReserve));
-    const distance = Math.max(halfH / (t * (1 - f)), halfW / (t * Math.max(0.2, aspect)));
-    // Screen up is world +y: aim a little higher so the people sit lower.
-    return { cx: (minX + maxX) / 2, cy: (minY + maxY) / 2 + f * distance * t, distance };
+    const b = Math.min(0.2, Math.max(0, bottomReserve));
+    const distance = Math.max(halfH / (t * (1 - f - b)), halfW / (t * Math.max(0.2, aspect)));
+    // Screen up is world +y: aim higher to clear the top strip, lower to
+    // clear the bottom one.
+    return { cx: (minX + maxX) / 2, cy: (minY + maxY) / 2 + (f - b) * distance * t, distance };
 }
 
 // Results copy for a loss: say which rule ended the run.
