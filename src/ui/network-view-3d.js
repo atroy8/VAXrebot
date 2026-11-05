@@ -135,6 +135,9 @@ const FACE_SCALE = 1.15;
 const FIT_PAD = 1.2;
 // Height of the button row at the top of the web (Key, 2D/3D), in CSS px.
 export const TOP_BUTTONS_PX = 54;
+// Strip kept clear at the bottom of the web for the one-line tool hint
+// (10 px from the edge, about 34 px tall), in CSS px. Round 33.
+export const BOTTOM_HINT_PX = 48;
 
 // Link ribbon widths and colour keys come from link-style.js.
 const LINK_COLORS = {
@@ -829,7 +832,13 @@ export class NetworkView {
     fitTarget() {
         const pts = [];
         for (const o of this.nodeObjs.values()) if (!o.boxed) pts.push(o.pos);
-        return fitCamera(pts, { fovDeg: this.camera.fov, aspect: this.camera.aspect, pad: FIT_PAD + 0.6 * (this.personScale - 1), topReserve: this.topReserve() });
+        return fitCamera(pts, { fovDeg: this.camera.fov, aspect: this.camera.aspect, pad: FIT_PAD + 0.6 * (this.personScale - 1), topReserve: this.topReserve(), bottomReserve: this.bottomReserve() });
+    }
+
+    // Share of the view's height the tool hint covers at the bottom.
+    bottomReserve() {
+        const h = this.container?.clientHeight || 0;
+        return h > 0 ? Math.min(0.15, BOTTOM_HINT_PX / h) : 0;
     }
 
     // Share of the view's height the Key and 2D/3D buttons cover at the top
