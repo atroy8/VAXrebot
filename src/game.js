@@ -52,6 +52,7 @@ import { createViewLoader } from './ui/view-loader.js';
 import { lessonFor, debriefLine } from './config/lessons.js';
 import { snapshotNetwork, noResponseCases, avertedSummary } from './sim/counterfactual.js';
 import { renderAverted } from './ui/averted.js';
+import { resultsActions } from './ui/results-actions.js';
 import {
     renderHeader,
     renderTools,
@@ -250,6 +251,12 @@ export class EpidemicSimulator {
         document
             .getElementById('try-different-scenario')
             .addEventListener('click', () => this.leaveResults(() => this.showScreen('welcome')));
+        // Round 34: a win goes straight on to the next level's briefing.
+        document.getElementById('next-level')?.addEventListener('click', () => {
+            const nextId = this.nextLevelId;
+            if (!nextId) return;
+            this.leaveResults(() => this.selectLevel(nextId));
+        });
         // A prize box on the award screen: back to the map, which flies to
         // the box and opens it (the same exit path, so ad pacing still applies).
         document.getElementById('results-tally')?.addEventListener('click', (e) => {
@@ -765,7 +772,32 @@ export class EpidemicSimulator {
         const lesson = this.currentLevel ? lessonFor(this.currentLevel.id) : null;
         fillLessonCard('game-over-lesson', lesson?.title, debriefLine(lesson, outcome, { unusedActions: stats.unusedActions ?? 0 }));
         this.renderAvertedCard(outcome, stats);
+        this.applyResultsActions(outcome);
         this.showScreen('game-over');
+    }
+
+    // Round 34: Next level leads a win, Try again leads a loss, and the map
+    // is always there (src/ui/results-actions.js).
+    applyResultsActions(outcome) {
+        const plan = resultsActions({ outcome, levelId: this.currentLevel?.id, save: this.save, levels: LEVELS, regions: REGIONS });
+        this.nextLevelId = plan.nextLevelId;
+        const buttons = {
+            replay: document.getElementById('play-again'),
+            map: document.getElementById('try-different-scenario'),
+            next: document.getElementById('next-level'),
+        };
+        if (!buttons.replay || !buttons.map) return;
+        buttons.replay.textContent = plan.replayLabel;
+        buttons.map.textContent = plan.mapLabel;
+        if (buttons.next) buttons.next.hidden = plan.primary !== 'next';
+        for (const [key, btn] of Object.entries(buttons)) {
+            if (!btn) continue;
+            btn.classList.toggle('btn--primary', key === plan.primary);
+            btn.classList.toggle('btn--secondary', key !== plan.primary);
+        }
+        const row = buttons.replay.parentElement;
+        row?.classList.toggle('has-next', plan.primary === 'next');
+        row?.classList.toggle('lead-replay', plan.primary === 'replay');
     }
 
     // Cases averted: the player's outbreak against a no-response baseline
