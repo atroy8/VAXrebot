@@ -798,3 +798,22 @@ html .network-container.has-backdrop.is-3d {
 }
 /* Paused: the scene holds still with the game. */
 #game-screen.is-paused .web-backdrop > i { animation-play-state: paused; }
+
+/* Round 34: a win leads with Next level. Replay and Map share a row above
+   it, and Next level spans the full width at the bottom, nearest the thumb.
+   A loss leads with Try again, so it moves below Back to map. */
+.game-over-actions.has-next {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+.game-over-actions.has-next #next-level {
+    grid-column: 1 / -1;
+    min-height: 52px;
+}
+.game-over-actions.lead-replay #play-again {
+    order: 2;
+}
+#next-level[hidden] {
+    display: none;
+}
