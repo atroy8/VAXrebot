@@ -239,14 +239,14 @@ export function rExplainer({ r = null, r0 = '' } = {}) {
     } else if (r > 1) {
         const about = r >= 5 ? '5 or more' : r < 1.5 ? 'more than 1' : `about ${Math.round(r)}`;
         headline = 'Growing: R is above 1';
-        lines.push(`Each sick person is passing it to ${about} others right now, so cases multiply.`);
-        lines.push('Isolate the sick and cut the red links to push R under 1.');
+        lines.push(`Each sick person can still reach ${about} others through red links, so cases multiply.`);
+        lines.push('Cut red links and isolate the sick to push R under 1. It drops the moment you act.');
     } else if (r === 0) {
         headline = 'Stopped for now: R is 0';
-        lines.push('Nobody caught it yesterday. Keep the sick away from the healthy.');
+        lines.push('No sick person can reach a healthy one right now. Keep it that way.');
     } else {
         headline = 'Shrinking: R is below 1';
-        lines.push('Each sick person now passes it to fewer than one other, so the outbreak fades out.');
+        lines.push('Each sick person can now reach fewer than one other on average, so the outbreak fades out.');
     }
     const high = r0High(r0);
     if (high != null) {
@@ -263,6 +263,16 @@ export function rExplainer({ r = null, r0 = '' } = {}) {
 // celebrating, because that is when an outbreak starts to die out.
 export function rFellBelowOne(prevR, nextR) {
     return prevR != null && nextR != null && Number.isFinite(prevR) && Number.isFinite(nextR) && prevR > 1 && nextR <= 1;
+}
+
+// Round 35: which way R just moved, for the HUD nudge: 'down', 'up', or
+// null when it held (changes under 0.05 do not count, nor do moves within 5+).
+export function rTick(prevR, nextR) {
+    if (prevR == null || nextR == null || !Number.isFinite(prevR) || !Number.isFinite(nextR)) return null;
+    if (formatR(prevR) === formatR(nextR)) return null;
+    if (nextR < prevR - 0.05) return 'down';
+    if (nextR > prevR + 0.05) return 'up';
+    return null;
 }
 
 export const R_BELOW_ONE_TEXT = 'R fell below 1! Each case now leads to less than one more, so the outbreak is shrinking.';

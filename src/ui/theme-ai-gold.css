@@ -296,6 +296,8 @@ html .stat--r .r-info {
     vertical-align: 1px;
 }
 html .stat--r.r-celebrate { animation: r-celebrate 0.8s ease 2; border-color: #8ee6b0; }
+html .stat--r.r-tick-down { animation: r-tick-down 0.6s ease; }
+html .stat--r.r-tick-up { animation: r-tick-up 0.6s ease; }
 
 html .r-card {
     position: fixed;
