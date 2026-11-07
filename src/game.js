@@ -28,7 +28,7 @@ import './ui/game-screen.css';
 import './ui/averted.css';
 import './ui/variants.css';
 import './ui/app-shell.css'; // last: safe areas and native touch feel (round 18)
-import { toolHint, dayBanner, rFellBelowOne, R_BELOW_ONE_TEXT, shouldAutoPause, toolChips, autoToolForTap, noToolTapHint, idleTapMode, usedUpNudge } from './ui/game-screen-model.js';
+import { toolHint, dayBanner, rFellBelowOne, rTick, R_BELOW_ONE_TEXT, shouldAutoPause, toolChips, autoToolForTap, noToolTapHint, idleTapMode, usedUpNudge } from './ui/game-screen-model.js';
 import { renderCareBox, flyToCareBox } from './ui/care-box.js';
 import { mountShop, renderShop } from './ui/shop.js';
 import { buildOutbreak } from './sim/setup.js';
@@ -42,7 +42,7 @@ import {
     allActionsSpent,
     actionsRemaining,
     caseCapFor,
-    effectiveR,
+    liveR,
 } from './sim/actions.js';
 import { rollLevelRules, threatLine } from './config/difficulty-roll.js';
 import { createAutoAdvance } from './ui/auto-advance.js';
@@ -565,26 +565,11 @@ export class EpidemicSimulator {
             const left = actionsRemaining(this.gameState, this.tools, difficulty);
             this.gameState.stats.unusedActions = (this.gameState.stats.unusedActions || 0) + left;
         }
-        const { spread, outcomes, result, activeBefore } = advanceDay(this.gameState, this.network, {
+        const { spread, outcomes, result } = advanceDay(this.gameState, this.network, {
             scenario: this.currentScenario,
             difficulty,
         });
         const { events, count } = spread;
-        // Smooth day-to-day noise: blend today's R with yesterday's.
-        const rToday = effectiveR(count, activeBefore, difficulty.recoveryTime);
-        const prevR = this.lastR;
-        this.lastR = rToday == null ? this.lastR : this.lastR == null ? rToday : 0.5 * rToday + 0.5 * this.lastR;
-        // Round 16: the first day R drops under 1 is the turning point of an
-        // outbreak, so mark it (once per level) with a toast and a chime.
-        if (!result && !this.gameState.stats.rBelowOneDay && rFellBelowOne(prevR, this.lastR)) {
-            this.gameState.stats.rBelowOneDay = this.gameState.day - 1;
-            showNotification(R_BELOW_ONE_TEXT, 'success');
-            this.audio.playStinger?.('milestone');
-            this.haptics.play('milestone');
-            document.getElementById('r-stat')?.classList.add('r-celebrate');
-            setTimeout(() => document.getElementById('r-stat')?.classList.remove('r-celebrate'), 1600);
-        }
-        if (isRCardOpen()) openRCard({ r: this.lastR, r0: this.currentR0 });
         for (const { source, target } of events) {
             this.view.animateVirus(source, target);
             this.audio.playSound(150, 0.2, 'triangle');
@@ -894,7 +879,42 @@ export class EpidemicSimulator {
         if (sheet) sheet.hidden = true;
     }
 
+    // Round 35: R is read off the web as it stands (liveR in
+    // src/sim/actions.js), so it moves the moment the player cuts a red link
+    // or isolates someone, not a day later. The first time it drops from
+    // above 1 to 1 or below is the turning point of an outbreak: mark it once
+    // per level with a toast and a chime (only once it reads under 1.0, since the
+    // toast says below 1). When it drops straight to nothing
+    // the Spread stopped! card says it instead.
+    refreshR() {
+        if (!this.gameState || !this.network || !this.currentScenario) return;
+        const difficulty = this.difficulty;
+        const prevR = this.lastR;
+        this.lastR = liveR(this.network, this.currentScenario.baseTransmissionRate * difficulty.transmissionMultiplier, difficulty.recoveryTime);
+        if (!this.gameState.gameOver && !this.wrapUp && !this.gameState.stats.rBelowOneDay && rFellBelowOne(prevR, this.lastR) && this.lastR < 0.95 && !spreadIsOver(this.network)) {
+            this.gameState.stats.rBelowOneDay = this.gameState.day;
+            showNotification(R_BELOW_ONE_TEXT, 'success');
+            this.audio.playStinger?.('milestone');
+            this.haptics.play('milestone');
+            document.getElementById('r-stat')?.classList.add('r-celebrate');
+            setTimeout(() => document.getElementById('r-stat')?.classList.remove('r-celebrate'), 1600);
+        }
+        else if (prevR != null && !this.gameState.gameOver) {
+            const tick = rTick(prevR, this.lastR);
+            const el = document.getElementById('r-stat');
+            if (tick && el) {
+                el.classList.remove('r-tick-down', 'r-tick-up');
+                void el.offsetWidth; // restart the animation on quick taps
+                el.classList.add(`r-tick-${tick}`);
+                clearTimeout(this.rTickTimer);
+                this.rTickTimer = setTimeout(() => el.classList.remove('r-tick-down', 'r-tick-up'), 700);
+            }
+        }
+        if (isRCardOpen()) openRCard({ r: this.lastR, r0: this.currentR0 });
+    }
+
     updateUI() {
+        this.refreshR();
         const difficulty = this.difficulty;
         renderHeader({
             scenarioName: this.currentLevel ? this.currentLevel.name : this.currentScenario.name,
