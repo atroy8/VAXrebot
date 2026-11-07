@@ -695,6 +695,19 @@ html .network-container.is-3d {
     0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(142, 230, 176, 0); }
     40% { transform: scale(1.12); box-shadow: 0 0 0 6px rgba(142, 230, 176, 0.35); }
 }
+/* Round 35: R moves the moment you act. A quick green dip when it falls,
+   a red bump when it rises, so the player sees their cut land on R. */
+@keyframes r-tick-down {
+    0%, 100% { transform: none; }
+    35% { transform: translateY(3px) scale(0.94); box-shadow: 0 0 0 5px rgba(142, 230, 176, 0.4); }
+}
+@keyframes r-tick-up {
+    0%, 100% { transform: none; }
+    35% { transform: translateY(-3px) scale(1.06); box-shadow: 0 0 0 5px rgba(240, 110, 110, 0.35); }
+}
+@media (prefers-reduced-motion: reduce) {
+    html .stat--r.r-tick-down, html .stat--r.r-tick-up { animation: none; }
+}
 @keyframes r-card-in {
     from { opacity: 0; transform: translateY(-8px) scale(0.97); }
     to { opacity: 1; transform: none; }
