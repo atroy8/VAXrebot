@@ -13,10 +13,14 @@ export function plainName(name) {
 
 // Short instruction shown over the network while a tool is selected.
 // One line, plain words, teaches the idea behind the tool.
+// Round 33: each hint fits one line on a 360 px phone (HINT_MAX_CHARS), so
+// the strip the web keeps clear at the bottom (fitCamera's bottomReserve)
+// is always tall enough and the hint never sits on a person.
+export const HINT_MAX_CHARS = 32;
 const HINTS = {
-    vaccinate: 'Tap a healthy person to vaccinate them. Busy people first.',
-    quarantine: 'Tap a person to isolate them. Isolating the sick stops them spreading.',
-    severLink: 'Tap a link to cut it. Red links are where the virus spreads next.',
+    vaccinate: 'Vaccinate busy, healthy people.',
+    quarantine: 'Isolate the sick to stop spread.',
+    severLink: 'Red links spread it. Tap to cut.',
 };
 
 export function toolHint(toolId, tools = {}) {
@@ -55,9 +59,42 @@ export function idleTapMode(chips = []) {
 // Points at the tool that would work, so the tap still teaches something.
 export function noToolTapHint(kind, chips = []) {
     const ready = (id) => chips.some((c) => c.id === id && !c.powerUp && c.state === 'ready');
+    const spent = (id) => chips.some((c) => c.id === id && !c.powerUp && c.state === 'spent');
     if (kind === 'node' && ready('severLink')) return 'Sever cuts lines, not people. Tap a red line.';
+    if (kind === 'link' && spent('severLink')) {
+        const next = nextToolLine(chips, 'severLink');
+        if (next) return `Sever is used up for today. ${next}`;
+    }
     if (kind === 'link' && (ready('vaccinate') || ready('quarantine'))) return 'Tap a person to use your tool.';
     return 'Pick a tool from the tray first.';
+}
+
+// Round 31 playtest fix: once the chosen tool hit its daily limit it stayed
+// chosen, so every further tap on a red line drew the same red error toast
+// (Daily limit for Sever Link reached) while Vaccinate sat ready in the tray.
+// The game now lets go of a tool the moment it is used up and says what is
+// still ready. Returns that line, or null when nothing else is ready today
+// (the Next day countdown says the rest).
+const NEXT_STEP = {
+    vaccinate: 'Tap a healthy person to vaccinate them.',
+    quarantine: 'Tap a sick person to isolate them.',
+    severLink: 'Tap a red line to cut it.',
+};
+
+function nextToolLine(chips, usedUpId) {
+    for (const c of chips) {
+        if (c.powerUp || c.id === usedUpId || c.state !== 'ready') continue;
+        if (NEXT_STEP[c.id]) return NEXT_STEP[c.id];
+    }
+    return null;
+}
+
+export function usedUpNudge(toolId, chips = []) {
+    const chip = chips.find((c) => c.id === toolId && !c.powerUp);
+    if (!chip || chip.state !== 'spent') return null;
+    const next = nextToolLine(chips, toolId);
+    if (!next) return null;
+    return `${chip.label || plainName(toolId)} is used up for today. ${next}`;
 }
 
 // One chip per tool for the bottom tray.
@@ -134,7 +171,10 @@ export function dayBanner({ day, newCases = 0, recovered = 0, died = 0 }) {
 // topReserve (round 25 playtest fix): the fraction of the view's height kept
 // clear at the top for the Key and 2D/3D buttons, so no person sits under
 // them (a tap there opened the key instead of hitting the person).
-export function fitCamera(points, { fovDeg = 48, aspect = 1, pad = 1.4, topReserve = 0 } = {}) {
+// bottomReserve (round 33 playtest fix): the same at the bottom, where the
+// tool hint shows. On level 1 the hint used to cover the lowest person and
+// their links for 4.5 s right after a tool was picked.
+export function fitCamera(points, { fovDeg = 48, aspect = 1, pad = 1.4, topReserve = 0, bottomReserve = 0 } = {}) {
     if (!points.length) return { cx: 0, cy: 0, distance: 10 };
     let minX = Infinity;
     let maxX = -Infinity;
@@ -150,9 +190,11 @@ export function fitCamera(points, { fovDeg = 48, aspect = 1, pad = 1.4, topReser
     const halfH = (maxY - minY) / 2 + pad;
     const t = Math.tan((fovDeg * Math.PI) / 360);
     const f = Math.min(0.3, Math.max(0, topReserve));
-    const distance = Math.max(halfH / (t * (1 - f)), halfW / (t * Math.max(0.2, aspect)));
-    // Screen up is world +y: aim a little higher so the people sit lower.
-    return { cx: (minX + maxX) / 2, cy: (minY + maxY) / 2 + f * distance * t, distance };
+    const b = Math.min(0.2, Math.max(0, bottomReserve));
+    const distance = Math.max(halfH / (t * (1 - f - b)), halfW / (t * Math.max(0.2, aspect)));
+    // Screen up is world +y: aim higher to clear the top strip, lower to
+    // clear the bottom one.
+    return { cx: (minX + maxX) / 2, cy: (minY + maxY) / 2 + (f - b) * distance * t, distance };
 }
 
 // Results copy for a loss: say which rule ended the run.
@@ -197,14 +239,14 @@ export function rExplainer({ r = null, r0 = '' } = {}) {
     } else if (r > 1) {
         const about = r >= 5 ? '5 or more' : r < 1.5 ? 'more than 1' : `about ${Math.round(r)}`;
         headline = 'Growing: R is above 1';
-        lines.push(`Each sick person is passing it to ${about} others right now, so cases multiply.`);
-        lines.push('Isolate the sick and cut the red links to push R under 1.');
+        lines.push(`Each sick person can still reach ${about} others through red links, so cases multiply.`);
+        lines.push('Cut red links and isolate the sick to push R under 1. It drops the moment you act.');
     } else if (r === 0) {
         headline = 'Stopped for now: R is 0';
-        lines.push('Nobody caught it yesterday. Keep the sick away from the healthy.');
+        lines.push('No sick person can reach a healthy one right now. Keep it that way.');
     } else {
         headline = 'Shrinking: R is below 1';
-        lines.push('Each sick person now passes it to fewer than one other, so the outbreak fades out.');
+        lines.push('Each sick person can now reach fewer than one other on average, so the outbreak fades out.');
     }
     const high = r0High(r0);
     if (high != null) {
@@ -221,6 +263,16 @@ export function rExplainer({ r = null, r0 = '' } = {}) {
 // celebrating, because that is when an outbreak starts to die out.
 export function rFellBelowOne(prevR, nextR) {
     return prevR != null && nextR != null && Number.isFinite(prevR) && Number.isFinite(nextR) && prevR > 1 && nextR <= 1;
+}
+
+// Round 35: which way R just moved, for the HUD nudge: 'down', 'up', or
+// null when it held (changes under 0.05 do not count, nor do moves within 5+).
+export function rTick(prevR, nextR) {
+    if (prevR == null || nextR == null || !Number.isFinite(prevR) || !Number.isFinite(nextR)) return null;
+    if (formatR(prevR) === formatR(nextR)) return null;
+    if (nextR < prevR - 0.05) return 'down';
+    if (nextR > prevR + 0.05) return 'up';
+    return null;
 }
 
 export const R_BELOW_ONE_TEXT = 'R fell below 1! Each case now leads to less than one more, so the outbreak is shrinking.';

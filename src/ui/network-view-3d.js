@@ -135,6 +135,9 @@ const FACE_SCALE = 1.15;
 const FIT_PAD = 1.2;
 // Height of the button row at the top of the web (Key, 2D/3D), in CSS px.
 export const TOP_BUTTONS_PX = 54;
+// Strip kept clear at the bottom of the web for the one-line tool hint
+// (10 px from the edge, about 34 px tall), in CSS px. Round 33.
+export const BOTTOM_HINT_PX = 48;
 
 // Link ribbon widths and colour keys come from link-style.js.
 const LINK_COLORS = {
@@ -675,9 +678,10 @@ export class NetworkView {
             this.autoFit = true;
             this.physicsSettled = true;
         } else if (linkKey !== this.lastLinkKey) {
-            // A link was severed: let the network relax gently. Vaccinate
-            // changes no links, so the people you are tapping stay put.
-            this.alpha = Math.max(this.alpha || 0, LAYOUT.reheatAlpha);
+            // A link was severed: let the network relax very gently, so the
+            // next line you aim at stays under your thumb (round 32).
+            // Vaccinate changes no links, so the people you tap stay put.
+            this.alpha = Math.max(this.alpha || 0, this.is3d ? LAYOUT_3D.severAlpha : LAYOUT.severAlpha);
             this.physicsSettled = false;
         } else if (boxChanged) {
             // Someone left for the care box: close the gap very gently.
@@ -828,7 +832,13 @@ export class NetworkView {
     fitTarget() {
         const pts = [];
         for (const o of this.nodeObjs.values()) if (!o.boxed) pts.push(o.pos);
-        return fitCamera(pts, { fovDeg: this.camera.fov, aspect: this.camera.aspect, pad: FIT_PAD + 0.6 * (this.personScale - 1), topReserve: this.topReserve() });
+        return fitCamera(pts, { fovDeg: this.camera.fov, aspect: this.camera.aspect, pad: FIT_PAD + 0.6 * (this.personScale - 1), topReserve: this.topReserve(), bottomReserve: this.bottomReserve() });
+    }
+
+    // Share of the view's height the tool hint covers at the bottom.
+    bottomReserve() {
+        const h = this.container?.clientHeight || 0;
+        return h > 0 ? Math.min(0.15, BOTTOM_HINT_PX / h) : 0;
     }
 
     // Share of the view's height the Key and 2D/3D buttons cover at the top
@@ -1305,11 +1315,13 @@ export class NetworkView {
         // 4. The two nodes recoil apart, and the screen ticks.
         const away = _tmp2.subVectors(b.pos, a.pos);
         if (!this.is3d) away.setZ(0);
-        away.normalize().multiplyScalar(0.55);
+        // Round 32: a small recoil and a gentle reheat, so the rest of the
+        // web stays where the player is aiming next.
+        away.normalize().multiplyScalar(LAYOUT.severRecoil);
         b.vel.add(away);
         a.vel.sub(away);
         this.physicsSettled = false;
-        this.alpha = Math.max(this.alpha || 0, LAYOUT.reheatAlpha);
+        this.alpha = Math.max(this.alpha || 0, this.is3d ? LAYOUT_3D.severAlpha : LAYOUT.severAlpha);
         this.shakeUntil = start + 140;
         this.lastTouch = start;
     }

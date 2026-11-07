@@ -588,6 +588,20 @@
     padding: 10px 8px calc(10px + env(safe-area-inset-bottom, 0px));
     background: linear-gradient(180deg, rgba(255, 255, 255, 0) 0, #fff 14px);
 }
+/* Round 30: the screen's bottom padding (16 px plus the home bar inset)
+   left a strip under the sticky buttons where results text scrolled past,
+   cut in half. A paper skirt below the buttons closes that strip. */
+#game-over-screen.has-tally .game-over-actions::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 100%;
+    height: calc(var(--space-16) + env(safe-area-inset-bottom, 0px) + 2px);
+    background: var(--results-paper, #fff);
+    pointer-events: none;
+    z-index: -1; /* under the button shadows */
+}
 .tally-skip { margin-top: 4px; font-size: 0.72rem; color: #9ca3af; text-align: center; }
 .tally.done .tally-skip { visibility: hidden; }
 .final-stats-wrap { margin-top: 6px; }
@@ -680,6 +694,19 @@ html .network-container.is-3d {
 @keyframes r-celebrate {
     0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(142, 230, 176, 0); }
     40% { transform: scale(1.12); box-shadow: 0 0 0 6px rgba(142, 230, 176, 0.35); }
+}
+/* Round 35: R moves the moment you act. A quick green dip when it falls,
+   a red bump when it rises, so the player sees their cut land on R. */
+@keyframes r-tick-down {
+    0%, 100% { transform: none; }
+    35% { transform: translateY(3px) scale(0.94); box-shadow: 0 0 0 5px rgba(142, 230, 176, 0.4); }
+}
+@keyframes r-tick-up {
+    0%, 100% { transform: none; }
+    35% { transform: translateY(-3px) scale(1.06); box-shadow: 0 0 0 5px rgba(240, 110, 110, 0.35); }
+}
+@media (prefers-reduced-motion: reduce) {
+    html .stat--r.r-tick-down, html .stat--r.r-tick-up { animation: none; }
 }
 @keyframes r-card-in {
     from { opacity: 0; transform: translateY(-8px) scale(0.97); }
@@ -784,3 +811,22 @@ html .network-container.has-backdrop.is-3d {
 }
 /* Paused: the scene holds still with the game. */
 #game-screen.is-paused .web-backdrop > i { animation-play-state: paused; }
+
+/* Round 34: a win leads with Next level. Replay and Map share a row above
+   it, and Next level spans the full width at the bottom, nearest the thumb.
+   A loss leads with Try again, so it moves below Back to map. */
+.game-over-actions.has-next {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+.game-over-actions.has-next #next-level {
+    grid-column: 1 / -1;
+    min-height: 52px;
+}
+.game-over-actions.lead-replay #play-again {
+    order: 2;
+}
+#next-level[hidden] {
+    display: none;
+}

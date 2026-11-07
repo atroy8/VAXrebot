@@ -28,7 +28,7 @@ import './ui/game-screen.css';
 import './ui/averted.css';
 import './ui/variants.css';
 import './ui/app-shell.css'; // last: safe areas and native touch feel (round 18)
-import { toolHint, dayBanner, rFellBelowOne, R_BELOW_ONE_TEXT, shouldAutoPause, toolChips, autoToolForTap, noToolTapHint, idleTapMode } from './ui/game-screen-model.js';
+import { toolHint, dayBanner, rFellBelowOne, rTick, R_BELOW_ONE_TEXT, shouldAutoPause, toolChips, autoToolForTap, noToolTapHint, idleTapMode, usedUpNudge } from './ui/game-screen-model.js';
 import { renderCareBox, flyToCareBox } from './ui/care-box.js';
 import { mountShop, renderShop } from './ui/shop.js';
 import { buildOutbreak } from './sim/setup.js';
@@ -42,7 +42,7 @@ import {
     allActionsSpent,
     actionsRemaining,
     caseCapFor,
-    effectiveR,
+    liveR,
 } from './sim/actions.js';
 import { rollLevelRules, threatLine } from './config/difficulty-roll.js';
 import { createAutoAdvance } from './ui/auto-advance.js';
@@ -52,6 +52,7 @@ import { createViewLoader } from './ui/view-loader.js';
 import { lessonFor, debriefLine } from './config/lessons.js';
 import { snapshotNetwork, noResponseCases, avertedSummary } from './sim/counterfactual.js';
 import { renderAverted } from './ui/averted.js';
+import { resultsActions } from './ui/results-actions.js';
 import {
     renderHeader,
     renderTools,
@@ -250,6 +251,12 @@ export class EpidemicSimulator {
         document
             .getElementById('try-different-scenario')
             .addEventListener('click', () => this.leaveResults(() => this.showScreen('welcome')));
+        // Round 34: a win goes straight on to the next level's briefing.
+        document.getElementById('next-level')?.addEventListener('click', () => {
+            const nextId = this.nextLevelId;
+            if (!nextId) return;
+            this.leaveResults(() => this.selectLevel(nextId));
+        });
         // A prize box on the award screen: back to the map, which flies to
         // the box and opens it (the same exit path, so ad pacing still applies).
         document.getElementById('results-tally')?.addEventListener('click', (e) => {
@@ -422,7 +429,7 @@ export class EpidemicSimulator {
             showNotification(noToolTapHint(kind, chips), 'info');
             return false;
         }
-        this.selectTool(toolId);
+        this.selectTool(toolId, { hint: false });
         return true;
     }
 
@@ -498,7 +505,22 @@ export class EpidemicSimulator {
         if (!this.gameState || this.gameState.gameOver) return;
         this.maybeWrapUp();
         if (this.wrapUp || this.gameState.paused) return;
+        this.releaseUsedUpTool();
         if (allActionsSpent(this.gameState, this.tools, this.difficulty)) this.autoAdvance.start();
+    }
+
+    // Round 31: a tool that just hit its daily limit lets go, so the next tap
+    // auto-picks a tool that is still ready (round 27) instead of drawing a
+    // red limit error, and a toast says what is ready.
+    releaseUsedUpTool() {
+        const toolId = this.selectedTool;
+        if (!toolId || isPowerUp(toolId)) return;
+        const chips = this.currentChips();
+        const chip = chips.find((c) => c.id === toolId);
+        if (!chip || chip.state !== 'spent') return;
+        this.selectTool(toolId); // deselect
+        const nudge = usedUpNudge(toolId, chips);
+        if (nudge) showNotification(nudge, 'info');
     }
 
     // Countdown display on the Next day button; null clears it.
@@ -543,26 +565,11 @@ export class EpidemicSimulator {
             const left = actionsRemaining(this.gameState, this.tools, difficulty);
             this.gameState.stats.unusedActions = (this.gameState.stats.unusedActions || 0) + left;
         }
-        const { spread, outcomes, result, activeBefore } = advanceDay(this.gameState, this.network, {
+        const { spread, outcomes, result } = advanceDay(this.gameState, this.network, {
             scenario: this.currentScenario,
             difficulty,
         });
         const { events, count } = spread;
-        // Smooth day-to-day noise: blend today's R with yesterday's.
-        const rToday = effectiveR(count, activeBefore, difficulty.recoveryTime);
-        const prevR = this.lastR;
-        this.lastR = rToday == null ? this.lastR : this.lastR == null ? rToday : 0.5 * rToday + 0.5 * this.lastR;
-        // Round 16: the first day R drops under 1 is the turning point of an
-        // outbreak, so mark it (once per level) with a toast and a chime.
-        if (!result && !this.gameState.stats.rBelowOneDay && rFellBelowOne(prevR, this.lastR)) {
-            this.gameState.stats.rBelowOneDay = this.gameState.day - 1;
-            showNotification(R_BELOW_ONE_TEXT, 'success');
-            this.audio.playStinger?.('milestone');
-            this.haptics.play('milestone');
-            document.getElementById('r-stat')?.classList.add('r-celebrate');
-            setTimeout(() => document.getElementById('r-stat')?.classList.remove('r-celebrate'), 1600);
-        }
-        if (isRCardOpen()) openRCard({ r: this.lastR, r0: this.currentR0 });
         for (const { source, target } of events) {
             this.view.animateVirus(source, target);
             this.audio.playSound(150, 0.2, 'triangle');
@@ -750,7 +757,32 @@ export class EpidemicSimulator {
         const lesson = this.currentLevel ? lessonFor(this.currentLevel.id) : null;
         fillLessonCard('game-over-lesson', lesson?.title, debriefLine(lesson, outcome, { unusedActions: stats.unusedActions ?? 0 }));
         this.renderAvertedCard(outcome, stats);
+        this.applyResultsActions(outcome);
         this.showScreen('game-over');
+    }
+
+    // Round 34: Next level leads a win, Try again leads a loss, and the map
+    // is always there (src/ui/results-actions.js).
+    applyResultsActions(outcome) {
+        const plan = resultsActions({ outcome, levelId: this.currentLevel?.id, save: this.save, levels: LEVELS, regions: REGIONS });
+        this.nextLevelId = plan.nextLevelId;
+        const buttons = {
+            replay: document.getElementById('play-again'),
+            map: document.getElementById('try-different-scenario'),
+            next: document.getElementById('next-level'),
+        };
+        if (!buttons.replay || !buttons.map) return;
+        buttons.replay.textContent = plan.replayLabel;
+        buttons.map.textContent = plan.mapLabel;
+        if (buttons.next) buttons.next.hidden = plan.primary !== 'next';
+        for (const [key, btn] of Object.entries(buttons)) {
+            if (!btn) continue;
+            btn.classList.toggle('btn--primary', key === plan.primary);
+            btn.classList.toggle('btn--secondary', key !== plan.primary);
+        }
+        const row = buttons.replay.parentElement;
+        row?.classList.toggle('has-next', plan.primary === 'next');
+        row?.classList.toggle('lead-replay', plan.primary === 'replay');
     }
 
     // Cases averted: the player's outbreak against a no-response baseline
@@ -787,7 +819,11 @@ export class EpidemicSimulator {
         else if (kind === 'prize') a.playStinger ? a.playStinger('milestone') : a.playSound(1318, 0.4, 'sine');
     }
 
-    selectTool(toolId) {
+    // hint: false when a tap picked the tool and used it in the same moment
+    // (round 32). The player has just done what the hint would say, and on a
+    // phone the hint sat over the bottom of the web for 4.5 s, often on top
+    // of the sick person they were working on.
+    selectTool(toolId, { hint = true } = {}) {
         this.selectedTool = this.selectedTool === toolId ? null : toolId;
         this.view.setToolMode?.(this.selectedTool);
         document.querySelectorAll('.tool-item').forEach((item) => {
@@ -795,7 +831,7 @@ export class EpidemicSimulator {
             item.classList.toggle('selected', on);
             item.setAttribute('aria-pressed', String(on));
         });
-        showToolHint(this.selectedTool ? toolHint(this.selectedTool, this.tools) : '');
+        showToolHint(this.selectedTool && hint ? toolHint(this.selectedTool, this.tools) : '');
     }
 
     // Power-up flow: hand the economy module the gameApi it needs, spend
@@ -843,7 +879,42 @@ export class EpidemicSimulator {
         if (sheet) sheet.hidden = true;
     }
 
+    // Round 35: R is read off the web as it stands (liveR in
+    // src/sim/actions.js), so it moves the moment the player cuts a red link
+    // or isolates someone, not a day later. The first time it drops from
+    // above 1 to 1 or below is the turning point of an outbreak: mark it once
+    // per level with a toast and a chime (only once it reads under 1.0, since the
+    // toast says below 1). When it drops straight to nothing
+    // the Spread stopped! card says it instead.
+    refreshR() {
+        if (!this.gameState || !this.network || !this.currentScenario) return;
+        const difficulty = this.difficulty;
+        const prevR = this.lastR;
+        this.lastR = liveR(this.network, this.currentScenario.baseTransmissionRate * difficulty.transmissionMultiplier, difficulty.recoveryTime);
+        if (!this.gameState.gameOver && !this.wrapUp && !this.gameState.stats.rBelowOneDay && rFellBelowOne(prevR, this.lastR) && this.lastR < 0.95 && !spreadIsOver(this.network)) {
+            this.gameState.stats.rBelowOneDay = this.gameState.day;
+            showNotification(R_BELOW_ONE_TEXT, 'success');
+            this.audio.playStinger?.('milestone');
+            this.haptics.play('milestone');
+            document.getElementById('r-stat')?.classList.add('r-celebrate');
+            setTimeout(() => document.getElementById('r-stat')?.classList.remove('r-celebrate'), 1600);
+        }
+        else if (prevR != null && !this.gameState.gameOver) {
+            const tick = rTick(prevR, this.lastR);
+            const el = document.getElementById('r-stat');
+            if (tick && el) {
+                el.classList.remove('r-tick-down', 'r-tick-up');
+                void el.offsetWidth; // restart the animation on quick taps
+                el.classList.add(`r-tick-${tick}`);
+                clearTimeout(this.rTickTimer);
+                this.rTickTimer = setTimeout(() => el.classList.remove('r-tick-down', 'r-tick-up'), 700);
+            }
+        }
+        if (isRCardOpen()) openRCard({ r: this.lastR, r0: this.currentR0 });
+    }
+
     updateUI() {
+        this.refreshR();
         const difficulty = this.difficulty;
         renderHeader({
             scenarioName: this.currentLevel ? this.currentLevel.name : this.currentScenario.name,
