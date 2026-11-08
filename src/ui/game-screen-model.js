@@ -291,3 +291,10 @@ export function rScalePos(r) {
 export function shouldAutoPause({ hidden, screen, gameState, wrapUp = null } = {}) {
     return Boolean(hidden && screen === 'game' && gameState && !gameState.gameOver && !gameState.paused && !wrapUp);
 }
+
+// Round 36: names longer than this many letters get the smaller title size,
+// so they fit on two lines in the header at 360 to 390 px.
+export const TITLE_LONG_AT = 18;
+export function titleClass(name) {
+    return String(name || '').length > TITLE_LONG_AT ? 'is-long' : '';
+}
