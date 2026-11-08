@@ -8,9 +8,9 @@
 // a playable band: the order between diseases is kept (MERS is always
 // deadlier than flu), but every disease can take someone.
 //
-// Timing: a sick person may die on any day of their illness, not only on
-// the last one, at a daily chance that adds up to the disease's game CFR
-// over the full illness. Sick people in an isolation ward get care, which
+// Timing: a sick person may die on any day of their illness after the first
+// DEATH_LAG_DAYS (see below), at a daily chance that adds up to the
+// disease's game CFR over those days. Sick people in an isolation ward get care, which
 // halves that chance (TREATED_FACTOR), as supportive care does for real.
 
 export const GAME_CFR_MIN = 0.12; // the mildest disease in the game
@@ -18,6 +18,40 @@ export const GAME_CFR_MAX = 0.3; // the deadliest
 const LOG_LO = Math.log10(1e-4); // real CFR of 0.01% maps to GAME_CFR_MIN
 const LOG_HI = Math.log10(0.4); // real CFR of 40% maps to GAME_CFR_MAX
 export const TREATED_FACTOR = 0.5;
+
+// Round 36: deaths lag cases. For real, people die days to weeks after they
+// fall ill (COVID-19 onset to death was about two to three weeks), so a
+// town's death count trails its case count. Here nobody dies in their first
+// DEATH_LAG_DAYS days sick; the whole-illness chance is spread over the days
+// after that, so each disease is exactly as deadly as before. This also
+// means the first sick person on level 1 cannot die before Quarantine opens
+// on day 3. Always leaves at least one day at risk.
+export const DEATH_LAG_DAYS = 2;
+
+export function deathLag(recoveryTime) {
+    return Math.max(0, Math.min(DEATH_LAG_DAYS, (recoveryTime || 1) - 1));
+}
+
+// Days of an illness on which death is possible.
+export function riskDays(recoveryTime) {
+    return Math.max(1, (recoveryTime || 1) - deathLag(recoveryTime));
+}
+
+// True when someone sick for daysInfected days can die today.
+export function canDieOnDay(daysInfected, recoveryTime) {
+    return daysInfected >= 1 && daysInfected > deathLag(recoveryTime);
+}
+
+// Death chance on each day at risk for this person and disease.
+export function dailyRisk(node, fatalityRate, recoveryTime) {
+    return dailyDeathChance(personFatality(node, fatalityRate), riskDays(recoveryTime));
+}
+
+// Risk days still ahead for someone sick for daysInfected days.
+export function riskDaysLeft(daysInfected, recoveryTime) {
+    const from = Math.max(Math.max(0, daysInfected || 0), deathLag(recoveryTime));
+    return Math.max(1, (recoveryTime || 1) - from);
+}
 
 // Real CFR (0..1) to the chance a sick person dies over their whole illness.
 export function gameFatality(realCfr) {
