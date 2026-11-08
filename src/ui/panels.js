@@ -3,7 +3,7 @@
 // No game logic here; callers pass plain data.
 import { formatR, rTone, rExplainer, rScalePos } from './game-screen-model.js';
 import { spriteFor } from '../sprites.js';
-import { toolChips, lossReason } from './game-screen-model.js';
+import { toolChips, lossReason, titleClass } from './game-screen-model.js';
 import { threatPipsHtml } from './briefing.js';
 
 // Small inline icons for the tool tray (no emoji on the game screen).
@@ -22,7 +22,10 @@ const ICONS = {
 const TOOL_COLORS = { vaccinate: '#7c3aed', quarantine: '#f97316', severLink: '#0ea5e9' };
 
 export function renderHeader({ scenarioName, difficultyName, difficultyId, threatPips = null, day, infected, protected: protectedCount, population, paused = false, cases = null, caseCap = Infinity, r = null, actionsLeft = null, deaths = 0 }) {
-    document.getElementById('game-scenario-name').textContent = scenarioName;
+    const title = document.getElementById('game-scenario-name');
+    title.textContent = scenarioName;
+    title.className = titleClass(scenarioName);
+    title.title = scenarioName;
     const badge =
         threatPips != null
             ? `<span class="threat-badge" aria-label="Threat ${threatPips} of 5">${threatPipsHtml(threatPips)}</span>`
