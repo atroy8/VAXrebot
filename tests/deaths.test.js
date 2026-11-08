@@ -60,9 +60,9 @@ describe('real case fatality rates', () => {
 });
 
 describe('dying during the illness', () => {
-    it('a sick person can die on the first day of illness, not only the last', () => {
+    it('a sick person can die on the first day at risk (day 3), not only the last', () => {
         const state = stateWith();
-        const network = { nodes: [{ id: 0, state: 'infected', daysInfected: 1 }], links: [] };
+        const network = { nodes: [{ id: 0, state: 'infected', daysInfected: 3 }], links: [] };
         const out = updateOutcomes(state, network, 7, 0.3, () => 0.01);
         expect(out).toEqual([{ node: expect.objectContaining({ id: 0, state: 'dead' }), outcome: 'died', inWard: false }]);
         expect(state.stats.totalDead).toBe(1);
@@ -70,12 +70,12 @@ describe('dying during the illness', () => {
     });
 
     it('a roll that kills an untreated person spares one in a ward', () => {
-        const roll = () => dailyDeathChance(0.3, 7) * 0.75; // under the untreated chance, over the ward chance
+        const roll = () => dailyDeathChance(0.3, 5) * 0.75; // under the untreated chance, over the ward chance
         const a = stateWith();
-        const sick = { nodes: [{ id: 0, state: 'infected', daysInfected: 2 }], links: [] };
+        const sick = { nodes: [{ id: 0, state: 'infected', daysInfected: 3 }], links: [] };
         expect(updateOutcomes(a, sick, 7, 0.3, roll)[0].outcome).toBe('died');
         const b = stateWith();
-        const ward = { nodes: [{ id: 0, state: 'quarantined', sickWhileQuarantined: true, daysInfected: 2 }], links: [] };
+        const ward = { nodes: [{ id: 0, state: 'quarantined', sickWhileQuarantined: true, daysInfected: 3 }], links: [] };
         expect(updateOutcomes(b, ward, 7, 0.3, roll)).toHaveLength(0);
     });
 
