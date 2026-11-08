@@ -7,7 +7,7 @@ export function deathToast({ count = 1, firstThisLevel = false, inWard = false }
     const who = count === 1 ? 'Someone did not survive.' : `${count} people did not survive.`;
     if (!firstThisLevel) return who;
     if (inWard) return `${who} Even with care, some cases are fatal.`;
-    return `${who} Sick people in a ward get care and are half as likely to die.`;
+    return `${who} Deaths come days after people fall sick. A ward halves the risk.`;
 }
 
 // Briefing line: how deadly the disease is for real.
