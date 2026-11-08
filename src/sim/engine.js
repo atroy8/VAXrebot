@@ -6,7 +6,7 @@
 
 const nodeId = (ref) => (ref && typeof ref === 'object' ? ref.id : ref);
 import { envoyLost } from './variants.js';
-import { dailyDeathChance, personFatality } from './fatality.js';
+import { canDieOnDay, dailyRisk, riskDaysLeft } from './fatality.js';
 
 // One day of spread. Returns { events: [{ source, target }], count }.
 // `transmissionRate` is the fully computed per-contact probability
@@ -45,8 +45,8 @@ export function simulateSpread(state, network, transmissionRate, rng = Math.rand
 }
 
 // Resolve deaths and recoveries for one day. Item 20 (round 24): a sick
-// person may die on any day of their illness (daysInfected 1 up to
-// recoveryTime), at a daily chance that adds up to `fatalityRate` over the
+// person may die on any day of their illness after the first two (round 36,
+// deaths lag cases: daysInfected 3 up to recoveryTime), at a daily chance that adds up to `fatalityRate` over the
 // whole illness; sick people in a ward get care and face half that
 // (src/sim/fatality.js). Anyone who reaches recoveryTime alive recovers.
 // Returns an ordered list of { node, outcome: 'died' | 'recovered' }.
@@ -60,7 +60,8 @@ export function updateOutcomes(state, network, recoveryTime, fatalityRate, rng =
         const stillSick =
             node.state === 'infected' || (node.state === 'quarantined' && node.sickWhileQuarantined);
         if (!stillSick || node.daysInfected < 1) continue;
-        const daily = dailyDeathChance(personFatality(node, fatalityRate), recoveryTime);
+        // Round 36: deaths lag cases, so nobody dies in their first days sick.
+        const daily = canDieOnDay(node.daysInfected, recoveryTime) ? dailyRisk(node, fatalityRate, recoveryTime) : 0;
         if (daily > 0 && rng() < daily) {
             const inWard = node.state === 'quarantined';
             if (inWard) state.stats.diedInWard = (state.stats.diedInWard || 0) + 1;
@@ -107,8 +108,8 @@ export function resolveAftermath(state, network, recoveryTime, fatalityRate, rng
         const stillSick =
             node.state === 'infected' || (node.state === 'quarantined' && node.sickWhileQuarantined);
         if (!stillSick) continue;
-        const daysLeft = Math.max(1, recoveryTime - Math.max(0, node.daysInfected));
-        const daily = dailyDeathChance(personFatality(node, fatalityRate), recoveryTime);
+        const daysLeft = riskDaysLeft(node.daysInfected, recoveryTime);
+        const daily = dailyRisk(node, fatalityRate, recoveryTime);
         if (rng() < 1 - Math.pow(1 - daily, daysLeft)) {
             state.stats.totalDead++;
             state.stats.aftermathDead = (state.stats.aftermathDead || 0) + 1;
