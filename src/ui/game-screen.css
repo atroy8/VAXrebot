@@ -30,15 +30,26 @@
     padding: 10px 12px;
 }
 .game-topbar { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.game-info { display: flex; align-items: baseline; gap: 8px; min-width: 0; flex: 1; }
+.game-info { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; }
+/* Round 36: most level names ran past 20 letters and were cut off with an
+   ellipsis at 390 px ("Tidewater Healing Ha..."). The name now wraps onto
+   at most two balanced lines inside the 44 px icon row, and long names
+   (over TITLE_LONG_AT letters, src/ui/panels.js) use a slightly smaller size. */
 .game-info h4 {
     margin: 0;
     font-size: 1.05rem;
-    white-space: nowrap;
+    line-height: 1.1;
+    white-space: normal;
+    text-wrap: balance;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
     overflow: hidden;
-    text-overflow: ellipsis;
     min-width: 0;
 }
+.game-info h4.is-long { font-size: 0.94rem; }
+#current-difficulty-badge { flex: none; }
 .game-icons { display: flex; gap: 6px; flex: none; }
 .icon-btn {
     width: 44px;
