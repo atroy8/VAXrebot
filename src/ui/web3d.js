@@ -461,3 +461,35 @@ export function layoutForPersonScale(P, scale = 1) {
         maxRadius: P.maxRadius * s,
     };
 }
+
+// Round 37: in the flat 2D web each face floats a little toward the camera
+// (so it draws over its lines), but the perspective camera then pushes the
+// face outward from the screen centre while the coloured body sphere behind
+// it stays put. People away from the centre showed a dark crescent of the
+// sphere peeking out under or over their face. How far, in CSS px: a point
+// `lift` world units nearer a camera `depth` away moves outward by
+// offset * lift / (depth - lift).
+export function faceParallaxPx(offsetFromCentrePx, lift, depth) {
+    if (!(depth > lift) || lift <= 0) return 0;
+    return Math.abs(offsetFromCentrePx) * (lift / (depth - lift));
+}
+
+// The body sphere only earns its place in 3D, where it gives each person
+// depth as the web turns. In 2D the face token is the whole person.
+export function showBodySphere(is3d) {
+    return !!is3d;
+}
+
+// The fix that works in both views: lift each face along the line from the
+// person to the camera instead of along the camera's forward axis. A point
+// on that line projects to the same spot as the person's centre, so the face
+// sits dead centre on its body at any angle and any distance from the middle
+// of the screen. World-space unit vector; falls back to +z (2D straight down).
+export function faceLiftDirection(nodePos, camPos) {
+    const x = camPos.x - nodePos.x;
+    const y = camPos.y - nodePos.y;
+    const z = camPos.z - nodePos.z;
+    const len = Math.hypot(x, y, z);
+    if (len < 1e-9) return { x: 0, y: 0, z: 1 };
+    return { x: x / len, y: y / len, z: z / len };
+}
