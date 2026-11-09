@@ -588,9 +588,11 @@
 }
 .tally-lines--award { margin: 0 0 4px; }
 .tally-lines--award .tally-line { background: #fff8db; }
-/* With the tally up, the win line is redundant, and the buttons stay in reach. */
+/* With the tally up, the win line is redundant. The buttons stay in reach on
+   every results screen (round 37: a loss has no tally, and Try again sat
+   below the fold on a 390x844 phone, so you had to scroll to retry). */
 #game-over-screen.has-tally .game-over-message { display: none; }
-#game-over-screen.has-tally .game-over-actions {
+#game-over-screen .game-over-actions {
     position: sticky;
     bottom: 0;
     z-index: 2;
@@ -602,7 +604,7 @@
 /* Round 30: the screen's bottom padding (16 px plus the home bar inset)
    left a strip under the sticky buttons where results text scrolled past,
    cut in half. A paper skirt below the buttons closes that strip. */
-#game-over-screen.has-tally .game-over-actions::after {
+#game-over-screen .game-over-actions::after {
     content: '';
     position: absolute;
     left: 0;
@@ -837,6 +839,13 @@ html .network-container.has-backdrop.is-3d {
 }
 .game-over-actions.lead-replay #play-again {
     order: 2;
+}
+/* Round 37: on a loss the two buttons share one row, Map on the left and
+   Try again on the right, so the sticky footer stays short. */
+.game-over-actions.lead-replay {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
 }
 #next-level[hidden] {
     display: none;

@@ -77,6 +77,8 @@ import {
     layoutForPersonScale,
     MIN_PERSON_PX,
     MAX_PERSON_SCALE,
+    showBodySphere,
+    faceLiftDirection,
 } from './web3d.js';
 
 // 3D web mode (round 15): deep space behind the web, and fog so far people
@@ -165,6 +167,7 @@ const WARMUP_STEPS = 400;
 const _tmp = new THREE.Vector3();
 const _tmp2 = new THREE.Vector3();
 const _proj = new THREE.Vector3();
+const _quat = new THREE.Quaternion();
 
 const sphereGeometry = new THREE.SphereGeometry(NODE_RADIUS, 14, 10);
 const sphereMaterials = {};
@@ -1106,9 +1109,8 @@ export class NetworkView {
             if (this.alpha === 0 && maxSpeed < 0.002) this.physicsSettled = true;
         }
 
-        // Camera-facing direction, reused to float each face sprite just off
-        // the sphere surface so faces stay readable and occlude correctly.
-        _tmp2.set(0, 0, 1); // in 2D the camera always looks straight down
+        // How far each face sprite floats off the sphere surface toward the
+        // camera, so faces stay readable and occlude correctly.
         const faceOffset = NODE_RADIUS + 0.08;
         if (this.is3d) {
             // Slow drift so the depth reads, paused while a tool is chosen
@@ -1130,6 +1132,10 @@ export class NetworkView {
         for (const obj of this.nodeObjs.values()) {
             obj.group.position.copy(obj.pos);
             obj.group.scale.setScalar(this.personScale);
+            // 2D: no body sphere behind the face, so no crescent peeks out
+            // (round 37, see showBodySphere in web3d.js).
+            const body = showBodySphere(this.is3d);
+            if (obj.sphere.visible !== body) obj.sphere.visible = body;
             // In 3D each person (ring, halo, badge) turns to face the camera.
             if (this.is3d) obj.group.quaternion.copy(this.camera.quaternion);
             else obj.group.quaternion.identity();
@@ -1150,7 +1156,12 @@ export class NetworkView {
                 scale = FACE_SCALE * (1 + 0.3 * Math.sin(Math.PI * Math.min(1, Math.max(0, p))));
             }
             obj.sprite.scale.set(scale, scale, 1);
-            obj.sprite.position.copy(_tmp2).multiplyScalar(faceOffset);
+            // Lift the face toward the camera along the person's own line of
+            // sight, so it projects dead centre on the body (round 37).
+            // The group may be turned to face the camera, so undo that turn.
+            const lift = faceLiftDirection(obj.pos, this.camera.position);
+            _quat.copy(obj.group.quaternion).invert();
+            obj.sprite.position.set(lift.x, lift.y, lift.z).applyQuaternion(_quat).multiplyScalar(faceOffset);
         }
 
         // Infected nodes pulse so the threats stand out at a glance.
