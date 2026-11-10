@@ -32,7 +32,7 @@ describe('usedUpNudge', () => {
         const chips = toolChips(tools, difficulty, 2, { vaccinate: 0, quarantine: 0, severLink: limit }, {});
         expect(usedUpNudge('severLink', chips)).toMatch(/^Sever Link is used up for today\. Tap a healthy person/);
         expect(autoToolForTap('node', 'healthy', chips)).toBe('vaccinate');
-        expect(noToolTapHint('link', chips)).toMatch(/^Sever is used up for today\. Tap a healthy person/);
+        expect(noToolTapHint('link', chips)).toBe(usedUpNudge('severLink', chips));
     });
 });
 
