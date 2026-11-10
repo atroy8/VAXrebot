@@ -57,15 +57,21 @@ export function idleTapMode(chips = []) {
 
 // What to say when a tap with no tool chosen has nothing ready that fits.
 // Points at the tool that would work, so the tap still teaches something.
-export function noToolTapHint(kind, chips = []) {
+export function noToolTapHint(kind, chips = [], ctx = {}) {
     const ready = (id) => chips.some((c) => c.id === id && !c.powerUp && c.state === 'ready');
     const spent = (id) => chips.some((c) => c.id === id && !c.powerUp && c.state === 'spent');
     if (kind === 'node' && ready('severLink')) return 'Sever cuts lines, not people. Tap a red line.';
-    if (kind === 'link' && spent('severLink')) {
-        const next = nextToolLine(chips, 'severLink');
-        if (next) return `Sever is used up for today. ${next}`;
-    }
+    if (kind === 'link' && spent('severLink')) return spentToolLine('severLink', chips, ctx);
     if (kind === 'link' && (ready('vaccinate') || ready('quarantine'))) return 'Tap a person to use your tool.';
+    // Round 38: a sick person tapped while only Vaccinate is ready used to
+    // get 'Pick a tool from the tray first.', though the tray had nothing
+    // that helps them. Say why, and when isolation opens.
+    if (kind === 'node' && (ctx.nodeState === 'infected' || ctx.nodeState === 'exposed')) {
+        const q = chips.find((c) => c.id === 'quarantine' && !c.powerUp);
+        const when = q && q.state === 'locked' && q.firstDay ? ` Isolation opens on day ${q.firstDay}.` : q && q.state === 'spent' ? ' Isolation is used up for today.' : '';
+        if (ready('vaccinate')) return `Vaccines protect healthy people, not the sick.${when}`;
+        if (when) return when.trim();
+    }
     return 'Pick a tool from the tray first.';
 }
 
@@ -81,7 +87,12 @@ const NEXT_STEP = {
     severLink: 'Tap a red line to cut it.',
 };
 
-function nextToolLine(chips, usedUpId) {
+// Round 38: when someone sick is still free to spread and Quarantine is
+// ready, isolating them comes first: it stops spread at the source, while a
+// vaccine protects one contact. ctx.sickFree = sick people not yet isolated.
+function nextToolLine(chips, usedUpId, ctx = {}) {
+    const ready = (id) => id !== usedUpId && chips.some((c) => c.id === id && !c.powerUp && c.state === 'ready');
+    if (ctx.sickFree > 0 && ready('quarantine')) return NEXT_STEP.quarantine;
     for (const c of chips) {
         if (c.powerUp || c.id === usedUpId || c.state !== 'ready') continue;
         if (NEXT_STEP[c.id]) return NEXT_STEP[c.id];
@@ -89,12 +100,24 @@ function nextToolLine(chips, usedUpId) {
     return null;
 }
 
-export function usedUpNudge(toolId, chips = []) {
+export function usedUpNudge(toolId, chips = [], ctx = {}) {
     const chip = chips.find((c) => c.id === toolId && !c.powerUp);
     if (!chip || chip.state !== 'spent') return null;
-    const next = nextToolLine(chips, toolId);
-    if (!next) return null;
-    return `${chip.label || plainName(toolId)} is used up for today. ${next}`;
+    if (!nextToolLine(chips, toolId, ctx)) return null;
+    return spentToolLine(toolId, chips, ctx);
+}
+
+// Round 38 playtest fix: tapping a used-up tool in the tray showed the
+// engine's 'Daily limit for Sever Link reached.' while a line tap showed
+// 'Sever is used up for today. ...', so one moment drew two toasts saying
+// the same thing in different words. Every used-up message now comes from
+// here, word for word, so a repeat tap refreshes the one toast instead of
+// stacking a second. With nothing else ready it says when the tool is back.
+export function spentToolLine(toolId, chips = [], ctx = {}) {
+    const chip = chips.find((c) => c.id === toolId && !c.powerUp);
+    const label = (chip && chip.label) || plainName(toolId);
+    const next = nextToolLine(chips, toolId, ctx);
+    return `${label} is used up for today. ${next || 'It is back tomorrow.'}`;
 }
 
 // One chip per tool for the bottom tray.
