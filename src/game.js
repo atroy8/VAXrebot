@@ -28,7 +28,7 @@ import './ui/game-screen.css';
 import './ui/averted.css';
 import './ui/variants.css';
 import './ui/app-shell.css'; // last: safe areas and native touch feel (round 18)
-import { toolHint, dayBanner, rFellBelowOne, rTick, R_BELOW_ONE_TEXT, shouldAutoPause, toolChips, autoToolForTap, noToolTapHint, idleTapMode, usedUpNudge } from './ui/game-screen-model.js';
+import { toolHint, dayBanner, rFellBelowOne, rTick, R_BELOW_ONE_TEXT, shouldAutoPause, toolChips, autoToolForTap, noToolTapHint, idleTapMode, usedUpNudge, spentToolLine } from './ui/game-screen-model.js';
 import { renderCareBox, flyToCareBox } from './ui/care-box.js';
 import { mountShop, renderShop } from './ui/shop.js';
 import { buildOutbreak } from './sim/setup.js';
@@ -227,7 +227,15 @@ export class EpidemicSimulator {
                 return;
             }
             // Locked or spent tools explain themselves instead of doing nothing.
+            // Round 38: a used-up tool says the same line a red line tap
+            // would (spentToolLine), so the two never stack as two toasts.
             if (toolItem.classList.contains('disabled')) {
+                const chips = this.currentChips();
+                const chip = chips.find((c) => c.id === toolId);
+                if (chip && chip.state === 'spent') {
+                    showNotification(spentToolLine(toolId, chips, this.tapContext()), 'info');
+                    return;
+                }
                 const { reason } = canUseTool(this.gameState, this.tools, toolId, this.difficulty);
                 if (reason) showNotification(reason.replace(/^[^A-Za-z]+/, ''), 'info');
                 return;
@@ -420,13 +428,19 @@ export class EpidemicSimulator {
         return toolChips(this.tools, this.difficulty, this.gameState.day, this.gameState.dailyUsage, getCharges());
     }
 
+    // What the used-up nudges need to know about the web (round 38).
+    tapContext() {
+        const nodes = (this.network && this.network.nodes) || [];
+        return { sickFree: nodes.filter((n) => !n.removed && n.state === 'infected').length };
+    }
+
     // No tool chosen yet: pick the one that fits the tap (round 27), or say
     // which tool would. Returns true when a tool is now selected.
     autoPickTool(kind, nodeState) {
         const chips = this.currentChips();
         const toolId = autoToolForTap(kind, nodeState, chips);
         if (!toolId) {
-            showNotification(noToolTapHint(kind, chips), 'info');
+            showNotification(noToolTapHint(kind, chips, { ...this.tapContext(), nodeState }), 'info');
             return false;
         }
         this.selectTool(toolId, { hint: false });
@@ -519,7 +533,7 @@ export class EpidemicSimulator {
         const chip = chips.find((c) => c.id === toolId);
         if (!chip || chip.state !== 'spent') return;
         this.selectTool(toolId); // deselect
-        const nudge = usedUpNudge(toolId, chips);
+        const nudge = usedUpNudge(toolId, chips, this.tapContext());
         if (nudge) showNotification(nudge, 'info');
     }
 
