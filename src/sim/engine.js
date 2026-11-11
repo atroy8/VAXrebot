@@ -124,8 +124,8 @@ export function resolveAftermath(state, network, recoveryTime, fatalityRate, rng
 
 // True when the outbreak can no longer grow: no infectious person (sick and
 // not isolated) shares a link with anyone who can still catch it (healthy).
-// Nothing the player does can change the outcome after this point, except
-// waiting for the sick to recover, so the game fast-forwards to the end.
+// The outbreak cannot grow after this point. The game fast-forwards to the
+// end once isolation can no longer help the sick either (careStillHelps).
 // People never become healthy again and links only ever disappear, so once
 // this is true it stays true for the rest of the run.
 // Sick and able to spread, now or once a Stay Home Pay break ends.
@@ -190,6 +190,36 @@ const NONE_HERE = { vaccinate: 'vaccines', quarantine: 'isolation wards', severL
 
 function plain(name) {
     return String(name).replace(/^[^A-Za-z]+/, '').toLowerCase();
+}
+
+// Round 39: once the spread is over, care can still save lives. Sick people
+// in an isolation ward get supportive care, which halves their death risk
+// (see fatality.js), so the game should not fast-forward past a Quarantine
+// the player could still use on them. Returns the plan for the next useful
+// isolation, or null when no move can help the sick any more:
+//   { day, sick } - the first day Quarantine can reach someone still sick,
+//   and how many untreated sick people it could still reach then.
+// Pure: reads state, tools, difficulty and the web; changes nothing.
+export function careStillHelps(state, network, tools, difficulty, recoveryTime) {
+    const tool = tools && tools.quarantine;
+    if (!tool) return null;
+    const limit = toolDailyLimit(tool, difficulty, 'quarantine');
+    if (limit <= 0) return null;
+    const firstDay = toolAvailableDay(tool, difficulty, 'quarantine');
+    const usedToday = (state.dailyUsage && state.dailyUsage.quarantine) || 0;
+    let day = Math.max(state.day, firstDay);
+    if (day === state.day && usedToday >= limit) day = state.day + 1;
+    const wait = day - state.day;
+    const rt = recoveryTime || 1;
+    const used = state.usedOnPeople;
+    let sick = 0;
+    for (const n of network.nodes) {
+        if (n.removed || n.state !== 'infected') continue;
+        if (tool.oncePerPerson && used && used.has && used.has(`quarantine-${n.id}`)) continue;
+        // Still ill (and so still at risk) on the day isolation can reach them.
+        if ((n.daysInfected || 0) + wait < rt) sick++;
+    }
+    return sick > 0 ? { day, sick } : null;
 }
 
 // Turn-advance gate for the real pause. nextDay() may run only when the game
