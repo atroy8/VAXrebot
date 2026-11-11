@@ -28,12 +28,12 @@ import './ui/game-screen.css';
 import './ui/averted.css';
 import './ui/variants.css';
 import './ui/app-shell.css'; // last: safe areas and native touch feel (round 18)
-import { toolHint, dayBanner, rFellBelowOne, rTick, R_BELOW_ONE_TEXT, shouldAutoPause, toolChips, autoToolForTap, noToolTapHint, idleTapMode, usedUpNudge, spentToolLine } from './ui/game-screen-model.js';
+import { toolHint, dayBanner, rFellBelowOne, rTick, R_BELOW_ONE_TEXT, shouldAutoPause, toolChips, autoToolForTap, noToolTapHint, idleTapMode, usedUpNudge, spentToolLine, careNudgeLine } from './ui/game-screen-model.js';
 import { renderCareBox, flyToCareBox } from './ui/care-box.js';
 import { mountShop, renderShop } from './ui/shop.js';
 import { buildOutbreak } from './sim/setup.js';
 import { initGameState } from './sim/state.js';
-import { checkGameOver as resolveGameOver, canUseTool, canAdvanceDay, spreadIsOver, resolveAftermath, LOSS_RESULTS } from './sim/engine.js';
+import { checkGameOver as resolveGameOver, canUseTool, canAdvanceDay, spreadIsOver, resolveAftermath, LOSS_RESULTS, careStillHelps } from './sim/engine.js';
 import { deathToast, resultsDeathLines } from './ui/deaths.js';
 import {
     applyNodeTool,
@@ -431,7 +431,9 @@ export class EpidemicSimulator {
     // What the used-up nudges need to know about the web (round 38).
     tapContext() {
         const nodes = (this.network && this.network.nodes) || [];
-        return { sickFree: nodes.filter((n) => !n.removed && n.state === 'infected').length };
+        // Round 39: spreadOver tells the hints not to send the player to
+        // vaccines or red lines once the outbreak cannot grow.
+        return { sickFree: nodes.filter((n) => !n.removed && n.state === 'infected').length, spreadOver: !!this.network && spreadIsOver(this.network) };
     }
 
     // No tool chosen yet: pick the one that fits the tap (round 27), or say
@@ -632,14 +634,26 @@ export class EpidemicSimulator {
     }
 
     // When no sick person is in contact with anyone who could still catch
-    // it, no move can change the outcome. Say so, then fast-forward the last
-    // days while the remaining patients recover (or not), and end the round.
+    // it and isolation can no longer help the sick (round 39), no move can
+    // change the outcome. Say so, then fast-forward the last days while the
+    // remaining patients recover (or not), and end the round.
     maybeWrapUp() {
         if (!this.gameState || this.gameState.gameOver || this.wrapUp) return;
         if (!spreadIsOver(this.network)) return;
         // Nobody sick at all: that is already a result.
         this.checkGameOver();
         if (this.gameState.gameOver) return;
+        // Round 39: isolation still halves the sick's death risk, so while
+        // Quarantine can reach someone sick, the player keeps the controls.
+        const care = careStillHelps(this.gameState, this.network, this.tools, this.difficulty, this.difficulty.recoveryTime);
+        if (care) {
+            if (!this.gameState.careNudgeShown) {
+                this.gameState.careNudgeShown = true;
+                showNotification(careNudgeLine(care, this.gameState.day), 'success');
+                this.audio.playStinger?.('milestone');
+            }
+            return;
+        }
         this.autoAdvance.cancel();
         if (this.selectedTool) this.selectTool(this.selectedTool); // deselect
         this.closeShop();
