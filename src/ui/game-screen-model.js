@@ -93,6 +93,9 @@ const NEXT_STEP = {
 function nextToolLine(chips, usedUpId, ctx = {}) {
     const ready = (id) => id !== usedUpId && chips.some((c) => c.id === id && !c.powerUp && c.state === 'ready');
     if (ctx.sickFree > 0 && ready('quarantine')) return NEXT_STEP.quarantine;
+    // Round 39: once the spread is over there are no red lines to cut and
+    // nobody left who needs a vaccine, so only isolation is worth a tap.
+    if (ctx.spreadOver) return null;
     for (const c of chips) {
         if (c.powerUp || c.id === usedUpId || c.state !== 'ready') continue;
         if (NEXT_STEP[c.id]) return NEXT_STEP[c.id];
@@ -320,4 +323,16 @@ export function shouldAutoPause({ hidden, screen, gameState, wrapUp = null } = {
 export const TITLE_LONG_AT = 18;
 export function titleClass(name) {
     return String(name || '').length > TITLE_LONG_AT ? 'is-long' : '';
+}
+
+// Round 39: the spread is over but some sick people can still be isolated,
+// where care halves their risk. care is careStillHelps() from the engine:
+// { day, sick }. One short line, no dashes.
+export function careNudgeLine(care, today) {
+    if (!care) return '';
+    const who = care.sick === 1 ? '1 sick person still needs' : `${care.sick} sick people still need`;
+    if (care.day > today) {
+        return `Spread stopped! Quarantine opens on day ${care.day}. Isolate the sick then: care halves their risk.`;
+    }
+    return `Spread stopped! ${who} care. Quarantine them: care halves their risk.`;
 }
