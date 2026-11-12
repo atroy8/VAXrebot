@@ -850,3 +850,19 @@ html .network-container.has-backdrop.is-3d {
 #next-level[hidden] {
     display: none;
 }
+
+/* Round 40: for a moment after the results or a briefing opens, taps are
+   swallowed (src/ui/tap-guard.js). The buttons rise in over that moment, so
+   the short wait reads as the buttons arriving, not as a dead screen. */
+#game-over-screen.tap-guarded .game-over-actions .btn,
+#briefing-screen.tap-guarded .briefing-actions .btn {
+    animation: tap-guard-settle 650ms ease-out both;
+}
+@keyframes tap-guard-settle {
+    0%, 35% { opacity: 0.35; transform: translateY(6px); }
+    100% { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+    #game-over-screen.tap-guarded .game-over-actions .btn,
+    #briefing-screen.tap-guarded .briefing-actions .btn { animation: none; }
+}
