@@ -53,6 +53,7 @@ import { lessonFor, debriefLine } from './config/lessons.js';
 import { snapshotNetwork, noResponseCases, avertedSummary } from './sim/counterfactual.js';
 import { renderAverted } from './ui/averted.js';
 import { resultsActions } from './ui/results-actions.js';
+import { guardScreenTaps } from './ui/tap-guard.js';
 import {
     renderHeader,
     renderTools,
@@ -177,6 +178,13 @@ export class EpidemicSimulator {
     }
 
     bindEvents() {
+        // Round 40: a tap already on its way when a screen opens (a late Next
+        // day tap as the level ends) must not press the button that appears
+        // under the thumb (src/ui/tap-guard.js).
+        this.screenGuards = {
+            'game-over': guardScreenTaps(document.getElementById('game-over-screen')),
+            briefing: guardScreenTaps(document.getElementById('briefing-screen')),
+        };
         document.getElementById('start-game-btn').addEventListener('click', () => this.showScreen('menu'));
 
         document.getElementById('level-grid').addEventListener('click', (e) => {
@@ -294,6 +302,7 @@ export class EpidemicSimulator {
         closeRCard();
         renderScreen(screenName);
         this.currentScreen = screenName;
+        this.screenGuards?.[screenName]?.arm();
 
         if (screenName === 'welcome') refreshGlobeHome(); // back on the candy planet
         if (screenName === 'menu') {
