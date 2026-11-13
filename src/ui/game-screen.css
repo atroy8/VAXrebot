@@ -492,7 +492,7 @@
 /* ---- Results tally (results-tally.js) ---- */
 .tally { margin: 10px 0 4px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .tally[hidden] { display: none; }
-.tally-bins { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.tally-bins { display: grid; grid-template-columns: repeat(var(--bins, 3), 1fr); gap: 8px; }
 .tally-bin {
     display: flex;
     flex-direction: column;
@@ -546,6 +546,9 @@
 @keyframes starPop { 0% { transform: scale(0.2) rotate(-40deg); } 100% { transform: scale(1) rotate(0); } }
 .tally-total { display: flex; justify-content: center; align-items: center; gap: 6px; font-size: 1.15rem; font-weight: 700; color: #0b7a5a; }
 .tally-total [data-total] { font-variant-numeric: tabular-nums; }
+/* Round 41: hidden until the funding count starts, then it pops in. */
+.tally-total[hidden] { display: none; }
+.tally-total.enter { animation: tallyLineIn 0.4s cubic-bezier(.3, 1.4, .5, 1) both; }
 .tally-coin { width: 20px; height: 20px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff6c2 0 18%, #ffd60a 45%, #e09b00 100%); box-shadow: 0 2px 0 #b07800; }
 .tally-prizes { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
 .tally-prize {
