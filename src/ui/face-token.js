@@ -15,6 +15,8 @@ export const FACE_LOOKS = {
     recovered: { color: '#2fc6e8', blink: 'happy' },
     healthy: { color: '#3cbf6a', blink: 'blink' },
     vaccinated: { color: '#8b5cf6', blink: 'happy' },
+    // Round 42: the Lost bin on the results. Never blinks.
+    dead: { color: '#9aa3ad', blink: 'idle' },
 };
 
 // i staggers the blink so a row of faces never blinks in unison.

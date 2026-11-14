@@ -12,16 +12,26 @@ const BIN_LOOKS = {
     // no longer reads as the sick people you isolated (those are Treated).
     isolated: { face: 'quarantined', label: 'Kept safe' },
     cured: { face: 'recovered', label: 'Cured' },
+    // Round 42: people who died, shown last and in grey, with no points.
+    // Treated 4 and Cured 3 left the fourth person unexplained; now the
+    // tally says what happened to them, gently, the way the HUD does.
+    lost: { face: 'dead', label: 'Lost', pts: 'remembered' },
 };
-const BIN_ORDER = ['treatment', 'isolated', 'cured'];
+const BIN_ORDER = ['treatment', 'isolated', 'cured', 'lost'];
 const MAX_FACES = 12;
 
 // Round 41: only the bins somebody landed in. On level 1 nobody healthy is
 // isolated, and a big empty 0 box between Treated and Cured looked like a
-// missed goal. Always keeps at least one bin so a win never shows nothing.
+// missed goal. Always keeps a care bin so a win never shows only a loss.
 export function shownBins(bins = {}) {
-    const ids = BIN_ORDER.filter((id) => (bins[id] || 0) > 0);
-    return ids.length ? ids : ['cured'];
+    const ids = BIN_ORDER.filter((id) => ((bins || {})[id] || 0) > 0);
+    return ids.some((id) => id !== 'lost') ? ids : ['cured', ...ids];
+}
+
+// Round 42: the bins that count toward funding make a tick as they fill;
+// the Lost bin fills slowly and quietly.
+export function binTicks(id) {
+    return id !== 'lost';
 }
 
 // The bins row, empty, ready to fill. Pure so it can be tested in node.
@@ -35,7 +45,7 @@ export function tallyBinsHtml(bins, bonus) {
                     <div class="tally-faces" data-faces></div>
                     <div class="tally-count" data-count>0</div>
                     <div class="tally-label">${BIN_LOOKS[id].label}</div>
-                    <div class="tally-pts" data-pts>${lineOf(id) ? `+${lineOf(id).each} each` : '&nbsp;'}</div>
+                    <div class="tally-pts" data-pts>${lineOf(id) ? `+${lineOf(id).each} each` : BIN_LOOKS[id].pts || '&nbsp;'}</div>
                 </div>`
         )
         .join('')}
@@ -126,7 +136,7 @@ export function playResultsTally(el, { bins, bonus, stars, baseFunding, chests =
             bin.classList.add('active');
             const faces = bin.querySelector('[data-faces]');
             const countEl = bin.querySelector('[data-count]');
-            const step = Math.max(45, Math.min(140, 900 / Math.max(1, n)));
+            const step = binTicks(id) ? Math.max(45, Math.min(140, 900 / Math.max(1, n))) : 320;
             for (let i = 0; i < n; i++) {
                 if (skipped) return;
                 if (i < MAX_FACES - (n > MAX_FACES ? 1 : 0)) {
@@ -140,7 +150,7 @@ export function playResultsTally(el, { bins, bonus, stars, baseFunding, chests =
                     more.textContent = `+${i - (MAX_FACES - 2)}`;
                 }
                 countEl.textContent = String(i + 1);
-                sound('tick', i);
+                if (binTicks(id)) sound('tick', i);
                 await sleep(step);
             }
             if (n === 0) bin.classList.add('empty');
