@@ -30,15 +30,26 @@
     padding: 10px 12px;
 }
 .game-topbar { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.game-info { display: flex; align-items: baseline; gap: 8px; min-width: 0; flex: 1; }
+.game-info { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; }
+/* Round 36: most level names ran past 20 letters and were cut off with an
+   ellipsis at 390 px ("Tidewater Healing Ha..."). The name now wraps onto
+   at most two balanced lines inside the 44 px icon row, and long names
+   (over TITLE_LONG_AT letters, src/ui/panels.js) use a slightly smaller size. */
 .game-info h4 {
     margin: 0;
     font-size: 1.05rem;
-    white-space: nowrap;
+    line-height: 1.1;
+    white-space: normal;
+    text-wrap: balance;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
     overflow: hidden;
-    text-overflow: ellipsis;
     min-width: 0;
 }
+.game-info h4.is-long { font-size: 0.94rem; }
+#current-difficulty-badge { flex: none; }
 .game-icons { display: flex; gap: 6px; flex: none; }
 .icon-btn {
     width: 44px;
@@ -481,7 +492,7 @@
 /* ---- Results tally (results-tally.js) ---- */
 .tally { margin: 10px 0 4px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .tally[hidden] { display: none; }
-.tally-bins { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.tally-bins { display: grid; grid-template-columns: repeat(var(--bins, 3), 1fr); gap: 8px; }
 .tally-bin {
     display: flex;
     flex-direction: column;
@@ -496,6 +507,10 @@
 .tally-bin--treatment { --bin-bg: #fff1e6; --bin-edge: #ffc9a3; --bin-ink: #c2410c; }
 .tally-bin--isolated { --bin-bg: #fff7d6; --bin-edge: #ffe08a; --bin-ink: #a16207; }
 .tally-bin--cured { --bin-bg: #e6fbef; --bin-edge: #a7ecc5; --bin-ink: #15803d; }
+/* Round 42: the people who died, quiet grey, no points. */
+.tally-bin--lost { --bin-bg: #f1f2f4; --bin-edge: #d3d7dc; --bin-ink: #5b6470; }
+.tally-bin--lost .face-token { filter: grayscale(1); opacity: 0.85; }
+.tally-bin--lost .tally-pts { font-style: italic; }
 .tally-bin.active { transform: scale(1.06); box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12); }
 .tally-faces {
     --face: 22px;
@@ -535,6 +550,9 @@
 @keyframes starPop { 0% { transform: scale(0.2) rotate(-40deg); } 100% { transform: scale(1) rotate(0); } }
 .tally-total { display: flex; justify-content: center; align-items: center; gap: 6px; font-size: 1.15rem; font-weight: 700; color: #0b7a5a; }
 .tally-total [data-total] { font-variant-numeric: tabular-nums; }
+/* Round 41: hidden until the funding count starts, then it pops in. */
+.tally-total[hidden] { display: none; }
+.tally-total.enter { animation: tallyLineIn 0.4s cubic-bezier(.3, 1.4, .5, 1) both; }
 .tally-coin { width: 20px; height: 20px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff6c2 0 18%, #ffd60a 45%, #e09b00 100%); box-shadow: 0 2px 0 #b07800; }
 .tally-prizes { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
 .tally-prize {
@@ -577,9 +595,11 @@
 }
 .tally-lines--award { margin: 0 0 4px; }
 .tally-lines--award .tally-line { background: #fff8db; }
-/* With the tally up, the win line is redundant, and the buttons stay in reach. */
+/* With the tally up, the win line is redundant. The buttons stay in reach on
+   every results screen (round 37: a loss has no tally, and Try again sat
+   below the fold on a 390x844 phone, so you had to scroll to retry). */
 #game-over-screen.has-tally .game-over-message { display: none; }
-#game-over-screen.has-tally .game-over-actions {
+#game-over-screen .game-over-actions {
     position: sticky;
     bottom: 0;
     z-index: 2;
@@ -587,6 +607,20 @@
     margin-right: -8px;
     padding: 10px 8px calc(10px + env(safe-area-inset-bottom, 0px));
     background: linear-gradient(180deg, rgba(255, 255, 255, 0) 0, #fff 14px);
+}
+/* Round 30: the screen's bottom padding (16 px plus the home bar inset)
+   left a strip under the sticky buttons where results text scrolled past,
+   cut in half. A paper skirt below the buttons closes that strip. */
+#game-over-screen .game-over-actions::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 100%;
+    height: calc(var(--space-16) + env(safe-area-inset-bottom, 0px) + 2px);
+    background: var(--results-paper, #fff);
+    pointer-events: none;
+    z-index: -1; /* under the button shadows */
 }
 .tally-skip { margin-top: 4px; font-size: 0.72rem; color: #9ca3af; text-align: center; }
 .tally.done .tally-skip { visibility: hidden; }
@@ -680,6 +714,19 @@ html .network-container.is-3d {
 @keyframes r-celebrate {
     0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(142, 230, 176, 0); }
     40% { transform: scale(1.12); box-shadow: 0 0 0 6px rgba(142, 230, 176, 0.35); }
+}
+/* Round 35: R moves the moment you act. A quick green dip when it falls,
+   a red bump when it rises, so the player sees their cut land on R. */
+@keyframes r-tick-down {
+    0%, 100% { transform: none; }
+    35% { transform: translateY(3px) scale(0.94); box-shadow: 0 0 0 5px rgba(142, 230, 176, 0.4); }
+}
+@keyframes r-tick-up {
+    0%, 100% { transform: none; }
+    35% { transform: translateY(-3px) scale(1.06); box-shadow: 0 0 0 5px rgba(240, 110, 110, 0.35); }
+}
+@media (prefers-reduced-motion: reduce) {
+    html .stat--r.r-tick-down, html .stat--r.r-tick-up { animation: none; }
 }
 @keyframes r-card-in {
     from { opacity: 0; transform: translateY(-8px) scale(0.97); }
@@ -784,3 +831,45 @@ html .network-container.has-backdrop.is-3d {
 }
 /* Paused: the scene holds still with the game. */
 #game-screen.is-paused .web-backdrop > i { animation-play-state: paused; }
+
+/* Round 34: a win leads with Next level. Replay and Map share a row above
+   it, and Next level spans the full width at the bottom, nearest the thumb.
+   A loss leads with Try again, so it moves below Back to map. */
+.game-over-actions.has-next {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+.game-over-actions.has-next #next-level {
+    grid-column: 1 / -1;
+    min-height: 52px;
+}
+.game-over-actions.lead-replay #play-again {
+    order: 2;
+}
+/* Round 37: on a loss the two buttons share one row, Map on the left and
+   Try again on the right, so the sticky footer stays short. */
+.game-over-actions.lead-replay {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+#next-level[hidden] {
+    display: none;
+}
+
+/* Round 40: for a moment after the results or a briefing opens, taps are
+   swallowed (src/ui/tap-guard.js). The buttons rise in over that moment, so
+   the short wait reads as the buttons arriving, not as a dead screen. */
+#game-over-screen.tap-guarded .game-over-actions .btn,
+#briefing-screen.tap-guarded .briefing-actions .btn {
+    animation: tap-guard-settle 650ms ease-out both;
+}
+@keyframes tap-guard-settle {
+    0%, 35% { opacity: 0.35; transform: translateY(6px); }
+    100% { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+    #game-over-screen.tap-guarded .game-over-actions .btn,
+    #briefing-screen.tap-guarded .briefing-actions .btn { animation: none; }
+}

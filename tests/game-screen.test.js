@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { tools } from '../src/config/tools.js';
 import { difficulties } from '../src/config/difficulties.js';
-import { plainName, toolHint, toolChips, dayBanner, fitCamera, lossReason } from '../src/ui/game-screen-model.js';
+import { plainName, toolHint, toolChips, dayBanner, fitCamera, lossReason, HINT_MAX_CHARS } from '../src/ui/game-screen-model.js';
 
 const read = (p) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
 const EMOJI = /\p{Extended_Pictographic}/u;
@@ -20,7 +20,8 @@ describe('game screen model (item 7)', () => {
         for (const id of ['vaccinate', 'quarantine', 'severLink']) {
             const h = toolHint(id, tools);
             expect(h.length).toBeGreaterThan(10);
-            expect(h.length).toBeLessThan(90);
+            // Round 33: one line on a 360 px phone, so it fits the clear strip.
+            expect(h.length).toBeLessThanOrEqual(HINT_MAX_CHARS);
             expect(h).not.toMatch(EMOJI);
             expect(h).not.toContain('\u2014');
         }
@@ -84,6 +85,39 @@ describe('game screen model (item 7)', () => {
         }
         // No reserve: the old, centred fit.
         expect(fitCamera(pts, { fovDeg: 48, aspect, pad: 1.2 }).cy).toBeCloseTo((Math.min(...pts.map((p) => p.y)) + Math.max(...pts.map((p) => p.y))) / 2, 6);
+    });
+
+    it('keeps people out of the tool hint strip at the bottom too (round 33)', () => {
+        const pts = [];
+        for (let i = 0; i < 25; i++) pts.push({ x: Math.cos(i * 1.7) * 8, y: Math.sin(i * 2.3) * 12 });
+        const aspect = 304 / 515;
+        const top = 54 / 515;
+        const bottom = 48 / 515;
+        const { cx, cy, distance } = fitCamera(pts, { fovDeg: 48, aspect, pad: 1.2, topReserve: top, bottomReserve: bottom });
+        const t = Math.tan((48 * Math.PI) / 360);
+        let lowest = Infinity;
+        let highest = -Infinity;
+        for (const p of pts) {
+            const sy = (p.y - cy) / (distance * t);
+            lowest = Math.min(lowest, sy);
+            highest = Math.max(highest, sy);
+            expect(sy).toBeLessThanOrEqual(1 - 2 * top + 1e-9);
+            expect(sy).toBeGreaterThanOrEqual(-1 + 2 * bottom - 1e-9);
+            expect(Math.abs(p.x - cx) / (distance * t * aspect)).toBeLessThanOrEqual(1);
+        }
+        // The web sits centred between the two strips (same gap above and below).
+        expect(1 - 2 * top - highest).toBeCloseTo(lowest - (-1 + 2 * bottom), 6);
+        // The bottom reserve is capped so a tiny view never collapses.
+        const capped = fitCamera(pts, { fovDeg: 48, aspect, pad: 1.2, bottomReserve: 5 });
+        expect(Number.isFinite(capped.distance)).toBe(true);
+        expect(capped.distance).toBeGreaterThan(0);
+    });
+
+    it('wires the bottom reserve into the flat web fit (round 33)', async () => {
+        const fs = await import('node:fs');
+        const src = fs.readFileSync(new URL('../src/ui/network-view-3d.js', import.meta.url), 'utf8');
+        expect(src).toMatch(/bottomReserve: this\.bottomReserve\(\)/);
+        expect(src).toMatch(/BOTTOM_HINT_PX = \d+/);
     });
 
     it('explains which rule ended a lost level', () => {

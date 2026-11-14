@@ -8,10 +8,49 @@ import { starMeterHtml } from './star-meter.js';
 
 const BIN_LOOKS = {
     treatment: { face: 'infected', label: 'Treated' },
-    isolated: { face: 'quarantined', label: 'Isolated' },
+    // Round 41: "Kept safe", the same words as the bonus line, so the bin
+    // no longer reads as the sick people you isolated (those are Treated).
+    isolated: { face: 'quarantined', label: 'Kept safe' },
     cured: { face: 'recovered', label: 'Cured' },
+    // Round 42: people who died, shown last and in grey, with no points.
+    // Treated 4 and Cured 3 left the fourth person unexplained; now the
+    // tally says what happened to them, gently, the way the HUD does.
+    lost: { face: 'dead', label: 'Lost', pts: 'remembered' },
 };
+const BIN_ORDER = ['treatment', 'isolated', 'cured', 'lost'];
 const MAX_FACES = 12;
+
+// Round 41: only the bins somebody landed in. On level 1 nobody healthy is
+// isolated, and a big empty 0 box between Treated and Cured looked like a
+// missed goal. Always keeps a care bin so a win never shows only a loss.
+export function shownBins(bins = {}) {
+    const ids = BIN_ORDER.filter((id) => ((bins || {})[id] || 0) > 0);
+    return ids.some((id) => id !== 'lost') ? ids : ['cured', ...ids];
+}
+
+// Round 42: the bins that count toward funding make a tick as they fill;
+// the Lost bin fills slowly and quietly.
+export function binTicks(id) {
+    return id !== 'lost';
+}
+
+// The bins row, empty, ready to fill. Pure so it can be tested in node.
+export function tallyBinsHtml(bins, bonus) {
+    const ids = shownBins(bins);
+    const lineOf = (id) => (bonus?.lines || []).find((l) => l.id === id);
+    return `<div class="tally-bins" style="--bins:${ids.length}">${ids
+        .map(
+            (id) => `
+                <div class="tally-bin tally-bin--${id}" data-bin="${id}">
+                    <div class="tally-faces" data-faces></div>
+                    <div class="tally-count" data-count>0</div>
+                    <div class="tally-label">${BIN_LOOKS[id].label}</div>
+                    <div class="tally-pts" data-pts>${lineOf(id) ? `+${lineOf(id).each} each` : BIN_LOOKS[id].pts || '&nbsp;'}</div>
+                </div>`
+        )
+        .join('')}
+        </div>`;
+}
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // A prize box this win unlocked. It is a real button: tapping it leaves the
@@ -34,31 +73,18 @@ export function prizeCardHtml(c) {
 export function playResultsTally(el, { bins, bonus, stars, baseFunding, chests = [], meter = null, sound = () => {} }) {
     if (!el) return { skip() {} };
     const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    const lineOf = (id) => bonus.lines.find((l) => l.id === id);
     const extras = bonus.lines.filter((l) => !BIN_LOOKS[l.id]);
     const totalFunding = baseFunding + bonus.total;
 
     el.hidden = false;
     el.classList.remove('done');
     el.innerHTML = `
-        <div class="tally-bins">
-            ${['treatment', 'isolated', 'cured']
-                .map(
-                    (id) => `
-                <div class="tally-bin tally-bin--${id}" data-bin="${id}">
-                    <div class="tally-faces" data-faces></div>
-                    <div class="tally-count" data-count>0</div>
-                    <div class="tally-label">${BIN_LOOKS[id].label}</div>
-                    <div class="tally-pts" data-pts>${lineOf(id) ? `+${lineOf(id).each} each` : '&nbsp;'}</div>
-                </div>`
-                )
-                .join('')}
-        </div>
+        ${tallyBinsHtml(bins, bonus)}
         <ul class="tally-lines" data-lines></ul>
         <div class="tally-stars" data-stars aria-label="${stars} of 3 stars">${'<span class="tally-star">★</span>'.repeat(3)}</div>
         <div class="tally-meter" data-meter></div>
         <ul class="tally-lines tally-lines--award" data-award></ul>
-        <div class="tally-total"><span class="tally-coin" aria-hidden="true"></span><span data-total>+0</span> funding</div>
+        <div class="tally-total" data-total-row hidden><span class="tally-coin" aria-hidden="true"></span><span data-total>+0</span> funding</div>
         <div class="tally-prizes" data-prizes></div>
         <div class="tally-skip" data-skip>Tap to skip</div>`;
 
@@ -90,12 +116,13 @@ export function playResultsTally(el, { bins, bonus, stars, baseFunding, chests =
     const awardLine = { id: 'award', label: `${stars}-star mission reward`, amount: baseFunding };
 
     function finish() {
-        for (const id of Object.keys(BIN_LOOKS)) fillBin(id, bins[id] || 0, false);
+        for (const id of shownBins(bins)) fillBin(id, bins[id] || 0, false);
         q('[data-lines]').innerHTML = bonus.lines.map(lineHtml).join('');
         q('[data-stars]').querySelectorAll('.tally-star').forEach((s, i) => s.classList.toggle('on', i < stars));
         q('[data-meter]').innerHTML = starMeterHtml(meter);
         q('[data-award]').innerHTML = baseFunding > 0 ? lineHtml(awardLine) : '';
         q('[data-total]').textContent = `+${totalFunding}`;
+        q('[data-total-row]').hidden = false;
         q('[data-prizes]').innerHTML = chests.map(prizeCardHtml).join('');
         el.classList.add('done');
     }
@@ -103,13 +130,13 @@ export function playResultsTally(el, { bins, bonus, stars, baseFunding, chests =
     async function run() {
         await sleep(350);
         // 1. The bins fill face by face and count up.
-        for (const id of ['treatment', 'isolated', 'cured']) {
+        for (const id of shownBins(bins)) {
             const n = bins[id] || 0;
             const bin = q(`[data-bin="${id}"]`);
             bin.classList.add('active');
             const faces = bin.querySelector('[data-faces]');
             const countEl = bin.querySelector('[data-count]');
-            const step = Math.max(45, Math.min(140, 900 / Math.max(1, n)));
+            const step = binTicks(id) ? Math.max(45, Math.min(140, 900 / Math.max(1, n))) : 320;
             for (let i = 0; i < n; i++) {
                 if (skipped) return;
                 if (i < MAX_FACES - (n > MAX_FACES ? 1 : 0)) {
@@ -123,7 +150,7 @@ export function playResultsTally(el, { bins, bonus, stars, baseFunding, chests =
                     more.textContent = `+${i - (MAX_FACES - 2)}`;
                 }
                 countEl.textContent = String(i + 1);
-                sound('tick', i);
+                if (binTicks(id)) sound('tick', i);
                 await sleep(step);
             }
             if (n === 0) bin.classList.add('empty');
@@ -159,8 +186,11 @@ export function playResultsTally(el, { bins, bonus, stars, baseFunding, chests =
             sound('line');
             await sleep(330);
         }
-        // 4. Funding counts up.
+        // 4. Funding counts up. Round 41: the row only appears now, so it
+        // never sits at +0 funding while the bins are still filling.
         const totalEl = q('[data-total]');
+        q('[data-total-row]').hidden = false;
+        q('[data-total-row]').classList.add('enter');
         const frames = 24;
         for (let f = 1; f <= frames; f++) {
             if (skipped) return;

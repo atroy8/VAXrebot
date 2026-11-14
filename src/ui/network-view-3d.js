@@ -77,6 +77,8 @@ import {
     layoutForPersonScale,
     MIN_PERSON_PX,
     MAX_PERSON_SCALE,
+    showBodySphere,
+    faceLiftDirection,
 } from './web3d.js';
 
 // 3D web mode (round 15): deep space behind the web, and fog so far people
@@ -135,6 +137,9 @@ const FACE_SCALE = 1.15;
 const FIT_PAD = 1.2;
 // Height of the button row at the top of the web (Key, 2D/3D), in CSS px.
 export const TOP_BUTTONS_PX = 54;
+// Strip kept clear at the bottom of the web for the one-line tool hint
+// (10 px from the edge, about 34 px tall), in CSS px. Round 33.
+export const BOTTOM_HINT_PX = 48;
 
 // Link ribbon widths and colour keys come from link-style.js.
 const LINK_COLORS = {
@@ -162,6 +167,7 @@ const WARMUP_STEPS = 400;
 const _tmp = new THREE.Vector3();
 const _tmp2 = new THREE.Vector3();
 const _proj = new THREE.Vector3();
+const _quat = new THREE.Quaternion();
 
 const sphereGeometry = new THREE.SphereGeometry(NODE_RADIUS, 14, 10);
 const sphereMaterials = {};
@@ -675,9 +681,10 @@ export class NetworkView {
             this.autoFit = true;
             this.physicsSettled = true;
         } else if (linkKey !== this.lastLinkKey) {
-            // A link was severed: let the network relax gently. Vaccinate
-            // changes no links, so the people you are tapping stay put.
-            this.alpha = Math.max(this.alpha || 0, LAYOUT.reheatAlpha);
+            // A link was severed: let the network relax very gently, so the
+            // next line you aim at stays under your thumb (round 32).
+            // Vaccinate changes no links, so the people you tap stay put.
+            this.alpha = Math.max(this.alpha || 0, this.is3d ? LAYOUT_3D.severAlpha : LAYOUT.severAlpha);
             this.physicsSettled = false;
         } else if (boxChanged) {
             // Someone left for the care box: close the gap very gently.
@@ -828,7 +835,13 @@ export class NetworkView {
     fitTarget() {
         const pts = [];
         for (const o of this.nodeObjs.values()) if (!o.boxed) pts.push(o.pos);
-        return fitCamera(pts, { fovDeg: this.camera.fov, aspect: this.camera.aspect, pad: FIT_PAD + 0.6 * (this.personScale - 1), topReserve: this.topReserve() });
+        return fitCamera(pts, { fovDeg: this.camera.fov, aspect: this.camera.aspect, pad: FIT_PAD + 0.6 * (this.personScale - 1), topReserve: this.topReserve(), bottomReserve: this.bottomReserve() });
+    }
+
+    // Share of the view's height the tool hint covers at the bottom.
+    bottomReserve() {
+        const h = this.container?.clientHeight || 0;
+        return h > 0 ? Math.min(0.15, BOTTOM_HINT_PX / h) : 0;
     }
 
     // Share of the view's height the Key and 2D/3D buttons cover at the top
@@ -1096,9 +1109,8 @@ export class NetworkView {
             if (this.alpha === 0 && maxSpeed < 0.002) this.physicsSettled = true;
         }
 
-        // Camera-facing direction, reused to float each face sprite just off
-        // the sphere surface so faces stay readable and occlude correctly.
-        _tmp2.set(0, 0, 1); // in 2D the camera always looks straight down
+        // How far each face sprite floats off the sphere surface toward the
+        // camera, so faces stay readable and occlude correctly.
         const faceOffset = NODE_RADIUS + 0.08;
         if (this.is3d) {
             // Slow drift so the depth reads, paused while a tool is chosen
@@ -1120,6 +1132,10 @@ export class NetworkView {
         for (const obj of this.nodeObjs.values()) {
             obj.group.position.copy(obj.pos);
             obj.group.scale.setScalar(this.personScale);
+            // 2D: no body sphere behind the face, so no crescent peeks out
+            // (round 37, see showBodySphere in web3d.js).
+            const body = showBodySphere(this.is3d);
+            if (obj.sphere.visible !== body) obj.sphere.visible = body;
             // In 3D each person (ring, halo, badge) turns to face the camera.
             if (this.is3d) obj.group.quaternion.copy(this.camera.quaternion);
             else obj.group.quaternion.identity();
@@ -1140,7 +1156,12 @@ export class NetworkView {
                 scale = FACE_SCALE * (1 + 0.3 * Math.sin(Math.PI * Math.min(1, Math.max(0, p))));
             }
             obj.sprite.scale.set(scale, scale, 1);
-            obj.sprite.position.copy(_tmp2).multiplyScalar(faceOffset);
+            // Lift the face toward the camera along the person's own line of
+            // sight, so it projects dead centre on the body (round 37).
+            // The group may be turned to face the camera, so undo that turn.
+            const lift = faceLiftDirection(obj.pos, this.camera.position);
+            _quat.copy(obj.group.quaternion).invert();
+            obj.sprite.position.set(lift.x, lift.y, lift.z).applyQuaternion(_quat).multiplyScalar(faceOffset);
         }
 
         // Infected nodes pulse so the threats stand out at a glance.
@@ -1305,11 +1326,13 @@ export class NetworkView {
         // 4. The two nodes recoil apart, and the screen ticks.
         const away = _tmp2.subVectors(b.pos, a.pos);
         if (!this.is3d) away.setZ(0);
-        away.normalize().multiplyScalar(0.55);
+        // Round 32: a small recoil and a gentle reheat, so the rest of the
+        // web stays where the player is aiming next.
+        away.normalize().multiplyScalar(LAYOUT.severRecoil);
         b.vel.add(away);
         a.vel.sub(away);
         this.physicsSettled = false;
-        this.alpha = Math.max(this.alpha || 0, LAYOUT.reheatAlpha);
+        this.alpha = Math.max(this.alpha || 0, this.is3d ? LAYOUT_3D.severAlpha : LAYOUT.severAlpha);
         this.shakeUntil = start + 140;
         this.lastTouch = start;
     }

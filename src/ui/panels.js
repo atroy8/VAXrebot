@@ -3,7 +3,7 @@
 // No game logic here; callers pass plain data.
 import { formatR, rTone, rExplainer, rScalePos } from './game-screen-model.js';
 import { spriteFor } from '../sprites.js';
-import { toolChips, lossReason } from './game-screen-model.js';
+import { toolChips, lossReason, titleClass } from './game-screen-model.js';
 import { threatPipsHtml } from './briefing.js';
 
 // Small inline icons for the tool tray (no emoji on the game screen).
@@ -22,7 +22,10 @@ const ICONS = {
 const TOOL_COLORS = { vaccinate: '#7c3aed', quarantine: '#f97316', severLink: '#0ea5e9' };
 
 export function renderHeader({ scenarioName, difficultyName, difficultyId, threatPips = null, day, infected, protected: protectedCount, population, paused = false, cases = null, caseCap = Infinity, r = null, actionsLeft = null, deaths = 0 }) {
-    document.getElementById('game-scenario-name').textContent = scenarioName;
+    const title = document.getElementById('game-scenario-name');
+    title.textContent = scenarioName;
+    title.className = titleClass(scenarioName);
+    title.title = scenarioName;
     const badge =
         threatPips != null
             ? `<span class="threat-badge" aria-label="Threat ${threatPips} of 5">${threatPipsHtml(threatPips)}</span>`
@@ -99,9 +102,36 @@ export function showToolHint(text) {
     if (!el) return;
     el.textContent = text || '';
     el.hidden = !text;
+    // Round 29: the newest message wins the bottom of the web. Picking a
+    // tool means the player has moved on, so toasts still showing fade out
+    // instead of sitting on top of the hint.
+    if (text) dismissToasts();
     // The hint teaches once, then gets out of the way of the network.
     clearTimeout(showToolHint.timer);
     if (text) showToolHint.timer = setTimeout(() => { el.hidden = true; }, 4500);
+}
+
+// Round 29: a toast and the tool hint share the bottom of the web on phones,
+// so whichever came second covered the other and left half a sentence
+// showing behind it. A toast now clears the hint, and a hint clears toasts.
+export function hideToolHint() {
+    const el = document.getElementById('tool-hint');
+    if (!el) return;
+    clearTimeout(showToolHint.timer);
+    el.hidden = true;
+}
+
+// Fade out every toast still on screen (see showToolHint).
+export function dismissToasts() {
+    const container = document.getElementById('notification-container');
+    if (!container) return;
+    for (const n of [...container.children]) {
+        if (n.dataset.leaving) continue;
+        clearTimeout(n._timer);
+        n.dataset.leaving = '1';
+        n.style.animation = 'fadeOutRight 0.25s forwards';
+        setTimeout(() => n.remove(), 250);
+    }
 }
 
 // Day banner (replaces the old text log): one line, fades on its own.
@@ -137,17 +167,36 @@ export function addLogEntry(day, message, important = false) {
 
 // Toasts: plain text (emoji stripped), an identical toast already on screen
 // is refreshed instead of stacked, and at most two show at once.
+const TAP_TYPES = ['notification info', 'notification error'];
+
 export function showNotification(message, type = 'info') {
     const container = document.getElementById('notification-container');
     if (!container) return;
     const text = String(message).replace(/[\p{Extended_Pictographic}\ufe0f\u200d]\s*/gu, '').trim();
+    hideToolHint();
+    // Round 38: tap feedback (info and error) is about the tap just made, so
+    // a new one replaces the last instead of stacking two lines over the web.
+    // Good news (success) stays up beside it.
+    if (type === 'info' || type === 'error') {
+        for (const n of [...container.children]) {
+            if (n.dataset.leaving || n.textContent === text || !TAP_TYPES.some((t) => n.className.includes(t))) continue;
+            clearTimeout(n._timer);
+            n.dataset.leaving = '1';
+            n.style.animation = 'fadeOutRight 0.25s forwards';
+            setTimeout(() => n.remove(), 250);
+        }
+    }
     let notification = [...container.children].find((n) => n.textContent === text && !n.dataset.leaving);
     if (!notification) {
         notification = document.createElement('div');
         notification.className = `notification ${type}`;
         notification.textContent = text;
         container.appendChild(notification);
-        while (container.children.length > 2) container.firstChild.remove();
+        // Keep at most two on screen; toasts already fading go first.
+        while (container.children.length > 2) {
+            const fading = [...container.children].find((n) => n.dataset.leaving);
+            (fading || container.firstChild).remove();
+        }
     }
     clearTimeout(notification._timer);
     notification._timer = setTimeout(() => {

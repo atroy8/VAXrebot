@@ -104,6 +104,34 @@ export function effectiveR(newInfections, infectiousBefore, infectiousDays) {
     return (newInfections / infectiousBefore) * infectiousDays;
 }
 
+// Round 35: R right now, read off the web as it stands. For each person who
+// can spread (sick and not isolated), add up the chance they infect each
+// healthy contact before they recover: 1 - (1 - rate)^daysLeft per link.
+// R is the average of that over everyone who can spread, so it is the
+// expected number of new cases per case if nothing changes, which is what
+// health teams mean by R. It moves the moment the player acts: cutting a
+// red link or isolating a sick person drops it at once. 0 when nobody can
+// spread. Pure: the game, the balance bots and the tests share it.
+export function liveR(network, transmissionRate, recoveryTime) {
+    const rate = Math.min(1, Math.max(0, transmissionRate || 0));
+    const byId = new Map(network.nodes.map((n) => [n.id, n]));
+    const spreaders = network.nodes.filter((n) => n.state === 'infected');
+    if (!spreaders.length) return 0;
+    const reach = new Map(spreaders.map((n) => [n.id, 0]));
+    const days = (n) => Math.max(1, (recoveryTime || 1) - Math.max(0, n.daysInfected || 0));
+    const chance = (n) => 1 - Math.pow(1 - rate, days(n));
+    for (const l of network.links) {
+        const a = byId.get(nodeId(l.source));
+        const b = byId.get(nodeId(l.target));
+        if (!a || !b) continue;
+        if (reach.has(a.id) && b.state === 'healthy') reach.set(a.id, reach.get(a.id) + chance(a));
+        if (reach.has(b.id) && a.state === 'healthy') reach.set(b.id, reach.get(b.id) + chance(b));
+    }
+    let sum = 0;
+    for (const v of reach.values()) sum += v;
+    return sum / spreaders.length;
+}
+
 // Live links between a node and its neighbors (helpers for bots and UI).
 export function neighbors(network, id) {
     const out = [];

@@ -171,7 +171,8 @@ html .threat-pip.on {
     box-shadow: 0 2px 0 var(--kin-700), inset 0 -3px 0 rgba(0, 0, 0, 0.12);
 }
 html .final-stat { background: var(--washi); }
-html #game-over-screen.has-tally .game-over-actions { background: linear-gradient(180deg, rgba(255, 253, 247, 0) 0, #fffdf7 14px); }
+html #game-over-screen .game-over-actions { background: linear-gradient(180deg, rgba(255, 253, 247, 0) 0, #fffdf7 14px); }
+html #game-over-screen { --results-paper: #fffdf7; }
 
 /* ---- In-level dashboard ---- */
 html .game-header {
@@ -237,6 +238,7 @@ html .care-bin--isolated,
 html .tally-bin--isolated { --bin-bg: var(--kin-100); --bin-edge: var(--kin-300); --bin-ink: var(--kin-700); }
 html .care-bin--cured,
 html .tally-bin--cured { --bin-bg: var(--ai-100); --bin-edge: var(--ai-200); --bin-ink: var(--ai-600); }
+html .tally-bin--lost { --bin-bg: #f1f0ee; --bin-edge: #d6d3ce; --bin-ink: #5f5b56; }
 
 html .wrapup-card { background: var(--ai-100); border-color: var(--ai-400); color: var(--ai-800); box-shadow: 0 6px 18px rgba(11, 24, 56, 0.3); }
 
@@ -295,6 +297,8 @@ html .stat--r .r-info {
     vertical-align: 1px;
 }
 html .stat--r.r-celebrate { animation: r-celebrate 0.8s ease 2; border-color: #8ee6b0; }
+html .stat--r.r-tick-down { animation: r-tick-down 0.6s ease; }
+html .stat--r.r-tick-up { animation: r-tick-up 0.6s ease; }
 
 html .r-card {
     position: fixed;
