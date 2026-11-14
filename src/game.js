@@ -782,7 +782,7 @@ export class EpidemicSimulator {
         });
         if (showTally) {
             playResultsTally(document.getElementById('results-tally'), {
-                bins: { treatment: stats.treated || 0, isolated: stats.isolated || 0, cured: stats.totalRecovered || 0 },
+                bins: { treatment: stats.treated || 0, isolated: stats.isolated || 0, cured: stats.totalRecovered || 0, lost: stats.totalDead || 0 },
                 bonus,
                 stars,
                 baseFunding: fundingEarned,

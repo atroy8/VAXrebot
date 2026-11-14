@@ -238,6 +238,7 @@ html .care-bin--isolated,
 html .tally-bin--isolated { --bin-bg: var(--kin-100); --bin-edge: var(--kin-300); --bin-ink: var(--kin-700); }
 html .care-bin--cured,
 html .tally-bin--cured { --bin-bg: var(--ai-100); --bin-edge: var(--ai-200); --bin-ink: var(--ai-600); }
+html .tally-bin--lost { --bin-bg: #f1f0ee; --bin-edge: #d6d3ce; --bin-ink: #5f5b56; }
 
 html .wrapup-card { background: var(--ai-100); border-color: var(--ai-400); color: var(--ai-800); box-shadow: 0 6px 18px rgba(11, 24, 56, 0.3); }
 

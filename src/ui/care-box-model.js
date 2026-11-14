@@ -8,7 +8,7 @@
 
 export const BINS = [
     { id: 'treatment', label: 'Treating', sprite: 'infected', face: 'infected', tip: 'Sick people in isolation. They cannot spread it while they recover.' },
-    { id: 'isolated', label: 'Isolated', sprite: 'quarantined', face: 'quarantined', tip: 'Healthy people kept apart as a precaution.' },
+    { id: 'isolated', label: 'Kept safe', sprite: 'quarantined', face: 'quarantined', tip: 'Healthy people kept apart as a precaution.' },
     { id: 'cured', label: 'Cured', sprite: 'recovered', face: 'recovered', tip: 'Recovered and immune. They cannot catch it again.' },
 ];
 
