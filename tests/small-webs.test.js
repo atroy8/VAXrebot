@@ -1,5 +1,5 @@
-// Item 14 (round 20): smaller webs, 10 to 12 people on the first planet
-// growing to 21 to 25 on the last, clean small networks, and a carrier who
+// Item 14 (round 20): smaller webs, now (item 28, round 43) 8 to 16 people
+// on the first planet growing to 16 to 32 on the last, clean small networks, and a carrier who
 // knows about half the web.
 import { describe, it, expect } from 'vitest';
 import { LEVELS, REGIONS } from '../src/config/levels.js';
@@ -24,10 +24,11 @@ function connected(n, links) {
 }
 
 describe('web size per planet (item 14)', () => {
-    it('runs from 10 to 12 people on the first planet to 21 to 25 on the last', () => {
+    // Item 28 (round 43) widened the item 14 ranges for more variety.
+    it('runs from 8 to 16 people on the first planet to 16 to 32 on the last', () => {
         expect(PLANET_POPULATION).toHaveLength(REGIONS.length);
-        expect(PLANET_POPULATION[0]).toEqual([10, 12]);
-        expect(PLANET_POPULATION.at(-1)).toEqual([21, 25]);
+        expect(PLANET_POPULATION[0]).toEqual([8, 16]);
+        expect(PLANET_POPULATION.at(-1)).toEqual([16, 32]);
     });
 
     it('never shrinks from one planet to the next', () => {
@@ -43,9 +44,9 @@ describe('web size per planet (item 14)', () => {
             const { scenario } = levelRules(level);
             expect(scenario.populationRange[0], level.id).toBeGreaterThanOrEqual(lo);
             expect(scenario.populationRange[1], level.id).toBeLessThanOrEqual(hi);
-            if (level.variant?.boss) expect(scenario.populationRange, level.id).toEqual([hi, hi]);
+            if (level.variant?.boss) expect(scenario.populationRange, level.id).toEqual([hi - 2, hi]);
         }
-        expect(populationFor(7, { boss: true })).toEqual([25, 25]);
+        expect(populationFor(7, { boss: true })).toEqual([30, 32]);
     });
 
     it('the game and the bots build webs of that size', () => {
@@ -98,7 +99,7 @@ describe('clean small webs (item 14)', () => {
                 expect(new Set(network.links.map(pairKey)).size, level.id).toBe(network.links.length);
                 const adj = adjacency(network.nodes, network.links);
                 for (const node of network.nodes) expect(adj.get(node.id).size, level.id).toBeGreaterThan(0);
-                expect(n).toBeLessThanOrEqual(25);
+                expect(n).toBeLessThanOrEqual(32);
             }
         }
     });
