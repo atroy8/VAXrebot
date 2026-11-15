@@ -58,25 +58,61 @@ export const PLANET_DEFS = [
 
 export const LEVELS_PER_PLANET = 10;
 
-// Item 14 (Adam's Oct 21 notes): small webs you can read at a glance. Each
-// planet sets how many people its levels have, growing from 10 to 12 on the
-// first planet to 21 to 25 on the last. Ranges never shrink from one planet
-// to the next, and a planet's boss uses the top of its range.
+// Item 14 (Adam's Oct 21 notes): small webs you can read at a glance.
+// Item 28 (round 43, Adam's Nov 14 notes): more variety. Each planet now has
+// a wider range, about 8 to 16 people on the first planet up to 16 to 32 on
+// the last, and the kind of place decides where in that range a level sits:
+// a healing hall is small, a festival or an airport is big. Ranges never
+// shrink from one planet to the next, and a boss sits at the top.
 export const PLANET_POPULATION = [
-    [10, 12], // Mizuho
-    [11, 13], // Hanabi
-    [12, 15], // Tsukimi
-    [14, 17], // Kumoji
-    [15, 19], // Sango
-    [17, 21], // Yukimi
-    [19, 23], // Hotaru
-    [21, 25], // Kaminari
+    [8, 16], // Mizuho
+    [9, 18], // Hanabi
+    [10, 20], // Tsukimi
+    [11, 22], // Kumoji
+    [12, 24], // Sango
+    [13, 26], // Yukimi
+    [14, 28], // Hotaru
+    [16, 32], // Kaminari
 ];
+
+// Where in its planet's range each kind of place sits, as shares of the
+// range [from, to]. Bands overlap a little so neighbours can surprise you.
+export const SCENARIO_SIZE = {
+    care: [0, 0.4], // a healing hall: a few residents and carers
+    school: [0.15, 0.55], // one school
+    urban: [0.4, 0.8], // a neighbourhood
+    festival: [0.6, 1], // a crowd
+    global: [0.65, 1], // an airport hub
+};
+// Protecting an Envoy needs room for them to live a few contacts away from
+// the first cases, so Envoy levels sit mid range whatever the place.
+export const ENVOY_SIZE = [0.35, 0.75];
+// A boss plays at the very top of its planet's range, with a little spread.
+export const BOSS_SPREAD = 2;
 
 // The people range one level plays with: [lo, hi], both inclusive.
 export function populationFor(planetIndex, slot = {}) {
     const [lo, hi] = PLANET_POPULATION[Math.min(PLANET_POPULATION.length - 1, Math.max(0, planetIndex))];
-    return slot.boss ? [hi, hi] : [lo, hi];
+    if (slot.boss) return [hi - BOSS_SPREAD, hi];
+    const [f0, f1] = slot.variant === 'envoy' ? ENVOY_SIZE : SCENARIO_SIZE[slot.scenarioId] || [0, 1];
+    const span = hi - lo;
+    const a = lo + Math.round(f0 * span);
+    // At least three sizes per level, so a replay can roll a new count.
+    const b = Math.min(hi, Math.max(a + 2, lo + Math.round(f1 * span)));
+    return [a, b];
+}
+
+// Roll how many people this play has. A replay never repeats the last
+// count when the range allows another one (item 28).
+export function rollPopulation([lo, hi], rng = Math.random, previous = null) {
+    if (hi <= lo) return lo;
+    let n = lo + Math.floor(rng() * (hi - lo + 1));
+    if (n === previous) {
+        // Step to another count in the range, chosen by the same roll.
+        const step = 1 + Math.floor(rng() * (hi - lo));
+        n = lo + ((n - lo + step) % (hi - lo + 1));
+    }
+    return n;
 }
 
 // What each slot on a planet plays like. Every planet keeps the same rhythm:
