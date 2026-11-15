@@ -199,7 +199,7 @@ describe('view choice', () => {
         const src = readFileSync(new URL('../src/ui/network-view-3d.js', import.meta.url), 'utf8');
         expect(src).toContain('network-mode-btn');
         expect(src).toContain('layoutStep3d(');
-        expect(src).toContain('ribbonOffset(');
+        expect(src).toContain('writeCapsule(');
         expect(src).not.toContain('—');
         expect(readFileSync(new URL('../src/ui/web3d.js', import.meta.url), 'utf8')).not.toContain('—');
     });
