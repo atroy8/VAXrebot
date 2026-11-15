@@ -1,5 +1,6 @@
 // EpidemicSimulator: orchestration only. Sim math lives in src/sim/*,
 // rendering in src/ui/*, audio in src/audio.js. Still exposed as window.game.
+import { rollPopulation } from './config/campaign.js';
 import { scenarios } from './config/scenarios.js';
 import { difficulties } from './config/difficulties.js';
 import { tools } from './config/tools.js';
@@ -128,6 +129,8 @@ export class EpidemicSimulator {
         this.audio = new AudioEngine(() => this.currentScreen);
         // The 3D network view (and three.js) loads on demand: see view-loader.js.
         this.view = null;
+        // Last web size per level, so a replay rolls a new count (item 28).
+        this.lastPopulation = new Map();
         this.viewLoader = createViewLoader(() => import('./ui/network-view-3d.js'));
         this.activeDifficulty = null; // level difficulty with tuning applied
         this.lastR = null;
@@ -359,11 +362,13 @@ export class EpidemicSimulator {
                 this.startingGame = false;
             }
         }
-        // Population varies per scenario: pick uniformly from the scenario's
-        // range so each run feels different. The 8%-or-5-deaths loss rule
-        // keeps the math fair at any size.
-        const [popMin, popMax] = this.currentScenario.populationRange;
-        const population = popMin + Math.floor(Math.random() * (popMax - popMin + 1));
+        // Population varies per scenario: pick uniformly from the level's
+        // range so each run feels different, and a replay never repeats the
+        // last count (item 28). The 8%-or-5-deaths loss rule keeps the math
+        // fair at any size.
+        const levelKey = this.currentLevel?.id || 'free';
+        const population = rollPopulation(this.currentScenario.populationRange, Math.random, this.lastPopulation.get(levelKey));
+        this.lastPopulation.set(levelKey, population);
         this.autoAdvance.cancel();
         this.endWrapUp();
         this.lastR = null;
