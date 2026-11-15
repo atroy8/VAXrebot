@@ -493,3 +493,105 @@ export function faceLiftDirection(nodePos, camPos) {
     if (len < 1e-9) return { x: 0, y: 0, z: 1 };
     return { x: x / len, y: y / len, z: z / len };
 }
+
+// ---- Cleaner 3D lines (item 27, round 43) ----------------------------------
+//
+// Lines used to be flat ribbons drawn from centre to centre: two triangles
+// with square ends that cut across both people's faces, and in 3D the red
+// overlay sat on top of every face. Now each line is a camera-facing capsule
+// (a band with rounded ends) that stops at the rim of each person's token,
+// and every line draws under the faces.
+
+// Radius of a person's token (the face sprite) in world units at person
+// scale 1. The face sprite is FACE_SCALE (1.15) wide.
+export const TOKEN_RIM = 0.575;
+// Points on each rounded end. 6 segments read as round at phone sizes.
+export const LINE_CAP_SEGMENTS = 6;
+// Vertices per line: one half circle of LINE_CAP_SEGMENTS + 1 points per end.
+export const LINE_VERTS = 2 * (LINE_CAP_SEGMENTS + 1);
+
+// Trim a line so it ends at each person's rim as seen from the camera.
+// Moving t along the line moves its picture sideways by t * sin(angle to the
+// line of sight), so the trim at each end is rim / sin(angle). A line that
+// points almost straight at the camera is hidden behind its two people:
+// returns null then. a, b, camPos: {x, y, z}; rimA, rimB: world radii.
+export function trimToRims(a, b, camPos, rimA, rimB) {
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const dz = b.z - a.z;
+    const len = Math.hypot(dx, dy, dz);
+    if (len < 1e-9) return null;
+    const ux = dx / len;
+    const uy = dy / len;
+    const uz = dz / len;
+    const sinTo = (p) => {
+        let vx = p.x - camPos.x;
+        let vy = p.y - camPos.y;
+        let vz = p.z - camPos.z;
+        const vl = Math.hypot(vx, vy, vz) || 1;
+        vx /= vl;
+        vy /= vl;
+        vz /= vl;
+        const d = ux * vx + uy * vy + uz * vz;
+        return Math.sqrt(Math.max(0, 1 - d * d));
+    };
+    const sa = sinTo(a);
+    const sb = sinTo(b);
+    if (sa < 1e-3 || sb < 1e-3) return null;
+    const ta = rimA / sa;
+    const tb = rimB / sb;
+    if (ta + tb >= len) return null;
+    return {
+        a: { x: a.x + ux * ta, y: a.y + uy * ta, z: a.z + uz * ta },
+        b: { x: b.x - ux * tb, y: b.y - uy * tb, z: b.z - uz * tb },
+    };
+}
+
+// Write one camera-facing capsule (LINE_VERTS points) into out at offset
+// (in floats). The outline runs around the a end from +side to -side, then
+// around the b end back to +side, so it is a convex polygon and one triangle
+// fan from its first point fills it. Returns the next offset.
+export function writeCapsule(out, offset, a, b, camPos, halfWidth) {
+    const o = ribbonOffset(a, b, camPos, 1);
+    // Along the line, but square to the side vector and the line of sight.
+    const mx = (a.x + b.x) / 2 - camPos.x;
+    const my = (a.y + b.y) / 2 - camPos.y;
+    const mz = (a.z + b.z) / 2 - camPos.z;
+    let fx = o.y * mz - o.z * my;
+    let fy = o.z * mx - o.x * mz;
+    let fz = o.x * my - o.y * mx;
+    const fl = Math.hypot(fx, fy, fz) || 1;
+    const sign = fx * (b.x - a.x) + fy * (b.y - a.y) + fz * (b.z - a.z) < 0 ? -1 : 1;
+    fx = (fx / fl) * sign;
+    fy = (fy / fl) * sign;
+    fz = (fz / fl) * sign;
+    let k = offset;
+    const S = LINE_CAP_SEGMENTS;
+    for (let i = 0; i <= S; i++) {
+        const t = (Math.PI * i) / S;
+        const c = Math.cos(t) * halfWidth;
+        const s = Math.sin(t) * halfWidth;
+        out[k++] = a.x + o.x * c - fx * s;
+        out[k++] = a.y + o.y * c - fy * s;
+        out[k++] = a.z + o.z * c - fz * s;
+    }
+    for (let i = 0; i <= S; i++) {
+        const t = (Math.PI * i) / S;
+        const c = Math.cos(t) * halfWidth;
+        const s = Math.sin(t) * halfWidth;
+        out[k++] = b.x - o.x * c + fx * s;
+        out[k++] = b.y - o.y * c + fy * s;
+        out[k++] = b.z - o.z * c + fz * s;
+    }
+    return k;
+}
+
+// Triangle index for count capsules (a fan per capsule).
+export function capsuleIndex(count) {
+    const index = [];
+    for (let i = 0; i < count; i++) {
+        const o = i * LINE_VERTS;
+        for (let j = 1; j < LINE_VERTS - 1; j++) index.push(o, o + j, o + j + 1);
+    }
+    return index;
+}

@@ -39,7 +39,7 @@ export function generateRandomNetwork(n, p) {
 // no double lines between the same two people, and nobody left alone (each
 // cut off group is joined to the rest by one link), so every face on screen
 // is part of the puzzle. About 4 contacts per person on average.
-export const SMALL_WEB_MAX = 30;
+export const SMALL_WEB_MAX = 32;
 export const SMALL_WEB_DEGREE = 4;
 
 const idOf = (ref) => (ref && typeof ref === 'object' ? ref.id : ref);
