@@ -24,7 +24,9 @@ import './start-page.css';
 import { startPageMarkup, layoutPeople, bindPeopleTaps } from './start-page.js';
 import { starRow, levelLabelHtml, clampLabelX, LOCK_ICON as LOCK_SVG } from './globe-labels.js';
 import { latLngToXYZ, windingPath, chestStop, globeFitDistance, faceRotation, angleDelta, slerp, facesCamera, tiltedOffset, PLANET_VIEW_AIM_UP } from './globe-math.js';
-import { PLANETS, SYSTEM_LAYOUTS, PLANET_LEVEL_POSITIONS, SUN_RADIUS } from '../config/solar-system.js';
+import { PLANETS, SYSTEM_LAYOUTS, SUN_RADIUS } from '../config/solar-system.js';
+import { journeyStops, scenerySites } from '../config/planet-journey.js';
+import { sceneryParts, sceneryColors } from './scenery.js';
 import { orbitAngle, orbitPosition, systemCamera, galaxyCamera, planetStatus, systemStatus } from './solar-math.js';
 import { planetPalette, starPalette, comboFor, hexToRgb } from '../config/planet-palettes.js';
 import { takeChestRequest, chestDestination } from './pending-chest.js';
@@ -424,10 +426,8 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
         LEVELS.forEach((l, i) => {
             if (l.regionId === def.regionId) levelIdx.push(i);
         });
-        const stops = levelIdx.map((_, k) => {
-            const pos = PLANET_LEVEL_POSITIONS[k % PLANET_LEVEL_POSITIONS.length];
-            return latLngToXYZ(pos.lat, pos.lng, 1);
-        });
+        // Item 29 (a): the levels go all the way round the planet.
+        const stops = journeyStops(levelIdx.length);
         return {
             def,
             palette: pal,
@@ -445,7 +445,8 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
             label,
             levelIdx,
             stops,
-            pathPoints: stops.length > 1 ? windingPath(stops, { perLeg: PER_LEG, wiggle: 0.05, radius: 1.008 }).map(v3) : [],
+            // The road runs on past the boss to its prize box (round 44).
+            pathPoints: stops.length > 1 ? windingPath(stops.length > 2 ? [...stops, chestStop(stops, stops.length - 1)] : stops, { perLeg: PER_LEG, wiggle: 0.05, radius: 1.008 }).map(v3) : [],
             doneTube: null,
             todoTube: null,
             status: null,
@@ -1051,11 +1052,23 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
 
     // What to turn toward you: the middle of the planet's face, nudged a
     // little toward the chosen level, so the whole road stays on screen.
+    // Item 29 (a): the road goes all the way round, so the planet turns the
+    // chosen level (or the next one on this planet) to face you, nudged a
+    // little ahead along the road so you can see where it leads.
     const FACE_CENTRE = latLngToXYZ(-3, -90, 1);
+    const FACE_NORTH = 0.3;
     function facingStop(p, levelIndex) {
-        const local = levelIndex != null ? p.levelIdx.indexOf(levelIndex) : -1;
-        if (local < 0) return FACE_CENTRE;
-        return slerp(FACE_CENTRE, p.stops[local], 0.12);
+        let local = levelIndex != null ? p.levelIdx.indexOf(levelIndex) : -1;
+        if (local < 0) {
+            const first = p.levelIdx[0];
+            local = Math.min(p.levelIdx.length - 1, Math.max(0, state.nextIndex - first));
+        }
+        const here = p.stops[local];
+        const ahead = p.stops[local + 1] || here;
+        const target = slerp(here, ahead, 0.18);
+        // The view is tilted (item 23), so a stop turned straight at you sits
+        // high on the planet. Turn a point a little north of it instead, so it sits mid-screen.
+        return slerp(target, { x: 0, y: 1, z: 0 }, FACE_NORTH);
     }
 
     // Spin one planet so a surface point faces you.
@@ -1599,8 +1612,70 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
         }
     }
 
+    // ---- Scenery (item 29 a) --------------------------------------------------
+    // Villages, groves, lanterns and people you cannot play, in the gaps
+    // between the levels. Each planet's scenery is merged into one mesh per
+    // colour role, never takes taps and never sits on a level or prize box.
+    function sceneryPartGeometry(part) {
+        if (part.shape === 'ball') {
+            const g = new THREE.SphereGeometry(part.r, 8, 6);
+            g.translate(...part.pos);
+            return g;
+        }
+        return partGeometry(part);
+    }
+    function buildScenery(p) {
+        const keepClear = [...p.stops];
+        for (const chest of CHESTS) {
+            const local = p.levelIdx.indexOf(chest.afterLevelIndex);
+            if (local >= 0) keepClear.push(chestStop(p.stops, local));
+        }
+        const sites = scenerySites(p.stops, { keepClear, road: p.pathPoints, seed: 101 + p.index * 7919 });
+        const byRole = {};
+        const m = new THREE.Matrix4();
+        const q = new THREE.Quaternion();
+        const yawQ = new THREE.Quaternion();
+        const scl = new THREE.Vector3();
+        for (const site of sites) {
+            const at = v3(site.pos).multiplyScalar(GLOBE_RADIUS);
+            q.setFromUnitVectors(UP, at.clone().normalize());
+            yawQ.setFromAxisAngle(UP, site.yaw);
+            q.multiply(yawQ);
+            scl.setScalar(site.size);
+            m.compose(at, q, scl);
+            for (const part of sceneryParts(site.kind)) {
+                const g = sceneryPartGeometry(part);
+                const flat = g.index ? g.toNonIndexed() : g;
+                if (flat !== g) g.dispose();
+                flat.deleteAttribute('uv');
+                flat.applyMatrix4(m);
+                (byRole[part.role] ||= []).push(flat);
+            }
+        }
+        const colors = sceneryColors({
+            wall: BUILDING_WALL,
+            stone: BUILDING_STONE,
+            dark: BUILDING_DARK,
+            land: p.palette.land.map(hexNum),
+            cloth: [p.palette.button],
+        });
+        const group = new THREE.Group();
+        group.name = 'scenery';
+        for (const [role, geos] of Object.entries(byRole)) {
+            const geo = mergeGeometries(geos);
+            geos.forEach((g) => g.dispose());
+            if (!geo) continue;
+            const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: colors[role], roughness: role === 'stone' ? 0.8 : 0.55 }));
+            mesh.raycast = () => {};
+            group.add(mesh);
+        }
+        p.world.add(group);
+        p.scenery = { group, sites };
+    }
+
     LEVELS.forEach((level, i) => makeLevelMarker(level, i));
     CHESTS.forEach(makeChestMarker);
+    planets.forEach(buildScenery);
     refresh();
     animate();
 
