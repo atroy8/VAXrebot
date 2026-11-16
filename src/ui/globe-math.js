@@ -56,9 +56,13 @@ export function windingPath(stops, { perLeg = 24, wiggle = 0.06, radius = 1.012 
 
 // Prize boxes sit on the path between the level that unlocks them and the
 // next level, so the road visibly leads to each box.
+// Round 44: the road goes all the way round a planet (item 29 a), so the box
+// after the last level sits on the way back toward level 1. Before this it
+// sat right on top of the boss building, and a tap on the boss opened the box.
 export function chestStop(levelStops, afterIndex) {
     const a = norm(levelStops[afterIndex]);
-    const b = levelStops[afterIndex + 1] ? norm(levelStops[afterIndex + 1]) : a;
+    const nextStop = levelStops[afterIndex + 1] || (levelStops.length > 2 ? levelStops[0] : null);
+    const b = nextStop ? norm(nextStop) : a;
     return slerp(a, b, 0.5);
 }
 
