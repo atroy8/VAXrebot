@@ -11,6 +11,7 @@
 // src/config/planet-palettes.js). Unlocking follows the level rules in
 // src/progress.js: a planet opens when its first level unlocks.
 import { SYSTEMS, PLANET_DEFS } from './campaign.js';
+import { journeyPositions } from './planet-journey.js';
 
 export const PLANET_RADIUS_MAX = 0.55; // world units for a size 1 planet
 export const SUN_RADIUS = 0.42;
@@ -60,17 +61,6 @@ export const SYSTEM_LAYOUTS = SYSTEMS.map(layoutSystem);
 export const PLANETS = SYSTEM_LAYOUTS.flatMap((s) => s.planets.map((p) => ({ ...p, systemIndex: s.index })));
 
 // Where a planet's 10 levels sit on its surface (lat/lng, degrees), in play
-// order. A road that climbs the face of the planet in rows of 3, 2, 3, 2,
-// all on the side that faces you (lng -90 is the centre of the face).
-export const PLANET_LEVEL_POSITIONS = [
-    { lat: -40, lng: -128 },
-    { lat: -46, lng: -90 },
-    { lat: -40, lng: -52 },
-    { lat: -14, lng: -64 },
-    { lat: -14, lng: -116 },
-    { lat: 12, lng: -130 },
-    { lat: 14, lng: -90 },
-    { lat: 12, lng: -50 },
-    { lat: 38, lng: -68 },
-    { lat: 40, lng: -112 },
-];
+// order. Item 29 (a), round 44: the road now goes all the way round the
+// planet (src/config/planet-journey.js); it used to climb only the face.
+export const PLANET_LEVEL_POSITIONS = journeyPositions(10);
