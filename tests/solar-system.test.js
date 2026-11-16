@@ -129,25 +129,24 @@ describe('galaxy layout (round 14)', () => {
         expect(SYSTEM_SPACING).toBeGreaterThan(10);
     });
 
-    it("a planet's 10 levels all sit on the side facing you, far enough apart to tap", () => {
+    it("a planet's 10 levels go all the way round it, far enough apart to tap (item 29 a)", () => {
         expect(PLANET_LEVEL_POSITIONS).toHaveLength(10);
-        const front = latLngToXYZ(0, -90);
         const stops = PLANET_LEVEL_POSITIONS.map((p) => latLngToXYZ(p.lat, p.lng));
-        for (const v of stops) expect(v.x * front.x + v.y * front.y + v.z * front.z).toBeGreaterThan(Math.cos((62 * Math.PI) / 180));
-        // On screen (planet fills about 370 px), buttons are at least 50 px apart.
+        // Level 1 faces you when the planet view opens.
+        const front = latLngToXYZ(0, -90);
+        expect(stops[0].x * front.x + stops[0].y * front.y + stops[0].z * front.z).toBeGreaterThan(0.9);
+        // Neighbours are at least 50 px apart when facing you (planet about 370 px).
         const R = 185;
         for (let i = 0; i < stops.length; i++) {
             for (let j = i + 1; j < stops.length; j++) {
-                const d = Math.hypot(stops[i].x - stops[j].x, stops[i].y - stops[j].y) * R;
-                expect(d).toBeGreaterThan(50);
+                expect(Math.hypot(stops[i].x - stops[j].x, stops[i].y - stops[j].y, stops[i].z - stops[j].z) * R).toBeGreaterThan(50);
             }
         }
-        // The road climbs: level 10 sits above level 1.
-        expect(stops[9].y).toBeGreaterThan(stops[0].y);
         expect(windingPath(stops, { perLeg: 4 })).toHaveLength(37);
         // Prize boxes after levels 4 and 9 sit between their level and the next.
         const box = chestStop(stops, 3);
-        expect(box.z).toBeGreaterThan(0);
+        const d = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+        expect(d(box, stops[3])).toBeCloseTo(d(box, stops[4]), 5);
     });
 });
 
