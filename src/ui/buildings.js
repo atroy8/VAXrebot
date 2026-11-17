@@ -24,6 +24,9 @@
 // windows ('dark'), gold finials ('gold': the pagoda's spire rings, the
 // castle's shachihoko), temple steps, a torii's curved kasagi.
 
+import { CIV_BUILDERS } from './civ-buildings.js';
+import { buildingForPlace, allCivBuildingTypes } from '../config/civilizations.js';
+
 export const ROLES = Object.freeze(['stone', 'wall', 'trim', 'roof', 'dark', 'gold']);
 export const BUILDING_TYPES = Object.freeze(['temple', 'teahouse', 'pagoda', 'torii', 'castle']);
 
@@ -129,7 +132,10 @@ function temple() {
     return parts;
 }
 
-const BUILDERS = { temple, teahouse, pagoda, torii, castle };
+// Round 45 (item 29 b): the other civilizations' buildings live in
+// civ-buildings.js. BUILDING_TYPES stays the Japanese set.
+const BUILDERS = { temple, teahouse, pagoda, torii, castle, ...CIV_BUILDERS };
+export const ALL_BUILDING_TYPES = Object.freeze([...new Set([...BUILDING_TYPES, ...allCivBuildingTypes()])]);
 
 // How much a curved roof's corners sweep up, as a share of the roof's height,
 // and how far down its slope sags (1 = straight like the old hipped roofs,
@@ -202,6 +208,7 @@ export function buildingParts(type) {
         if (p.shape === 'box') q.size = p.size.map((v) => v * k);
         else if (p.shape === 'beam') Object.assign(q, { size: p.size.map((v) => v * k), bend: p.bend * k });
         else if (p.shape === 'roof') Object.assign(q, { bottom: p.bottom * k, top: p.top * k, h: p.h * k });
+        else if (p.shape === 'post' && p.rTop !== undefined) Object.assign(q, { r: p.r * k, rTop: p.rTop * k, h: p.h * k });
         else Object.assign(q, { r: p.r * k, h: p.h * k });
         return q;
     });
@@ -264,12 +271,10 @@ export function leanAngleAtCentre() {
     return viewAngle(0);
 }
 
-const BY_SCENARIO = { care: 'temple', school: 'teahouse', urban: 'pagoda', festival: 'torii', global: 'pagoda' };
-
-// Building for a level from src/config/levels.js.
-export function buildingFor(level) {
-    if (level.variant && level.variant.boss) return 'castle';
-    return BY_SCENARIO[level.scenarioId] || 'teahouse';
+// Building for a level from src/config/levels.js, in the style of the
+// civilization of the land it stands in (round 45; Japan when not given).
+export function buildingFor(level, civ = 'japan') {
+    return buildingForPlace(level, civ);
 }
 
 // How far a part reaches from the stop's centre (x, z) and how high it goes.
@@ -279,8 +284,17 @@ export function partExtent(p) {
     let h;
     if (p.shape === 'box') [hw, h, hd] = [p.size[0] / 2, p.size[1], p.size[2] / 2];
     else if (p.shape === 'beam') [hw, h, hd] = [p.size[0] / 2, p.size[1] + 2 * p.bend, p.size[2] / 2];
-    else if (p.shape === 'roof') [hw, hd, h] = [p.bottom, p.bottom, p.h];
+    else if (p.shape === 'roof') [hw, hd, h] = [p.bottom, p.bottom * (p.zScale || 1), p.h];
     else [hw, hd, h] = [p.r, p.r, p.h];
+    if (p.rot) {
+        // A turned part: bound it by the sphere around its box (round 45).
+        const R = Math.hypot(hw, h / 2, hd);
+        return {
+            halfWidth: Math.max(Math.abs(p.pos[0]), Math.abs(p.pos[2])) + R,
+            top: p.pos[1] + R,
+            bottom: p.pos[1] - R,
+        };
+    }
     return {
         halfWidth: Math.max(Math.abs(p.pos[0]) + hw, Math.abs(p.pos[2]) + hd),
         top: p.pos[1] + h / 2,
