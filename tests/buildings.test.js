@@ -67,7 +67,7 @@ describe('Japanese buildings at the level stops (item 19)', () => {
 
     it('the globe builds stops from buildings.js, no dome buttons left', () => {
         expect(globe).toContain('buildingParts(type)');
-        expect(globe).toContain('buildingFor(level)');
+        expect(globe).toContain('buildingFor(level, civ)');
         expect(globe).not.toMatch(/capGeo|buttonGeo/);
     });
 });
