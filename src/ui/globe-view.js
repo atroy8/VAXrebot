@@ -33,6 +33,8 @@ import { takeChestRequest, chestDestination } from './pending-chest.js';
 import { THEME, CONFETTI, hexNum } from '../config/theme.js';
 import { cloisonnePlan, paintCloisonne, sharpScale, TEXTURE_W, TEXTURE_H } from './cloisonne.js';
 import { buildingParts, buildingFor, buildingColors, standingUp, buildingExtent, labelLift, roofSurface, beamLift } from './buildings.js';
+import { domeProfile } from './civ-buildings.js';
+import { CIVILIZATIONS, civilizationFor } from '../config/civilizations.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 // Level buttons: the planet's colour while open, gold once beaten.
@@ -256,6 +258,7 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
                 <h2 id="globe-sheet-title"></h2>
                 <p class="globe-sheet-sub" id="globe-sheet-sub"></p>
                 <p class="globe-sheet-desc" id="globe-sheet-desc"></p>
+                <p class="globe-sheet-note" id="globe-sheet-note" hidden></p>
                 <button class="globe-sheet-btn" id="globe-sheet-action" hidden></button>
             </div>
             ${startPageMarkup()}
@@ -538,7 +541,14 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
     function partGeometry(part) {
         let g;
         if (part.shape === 'box') g = new THREE.BoxGeometry(...part.size);
-        else if (part.shape === 'roof' && part.straight) g = new THREE.CylinderGeometry(part.top * Math.SQRT2, part.bottom * Math.SQRT2, part.h, 4, 1, false, Math.PI / 4);
+        else if (part.shape === 'roof' && part.straight) {
+            g = new THREE.CylinderGeometry(part.top * Math.SQRT2, part.bottom * Math.SQRT2, part.h, 4, 1, false, Math.PI / 4);
+            if (part.zScale && part.zScale !== 1) g.scale(1, 1, part.zScale);
+        } else if (part.shape === 'dome') {
+            // Round or onion domes (round 45), turned from a profile.
+            const pts = domeProfile(part.onion).map(([x, y]) => new THREE.Vector2(Math.max(0.0001, x * part.r), -part.h / 2 + y * part.h));
+            g = new THREE.LatheGeometry(pts, 12);
+        }
         else if (part.shape === 'roof') {
             // Curved roof with swept-up corners (round 23).
             const { positions, indices } = roofSurface(part);
@@ -553,7 +563,12 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
             const pos = g.attributes.position;
             for (let i = 0; i < pos.count; i++) pos.setY(i, pos.getY(i) + beamLift(pos.getX(i), w, part.bend));
             g.computeVertexNormals();
-        } else g = new THREE.CylinderGeometry(part.r, part.r, part.h, 8);
+        } else g = new THREE.CylinderGeometry(part.rTop ?? part.r, part.r, part.h, part.rTop !== undefined ? 12 : 8);
+        if (part.rot) {
+            g.rotateX(part.rot[0]);
+            g.rotateY(part.rot[1]);
+            g.rotateZ(part.rot[2]);
+        }
         g.translate(...part.pos);
         return g;
     }
@@ -598,7 +613,9 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
         const grp = new THREE.Group();
         standOn(grp, stop);
 
-        const building = buildingFor(level);
+        // Item 29 (b): the stop is built in the style of its land.
+        const civ = civilizationFor(pi, local, planet.levelIdx.length);
+        const building = buildingFor(level, civ);
         const body = new THREE.Group();
         const mats = {};
         for (const [role, geo] of Object.entries(buildingGeometries(building))) {
@@ -632,7 +649,7 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
         pickables.push(hit);
 
         const label = addLabel('', '');
-        const marker = { kind: 'level', index, local, planet: pi, stop, level, building, grp, body, mat, mats, ring, label, unlocked: false, done: false, squishAt: -1 };
+        const marker = { kind: 'level', index, local, planet: pi, stop, level, civ, building, grp, body, mat, mats, ring, label, unlocked: false, done: false, squishAt: -1 };
         state.levelMarkers.push(marker);
         planet.world.add(grp);
         return marker;
@@ -643,6 +660,7 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
         m.unlocked = isLevelUnlocked(state.save, LEVELS, REGIONS, m.level.id);
         m.done = rec.completed;
         const current = m.index === state.nextIndex && m.unlocked && !m.done;
+        const civColors = (CIVILIZATIONS[m.civ] || CIVILIZATIONS.japan).colors;
         const colors = buildingColors({
             unlocked: m.unlocked,
             done: m.done,
@@ -650,9 +668,9 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
             button: markerColor(m),
             gold: hexNum(THEME.kin600),
             locked: LOCKED_COLOR,
-            wall: BUILDING_WALL,
-            trim: BUILDING_TRIM,
-            stone: BUILDING_STONE,
+            wall: civColors.wall ?? BUILDING_WALL,
+            trim: civColors.trim ?? BUILDING_TRIM,
+            stone: civColors.stone ?? BUILDING_STONE,
             dark: BUILDING_DARK,
             finial: hexNum(THEME.kin400),
         });
@@ -826,10 +844,19 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
     }
 
     // ---- Info sheet ---------------------------------------------------------
-    function openSheet({ title, sub, desc, actionLabel, onAction }) {
+    function openSheet({ title, sub, desc, note, actionLabel, onAction }) {
         sheet.querySelector('#globe-sheet-title').textContent = title;
         sheet.querySelector('#globe-sheet-sub').textContent = sub || '';
         sheet.querySelector('#globe-sheet-desc').textContent = desc || '';
+        const noteEl = sheet.querySelector('#globe-sheet-note');
+        noteEl.textContent = '';
+        if (note) {
+            const tag = document.createElement('span');
+            tag.className = 'globe-sheet-land';
+            tag.textContent = note.land;
+            noteEl.append(tag, note.text);
+        }
+        noteEl.hidden = !note;
         const btn = sheet.querySelector('#globe-sheet-action');
         if (actionLabel && onAction) {
             btn.hidden = false;
@@ -848,6 +875,11 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
     }
     sheet.querySelector('#globe-sheet-close').addEventListener('click', closeSheet);
 
+    function landName(civ) {
+        const land = (CIVILIZATIONS[civ] || CIVILIZATIONS.japan).land;
+        return land.charAt(0).toUpperCase() + land.slice(1);
+    }
+
     function showLevelSheet(marker) {
         const { level, unlocked, done } = marker;
         const rec = levelRecord(state.save, level.id);
@@ -861,6 +893,8 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
             title,
             sub: `${planet.def.name}, mission ${marker.local + 1} of ${planet.levelIdx.length}`,
             desc: done ? `${level.blurb} Best: ${starRow(rec.stars)}` : level.blurb,
+            // Item 29 (b): one line of real public health history from the land.
+            note: { land: landName(marker.civ), text: (CIVILIZATIONS[marker.civ] || CIVILIZATIONS.japan).history },
             actionLabel: done ? 'Play again' : 'Play',
             onAction: () => {
                 closeSheet();
@@ -1643,25 +1677,34 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
             q.multiply(yawQ);
             scl.setScalar(site.size);
             m.compose(at, q, scl);
+            // Round 45: scenery takes the wall and stone colours of its land.
+            site.civ = civilizationFor(p.index, site.leg, p.stops.length);
             for (const part of sceneryParts(site.kind)) {
                 const g = sceneryPartGeometry(part);
                 const flat = g.index ? g.toNonIndexed() : g;
                 if (flat !== g) g.dispose();
                 flat.deleteAttribute('uv');
                 flat.applyMatrix4(m);
-                (byRole[part.role] ||= []).push(flat);
+                // Only walls and stone change with the land, so the rest stays merged.
+                const tinted = part.role === 'wall' || part.role === 'stone';
+                (byRole[`${tinted ? site.civ : 'japan'}|${part.role}`] ||= []).push(flat);
             }
         }
-        const colors = sceneryColors({
-            wall: BUILDING_WALL,
-            stone: BUILDING_STONE,
-            dark: BUILDING_DARK,
-            land: p.palette.land.map(hexNum),
-            cloth: [p.palette.button],
-        });
+        const colorsOf = (civ) => {
+            const c = (CIVILIZATIONS[civ] || CIVILIZATIONS.japan).colors;
+            return sceneryColors({
+                wall: c.wall ?? BUILDING_WALL,
+                stone: c.stone ?? BUILDING_STONE,
+                dark: BUILDING_DARK,
+                land: p.palette.land.map(hexNum),
+                cloth: [p.palette.button],
+            });
+        };
         const group = new THREE.Group();
         group.name = 'scenery';
-        for (const [role, geos] of Object.entries(byRole)) {
+        for (const [key, geos] of Object.entries(byRole)) {
+            const [civ, role] = key.split('|');
+            const colors = colorsOf(civ);
             const geo = mergeGeometries(geos);
             geos.forEach((g) => g.dispose());
             if (!geo) continue;
