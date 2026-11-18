@@ -43,7 +43,7 @@ export const LESSONS = {
     },
     'herd-immunity': {
         title: 'Herd immunity',
-        brief: 'When enough people are immune, the infection keeps hitting dead ends. Spread your vaccines across the school.',
+        brief: 'When enough people are immune, the infection keeps hitting dead ends. Spread your vaccines across the whole web, not just one corner.',
         win: 'The more contagious a disease, the more people need immunity. For measles that is over 90 percent, which is why every dose counts.',
         retry: 'Too few people were immune for chains to fade. Vaccinate early and spread doses across the whole network.',
     },

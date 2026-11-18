@@ -8,6 +8,7 @@
 // below is pure so it can be tested without a browser.
 
 import { faceTokenHtml } from './face-token.js';
+import { CIV_ORDER } from '../config/civilizations.js';
 
 // Who stands on the planet: mostly healthy townsfolk, a few protected or
 // recovered, and one sick person (the reason you are here).
@@ -37,9 +38,15 @@ export function personSize(r, count = START_CROWD.length, spreadDeg = 70) {
     return Math.round(Math.max(44, Math.min(64, gap * 0.82, r * 0.26)));
 }
 
+// Item 29 (c): the crowd on the title planet comes from every land on the
+// journey, one civilization after another round the rim.
+export function startCrowdCiv(i) {
+    return CIV_ORDER[i % CIV_ORDER.length];
+}
+
 export function startPageMarkup(crowd = START_CROWD) {
     const people = crowd
-        .map((state, i) => `<button type="button" class="start-person" data-i="${i}" style="--d:${((i * 0.37) % 1.1).toFixed(2)}s" aria-label="Say hi">${faceTokenHtml(state, { i })}</button>`)
+        .map((state, i) => `<button type="button" class="start-person" data-i="${i}" style="--d:${((i * 0.37) % 1.1).toFixed(2)}s" aria-label="Say hi">${faceTokenHtml(state, { i, civ: startCrowdCiv(i) })}</button>`)
         .join('');
     return `
         <div class="start-page" id="start-page">
