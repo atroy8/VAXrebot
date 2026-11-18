@@ -34,6 +34,7 @@ import { THEME, CONFETTI, hexNum } from '../config/theme.js';
 import { cloisonnePlan, paintCloisonne, sharpScale, TEXTURE_W, TEXTURE_H } from './cloisonne.js';
 import { buildingParts, buildingFor, buildingColors, standingUp, buildingExtent, labelLift, roofSurface, beamLift } from './buildings.js';
 import { domeProfile } from './civ-buildings.js';
+import { citizenFaceUrl } from './citizen-faces.js';
 import { CIVILIZATIONS, civilizationFor } from '../config/civilizations.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
@@ -853,7 +854,15 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
         if (note) {
             const tag = document.createElement('span');
             tag.className = 'globe-sheet-land';
-            tag.textContent = note.land;
+            // Item 29 (c): a citizen of the land, dressed in its clothes.
+            if (note.civ) {
+                const face = document.createElement('img');
+                face.className = 'globe-sheet-citizen';
+                face.src = citizenFaceUrl(note.civ, 'healthy', 'idle');
+                face.alt = '';
+                tag.append(face);
+            }
+            tag.append(note.land);
             noteEl.append(tag, note.text);
         }
         noteEl.hidden = !note;
@@ -894,7 +903,7 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
             sub: `${planet.def.name}, mission ${marker.local + 1} of ${planet.levelIdx.length}`,
             desc: done ? `${level.blurb} Best: ${starRow(rec.stars)}` : level.blurb,
             // Item 29 (b): one line of real public health history from the land.
-            note: { land: landName(marker.civ), text: (CIVILIZATIONS[marker.civ] || CIVILIZATIONS.japan).history },
+            note: { civ: marker.civ, land: landName(marker.civ), text: (CIVILIZATIONS[marker.civ] || CIVILIZATIONS.japan).history },
             actionLabel: done ? 'Play again' : 'Play',
             onAction: () => {
                 closeSheet();
@@ -1685,20 +1694,24 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
                 if (flat !== g) g.dispose();
                 flat.deleteAttribute('uv');
                 flat.applyMatrix4(m);
-                // Only walls and stone change with the land, so the rest stays merged.
-                const tinted = part.role === 'wall' || part.role === 'stone';
+                // Only walls, stone and the people's clothes and skin change
+                // with the land (round 46), so the rest stays merged.
+                const tinted = part.role === 'wall' || part.role === 'stone' || part.role === 'cloth' || part.role === 'skin';
                 (byRole[`${tinted ? site.civ : 'japan'}|${part.role}`] ||= []).push(flat);
             }
         }
         const colorsOf = (civ) => {
-            const c = (CIVILIZATIONS[civ] || CIVILIZATIONS.japan).colors;
-            return sceneryColors({
+            const def = CIVILIZATIONS[civ] || CIVILIZATIONS.japan;
+            const c = def.colors;
+            const o = def.outfit || {};
+            const base = sceneryColors({
                 wall: c.wall ?? BUILDING_WALL,
                 stone: c.stone ?? BUILDING_STONE,
                 dark: BUILDING_DARK,
                 land: p.palette.land.map(hexNum),
                 cloth: [p.palette.button],
             });
+            return { ...base, cloth: o.cloth ?? base.cloth, skin: o.skin ?? base.skin };
         };
         const group = new THREE.Group();
         group.name = 'scenery';

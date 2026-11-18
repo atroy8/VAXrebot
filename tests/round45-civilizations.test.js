@@ -189,7 +189,7 @@ describe('colours and history per land (item 29 b)', () => {
             expect(history).toMatch(/\.$/);
         }
         expect(globe).toContain('id="globe-sheet-note"');
-        expect(globe).toContain('note: { land: landName(marker.civ), text: (CIVILIZATIONS[marker.civ] || CIVILIZATIONS.japan).history }');
+        expect(globe).toContain('land: landName(marker.civ), text: (CIVILIZATIONS[marker.civ] || CIVILIZATIONS.japan).history }');
         expect(globe).toContain("tag.className = 'globe-sheet-land'");
         expect(globe).toMatch(/noteEl\.hidden = !note/);
         expect(css).toContain('.globe-sheet-note {');
