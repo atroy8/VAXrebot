@@ -24,6 +24,8 @@ export const CIVILIZATIONS = Object.freeze({
         set: { care: 'temple', school: 'teahouse', urban: 'pagoda', festival: 'torii', boss: 'castle' },
         // null keeps the theme's washi walls, vermilion trim and grey stone.
         colors: { wall: null, trim: null, stone: null },
+        // Item 29 (c): clothes and skin of the land's people (art/source/citizens.mjs).
+        outfit: { cloth: null, skin: null },
         history: 'In 1849 doctors in Osaka opened a vaccination house and passed cowpox from arm to arm to protect children from smallpox.',
     },
     sahel: {
@@ -31,6 +33,8 @@ export const CIVILIZATIONS = Object.freeze({
         land: 'the Sahel',
         set: { care: 'sahel-house', school: 'granary', urban: 'mud-tower', festival: 'toguna', boss: 'mud-palace' },
         colors: { wall: 0xc98f5a, trim: 0x7a5232, stone: 0xa8764c },
+        // Item 29 (c): clothes and skin of the land's people (art/source/citizens.mjs).
+        outfit: { cloth: 0x2f5597, skin: 0x8d5b3e },
         history: 'Inoculation against smallpox was known in West Africa long ago. In 1721 Onesimus, a West African man in Boston, explained it, and it saved lives in the city\'s epidemic.',
     },
     andes: {
@@ -38,6 +42,8 @@ export const CIVILIZATIONS = Object.freeze({
         land: 'the Andes',
         set: { care: 'inca-house', school: 'kallanka', urban: 'terraces', festival: 'sun-gate', boss: 'inca-fortress' },
         colors: { wall: 0xa59d8c, trim: 0x6d6556, stone: 0x857d6d },
+        // Item 29 (c): clothes and skin of the land's people (art/source/citizens.mjs).
+        outfit: { cloth: 0xb8342f, skin: 0xb67c56 },
         history: 'Smallpox reached the Inca Empire in the 1520s, before the Spanish did, travelling along roads and trade routes faster than any army.',
     },
     mughal: {
@@ -45,6 +51,8 @@ export const CIVILIZATIONS = Object.freeze({
         land: 'Mughal India',
         set: { care: 'chhatri', school: 'haveli', urban: 'minaret', festival: 'darwaza', boss: 'mughal-tomb' },
         colors: { wall: 0xf1e6d6, trim: 0xb5523b, stone: 0xc77f5e },
+        // Item 29 (c): clothes and skin of the land's people (art/source/citizens.mjs).
+        outfit: { cloth: 0xe39b2d, skin: 0xc08a60 },
         history: 'In Bengal in the 1700s, travelling inoculators called tikadars protected people from smallpox with a tiny dose of it.',
     },
     nordic: {
@@ -52,6 +60,8 @@ export const CIVILIZATIONS = Object.freeze({
         land: 'the Nordic lands',
         set: { care: 'longhouse', school: 'log-cabin', urban: 'stave-church', festival: 'midsummer-pole', boss: 'mead-hall' },
         colors: { wall: 0x8a5a3b, trim: 0x5a3a26, stone: 0x7d8288 },
+        // Item 29 (c): clothes and skin of the land's people (art/source/citizens.mjs).
+        outfit: { cloth: 0x55704a, skin: 0xf2d6c0 },
         history: 'In 1749 Sweden began counting every birth and death in every parish, one of the first national health records. You cannot fight what you do not count.',
     },
     maya: {
@@ -59,6 +69,8 @@ export const CIVILIZATIONS = Object.freeze({
         land: 'the Maya lowlands',
         set: { care: 'maya-hut', school: 'maya-palace', urban: 'maya-temple', festival: 'ball-court', boss: 'maya-pyramid' },
         colors: { wall: 0xe0d6bf, trim: 0xa8432f, stone: 0xb9ad94 },
+        // Item 29 (c): clothes and skin of the land's people (art/source/citizens.mjs).
+        outfit: { cloth: 0xf4efe4, skin: 0xad7650 },
         history: 'Kaqchikel Maya writers recorded a terrible epidemic around 1520 in their annals, so its story was not lost.',
     },
     persia: {
@@ -66,6 +78,8 @@ export const CIVILIZATIONS = Object.freeze({
         land: 'Persia',
         set: { care: 'caravanserai', school: 'badgir', urban: 'dome-hall', festival: 'garden-pavilion', boss: 'citadel' },
         colors: { wall: 0xd9c19a, trim: 0x2f6f8f, stone: 0xb89c72 },
+        // Item 29 (c): clothes and skin of the land's people (art/source/citizens.mjs).
+        outfit: { cloth: 0x2f6f8f, skin: 0xd3a17a },
         history: 'Around 1025 the Persian physician Ibn Sina wrote that some diseases pass from person to person, and advised keeping the sick apart.',
     },
 });
@@ -104,4 +118,13 @@ export function allCivBuildingTypes() {
     const out = new Set();
     for (const c of Object.values(CIVILIZATIONS)) for (const k of PLACE_KINDS) out.add(c.set[k]);
     return [...out];
+}
+
+// Item 29 (c), round 46: the land a level's people come from. Levels carry
+// planetIndex and levelInPlanet (campaign.js); free play has no land and
+// keeps the original Japanese citizens.
+export const LEVELS_PER_PLANET = 10;
+export function civilizationForLevel(level) {
+    if (!level || !Number.isInteger(level.planetIndex) || !Number.isInteger(level.levelInPlanet)) return 'japan';
+    return civilizationFor(level.planetIndex, level.levelInPlanet, LEVELS_PER_PLANET);
 }
