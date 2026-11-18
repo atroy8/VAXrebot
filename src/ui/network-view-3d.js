@@ -52,6 +52,7 @@ import { fitCamera } from './game-screen-model.js';
 import { pickTapTarget } from './tap-target.js';
 import { layoutStep as forceStep, settleLayout, nextAlpha, layoutForAspect, LAYOUT } from './force-layout.js';
 import { isBoxed } from './care-box-model.js';
+import { citizenFaceUrl, DEFAULT_CIV } from './citizen-faces.js';
 import { linkStyle, LINK_WIDTHS } from './link-style.js';
 import {
     LAYOUT_3D,
@@ -103,11 +104,7 @@ const safeStorage = () => {
 
 // Bundle every face frame at build time so the game works fully offline.
 // Map ends up as: textures[state][frame] -> THREE.Texture
-const faceModules = import.meta.glob('../assets/faces/*/*.png', {
-    eager: true,
-    query: '?url',
-    import: 'default',
-});
+// Item 29 (c): each land has its own citizens (src/ui/citizen-faces.js).
 
 // Item 20: length of the gentle death moment (animateDeath).
 export const DEATH_MS = 1600;
@@ -280,15 +277,14 @@ export function badgeKind(node) {
     return null;
 }
 
-function loadFaceTextures() {
+function loadFaceTextures(civ) {
     const loader = new THREE.TextureLoader();
     const textures = {};
     for (const state of STATES) {
         textures[state] = {};
         const frames = { idle: 'idle.png', blink: 'blink.png', reaction: REACTION_FRAME[state] };
         for (const [frame, file] of Object.entries(frames)) {
-            const key = `../assets/faces/${state}/${file}`;
-            const url = faceModules[key];
+            const url = citizenFaceUrl(civ, state, file.replace(/\.png$/, ''));
             const tex = loader.load(url);
             tex.colorSpace = THREE.SRGBColorSpace;
             textures[state][frame] = tex;
@@ -296,8 +292,16 @@ function loadFaceTextures() {
     }
     return textures;
 }
-// Loaded once per page lifetime; shared across level restarts.
-const faceTextures = loadFaceTextures();
+// One set per land, loaded the first time a level in that land starts and
+// kept for the page lifetime (level restarts reuse it).
+const faceTextureSets = new Map();
+export function faceTexturesFor(civ = DEFAULT_CIV) {
+    const key = civ || DEFAULT_CIV;
+    if (!faceTextureSets.has(key)) faceTextureSets.set(key, loadFaceTextures(key));
+    return faceTextureSets.get(key);
+}
+// The set people are drawn from right now (setCivilization switches it).
+let faceTextures = faceTexturesFor(DEFAULT_CIV);
 
 // Sunflower spiral on the z = 0 plane: even spacing, no overlaps at start.
 function sunflowerDisc(n, radius, out) {
@@ -498,6 +502,16 @@ export class NetworkView {
                 this.updatePersonScale();
                 if (Math.abs(this.personScale - before) < 0.01) break;
             }
+        }
+    }
+
+    // Item 29 (c): dress the people for the level's land. Call before
+    // update(); people already on screen switch at once.
+    setCivilization(civ) {
+        this.civ = civ || DEFAULT_CIV;
+        faceTextures = faceTexturesFor(this.civ);
+        for (const obj of this.nodeObjs?.values?.() || []) {
+            obj.sprite.material.map = faceTextures[obj.node.state]?.idle || faceTextures.healthy.idle;
         }
     }
 
