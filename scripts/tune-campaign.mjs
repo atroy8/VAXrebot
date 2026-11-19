@@ -111,7 +111,10 @@ export function tuneLevel(li, runs) {
                 // Early planets lean toward more actions a day, so the first
                 // levels feel like you are in control.
                 const fewer = Math.max(0, maxActions(kit) - (preset.vaccinate + preset.quarantine + preset.severLink));
-                cands.push({ level, win: r.win, res: r.res, err: (r.win - target) ** 2 + 0.0015 * fewer * (1 - t) });
+                // Round 47: steer away from settings where a sensible player
+                // loses at the end of day 1, before most tools open.
+                const dayOneLoss = r.res.filter((x) => x.outcome !== 'contained' && x.day <= 2).length / r.res.length;
+                cands.push({ level, win: r.win, res: r.res, err: (r.win - target) ** 2 + 0.0015 * fewer * (1 - t) + 0.15 * dayOneLoss });
             }
         }
     }
@@ -150,8 +153,9 @@ if (!isMainThread) {
     } catch {
         table = {};
     }
-    const all = [];
-    for (let li = FROM; li <= TO; li++) all.push(li);
+    // TUNE_ONLY=3,17,20 retunes just those level indexes (round 47).
+    const all = process.env.TUNE_ONLY ? process.env.TUNE_ONLY.split(',').map(Number) : [];
+    if (!all.length) for (let li = FROM; li <= TO; li++) all.push(li);
     const shards = Array.from({ length: N }, (_, k) => all.filter((_, j) => j % N === k)).filter((s) => s.length);
     await Promise.all(
         shards.map(
