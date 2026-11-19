@@ -32,7 +32,7 @@ import './ui/app-shell.css'; // last: safe areas and native touch feel (round 18
 import { toolHint, dayBanner, rFellBelowOne, rTick, R_BELOW_ONE_TEXT, shouldAutoPause, toolChips, autoToolForTap, noToolTapHint, idleTapMode, usedUpNudge, spentToolLine, careNudgeLine } from './ui/game-screen-model.js';
 import { renderCareBox, flyToCareBox } from './ui/care-box.js';
 import { mountShop, renderShop } from './ui/shop.js';
-import { buildOutbreak } from './sim/setup.js';
+import { buildOutbreak, openingLimits } from './sim/setup.js';
 import { initGameState } from './sim/state.js';
 import { checkGameOver as resolveGameOver, canUseTool, canAdvanceDay, spreadIsOver, resolveAftermath, LOSS_RESULTS, careStillHelps } from './sim/engine.js';
 import { deathToast, resultsDeathLines } from './ui/deaths.js';
@@ -412,10 +412,13 @@ export class EpidemicSimulator {
     createNetwork() {
         // Shared with the balance bots (src/sim/setup.js), so puzzle levels
         // (super-spreader, Envoy) are set up the same way everywhere.
+        const population = this.gameState.stats.initialPopulation;
         const out = buildOutbreak({
             scenario: this.currentScenario,
-            population: this.gameState.stats.initialPopulation,
+            population,
             variant: this.currentLevel?.variant || null,
+            // Round 47: day 1 can never end the level (see setup.js).
+            opening: openingLimits({ level: this.currentLevel, scenario: this.currentScenario, difficulty: this.difficulty, tools: this.tools, population }),
         });
         this.gameState.stats.totalInfected += out.initialCases;
         this.gameState.envoyId = out.envoyId;

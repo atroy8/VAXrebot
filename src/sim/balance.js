@@ -16,7 +16,7 @@
 import { rollLevelRules } from '../config/difficulty-roll.js';
 import { tools } from '../config/tools.js';
 import { LEVELS } from '../config/levels.js';
-import { buildOutbreak } from './setup.js';
+import { buildOutbreak, openingLimits } from './setup.js';
 import { initGameState } from './state.js';
 import { canUseTool, toolDailyLimit } from './engine.js';
 import { applyNodeTool, severLink, advanceDay, neighbors, allActionsSpent } from './actions.js';
@@ -40,7 +40,8 @@ export function buildRun(level, rng) {
     const [lo, hi] = scenario.populationRange;
     const population = lo + Math.floor(rng() * (hi - lo + 1));
     const state = initGameState(tools, population);
-    const out = buildOutbreak({ scenario, population, variant: level.variant || null, rng });
+    const opening = openingLimits({ level, scenario, difficulty, tools, population });
+    const out = buildOutbreak({ scenario, population, variant: level.variant || null, rng, opening });
     state.stats.totalInfected += out.initialCases;
     state.envoyId = out.envoyId;
     state.superSpreaderId = out.superSpreaderId;
