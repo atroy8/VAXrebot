@@ -29,7 +29,7 @@ import './ui/game-screen.css';
 import './ui/averted.css';
 import './ui/variants.css';
 import './ui/app-shell.css'; // last: safe areas and native touch feel (round 18)
-import { toolHint, dayBanner, rFellBelowOne, rTick, R_BELOW_ONE_TEXT, shouldAutoPause, toolChips, autoToolForTap, noToolTapHint, idleTapMode, usedUpNudge, spentToolLine, careNudgeLine } from './ui/game-screen-model.js';
+import { toolHint, dayBanner, rFellBelowOne, rTick, R_BELOW_ONE_TEXT, shouldAutoPause, toolChips, autoToolForTap, noToolTapHint, idleTapMode, usedUpNudge, spentToolLine, careNudgeStep } from './ui/game-screen-model.js';
 import { renderCareBox, flyToCareBox } from './ui/care-box.js';
 import { mountShop, renderShop } from './ui/shop.js';
 import { buildOutbreak, openingLimits } from './sim/setup.js';
@@ -63,6 +63,7 @@ import {
     renderLegend,
     addLogEntry,
     showNotification,
+    dismissToast,
     showToolHint,
     showDayBanner,
     renderGameOver,
@@ -598,6 +599,10 @@ export class EpidemicSimulator {
             return;
         }
         this.autoAdvance.cancel();
+        // Round 48: a care line about waiting for Quarantine is out of date
+        // once the day moves on; maybeWrapUp says what is true now.
+        const nudges = this.gameState.careNudges;
+        if (nudges && nudges.waitingText) dismissToast(nudges.waitingText);
         const difficulty = this.difficulty;
         // Coaching: count actions left unused when a day ends by choice.
         if (!this.wrapUp) {
@@ -670,10 +675,18 @@ export class EpidemicSimulator {
         // Quarantine can reach someone sick, the player keeps the controls.
         const care = careStillHelps(this.gameState, this.network, this.tools, this.difficulty, this.difficulty.recoveryTime);
         if (care) {
-            if (!this.gameState.careNudgeShown) {
-                this.gameState.careNudgeShown = true;
-                showNotification(careNudgeLine(care, this.gameState.day), 'success');
-                this.audio.playStinger?.('milestone');
+            // Round 48: one line while Quarantine is still closed, and one
+            // more on the morning it opens (careNudgeStep).
+            const seen = (this.gameState.careNudges ||= {});
+            const nudge = careNudgeStep(care, this.gameState.day, seen);
+            if (nudge) {
+                const first = !seen.waiting && !seen.open;
+                seen[nudge.kind] = true;
+                if (nudge.kind === 'waiting') seen.waitingText = nudge.text;
+                else if (seen.waitingText) dismissToast(seen.waitingText);
+                showNotification(nudge.text, 'success');
+                if (first) this.audio.playStinger?.('milestone');
+                else this.haptics.play('tool');
             }
             return;
         }
