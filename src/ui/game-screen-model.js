@@ -188,7 +188,10 @@ export function dayBanner({ day, newCases = 0, recovered = 0, died = 0 }) {
     if (died > 0) parts.push(`${died} lost`);
     if (parts.length === 0) parts.push('no new cases');
     const tone = newCases > 0 || died > 0 ? (newCases > recovered ? 'bad' : 'calm') : 'good';
-    return { text: `Day ${day}: ${parts.join(', ')}`, tone };
+    // Round 48: the banner shows at the start of the next day, beside a
+    // header that already says that day. "Day 1: 1 new case" under "Day 2"
+    // read as a mistake, so it now names the night that just passed.
+    return { text: `Overnight: ${parts.join(', ')}`, tone };
 }
 
 // Camera fit for the flat network: the smallest distance that shows every
@@ -335,4 +338,26 @@ export function careNudgeLine(care, today) {
         return `Spread stopped! Quarantine opens on day ${care.day}. Isolate the sick then: care halves their risk.`;
     }
     return `Spread stopped! ${who} care. Quarantine them: care halves their risk.`;
+}
+
+// Round 48: the line for the morning Quarantine opens, after the waiting
+// line told the player to hold on until then.
+export function careOpenLine(care) {
+    if (!care) return '';
+    const who = care.sick === 1 ? '1 sick person still needs care: tap them' : `${care.sick} sick people still need care: tap them`;
+    return `Quarantine is open! ${who} to isolate them.`;
+}
+
+// Round 48: which care nudge to show now, if any. The round 39 nudge showed
+// once per level, so a player told "Quarantine opens on day 3" on day 2 got
+// no word when day 3 came, and if they tapped Next day quickly the old line
+// was still up on day 3, saying Quarantine was not open yet. Now the waiting
+// line shows once while Quarantine is closed, and the open line once on the
+// day it opens. seen records what was shown: { waiting, open }.
+// Returns { kind: 'waiting' | 'open', text } or null.
+export function careNudgeStep(care, today, seen = {}) {
+    if (!care) return null;
+    if (care.day > today) return seen.waiting || seen.open ? null : { kind: 'waiting', text: careNudgeLine(care, today) };
+    if (seen.open) return null;
+    return { kind: 'open', text: seen.waiting ? careOpenLine(care) : careNudgeLine(care, today) };
 }
