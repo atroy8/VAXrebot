@@ -134,6 +134,21 @@ export function dismissToasts() {
     }
 }
 
+// Round 48: fade out one toast by its text (a line that has gone out of
+// date, such as "Quarantine opens on day 3" once day 3 has begun).
+export function dismissToast(message) {
+    const container = document.getElementById('notification-container');
+    if (!container || !message) return;
+    const text = String(message).replace(/[\p{Extended_Pictographic}\ufe0f\u200d]\s*/gu, '').trim();
+    for (const n of [...container.children]) {
+        if (n.dataset.leaving || n.textContent !== text) continue;
+        clearTimeout(n._timer);
+        n.dataset.leaving = '1';
+        n.style.animation = 'fadeOutRight 0.25s forwards';
+        setTimeout(() => n.remove(), 250);
+    }
+}
+
 // Day banner (replaces the old text log): one line, fades on its own.
 export function showDayBanner({ text, tone = 'calm' }) {
     const el = document.getElementById('day-banner');

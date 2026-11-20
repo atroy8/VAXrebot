@@ -142,8 +142,9 @@ describe('wiring in game.js', () => {
         expect(body.indexOf('careStillHelps(')).toBeLessThan(body.indexOf('this.autoAdvance.cancel()'));
     });
 
-    it('shows the nudge once per level', () => {
-        expect(body).toMatch(/if \(!this\.gameState\.careNudgeShown\) \{\s*this\.gameState\.careNudgeShown = true;\s*showNotification\(careNudgeLine\(care, this\.gameState\.day\), 'success'\)/);
+    it('shows each care nudge once per level (round 48: waiting, then open)', () => {
+        expect(body).toContain('careNudgeStep(care, this.gameState.day, seen)');
+        expect(body).toContain("showNotification(nudge.text, 'success')");
     });
 });
 
