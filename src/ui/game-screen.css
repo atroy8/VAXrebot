@@ -122,6 +122,11 @@
 .tool-hint[hidden], .day-banner[hidden] { display: none; }
 .day-banner {
     top: 10px;
+    /* Round 48: sit between the Key and 2D/3D buttons instead of over
+       them; a long night (cases, recoveries and a loss) wraps to two lines. */
+    max-width: calc(100% - 128px);
+    padding: 6px 10px;
+    font-size: 0.82rem;
     font-weight: 700;
     background: #fff;
     color: #1f2937;
