@@ -48,10 +48,10 @@ describe('game screen model (item 7)', () => {
     });
 
     it('summarises a day in one line with a tone', () => {
-        expect(dayBanner({ day: 4, newCases: 3, recovered: 1 })).toEqual({ text: 'Day 4: 3 new cases, 1 recovered', tone: 'bad' });
+        expect(dayBanner({ day: 4, newCases: 3, recovered: 1 })).toEqual({ text: 'Overnight: 3 new cases, 1 recovered', tone: 'bad' });
         expect(dayBanner({ day: 5, newCases: 1, recovered: 2 }).tone).toBe('calm');
-        expect(dayBanner({ day: 6 })).toEqual({ text: 'Day 6: no new cases', tone: 'good' });
-        expect(dayBanner({ day: 7, newCases: 1 }).text).toBe('Day 7: 1 new case');
+        expect(dayBanner({ day: 6 })).toEqual({ text: 'Overnight: no new cases', tone: 'good' });
+        expect(dayBanner({ day: 7, newCases: 1 }).text).toBe('Overnight: 1 new case');
     });
 
     it('fits every node on a tall phone screen and centres a lopsided layout', () => {
