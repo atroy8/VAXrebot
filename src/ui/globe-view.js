@@ -24,13 +24,18 @@ import './start-page.css';
 import { startPageMarkup, layoutPeople, bindPeopleTaps } from './start-page.js';
 import { starRow, levelLabelHtml, clampLabelX, LOCK_ICON as LOCK_SVG } from './globe-labels.js';
 import { latLngToXYZ, windingPath, chestStop, globeFitDistance, faceRotation, angleDelta, slerp, facesCamera, tiltedOffset, PLANET_VIEW_AIM_UP } from './globe-math.js';
-import { PLANETS, SYSTEM_LAYOUTS, PLANET_LEVEL_POSITIONS, SUN_RADIUS } from '../config/solar-system.js';
+import { PLANETS, SYSTEM_LAYOUTS, SUN_RADIUS } from '../config/solar-system.js';
+import { journeyStops, scenerySites } from '../config/planet-journey.js';
+import { sceneryParts, sceneryColors } from './scenery.js';
 import { orbitAngle, orbitPosition, systemCamera, galaxyCamera, planetStatus, systemStatus } from './solar-math.js';
 import { planetPalette, starPalette, comboFor, hexToRgb } from '../config/planet-palettes.js';
 import { takeChestRequest, chestDestination } from './pending-chest.js';
 import { THEME, CONFETTI, hexNum } from '../config/theme.js';
 import { cloisonnePlan, paintCloisonne, sharpScale, TEXTURE_W, TEXTURE_H } from './cloisonne.js';
 import { buildingParts, buildingFor, buildingColors, standingUp, buildingExtent, labelLift, roofSurface, beamLift } from './buildings.js';
+import { domeProfile } from './civ-buildings.js';
+import { citizenFaceUrl } from './citizen-faces.js';
+import { CIVILIZATIONS, civilizationFor } from '../config/civilizations.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 // Level buttons: the planet's colour while open, gold once beaten.
@@ -254,6 +259,7 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
                 <h2 id="globe-sheet-title"></h2>
                 <p class="globe-sheet-sub" id="globe-sheet-sub"></p>
                 <p class="globe-sheet-desc" id="globe-sheet-desc"></p>
+                <p class="globe-sheet-note" id="globe-sheet-note" hidden></p>
                 <button class="globe-sheet-btn" id="globe-sheet-action" hidden></button>
             </div>
             ${startPageMarkup()}
@@ -424,10 +430,8 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
         LEVELS.forEach((l, i) => {
             if (l.regionId === def.regionId) levelIdx.push(i);
         });
-        const stops = levelIdx.map((_, k) => {
-            const pos = PLANET_LEVEL_POSITIONS[k % PLANET_LEVEL_POSITIONS.length];
-            return latLngToXYZ(pos.lat, pos.lng, 1);
-        });
+        // Item 29 (a): the levels go all the way round the planet.
+        const stops = journeyStops(levelIdx.length);
         return {
             def,
             palette: pal,
@@ -445,7 +449,8 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
             label,
             levelIdx,
             stops,
-            pathPoints: stops.length > 1 ? windingPath(stops, { perLeg: PER_LEG, wiggle: 0.05, radius: 1.008 }).map(v3) : [],
+            // The road runs on past the boss to its prize box (round 44).
+            pathPoints: stops.length > 1 ? windingPath(stops.length > 2 ? [...stops, chestStop(stops, stops.length - 1)] : stops, { perLeg: PER_LEG, wiggle: 0.05, radius: 1.008 }).map(v3) : [],
             doneTube: null,
             todoTube: null,
             status: null,
@@ -537,7 +542,14 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
     function partGeometry(part) {
         let g;
         if (part.shape === 'box') g = new THREE.BoxGeometry(...part.size);
-        else if (part.shape === 'roof' && part.straight) g = new THREE.CylinderGeometry(part.top * Math.SQRT2, part.bottom * Math.SQRT2, part.h, 4, 1, false, Math.PI / 4);
+        else if (part.shape === 'roof' && part.straight) {
+            g = new THREE.CylinderGeometry(part.top * Math.SQRT2, part.bottom * Math.SQRT2, part.h, 4, 1, false, Math.PI / 4);
+            if (part.zScale && part.zScale !== 1) g.scale(1, 1, part.zScale);
+        } else if (part.shape === 'dome') {
+            // Round or onion domes (round 45), turned from a profile.
+            const pts = domeProfile(part.onion).map(([x, y]) => new THREE.Vector2(Math.max(0.0001, x * part.r), -part.h / 2 + y * part.h));
+            g = new THREE.LatheGeometry(pts, 12);
+        }
         else if (part.shape === 'roof') {
             // Curved roof with swept-up corners (round 23).
             const { positions, indices } = roofSurface(part);
@@ -552,7 +564,12 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
             const pos = g.attributes.position;
             for (let i = 0; i < pos.count; i++) pos.setY(i, pos.getY(i) + beamLift(pos.getX(i), w, part.bend));
             g.computeVertexNormals();
-        } else g = new THREE.CylinderGeometry(part.r, part.r, part.h, 8);
+        } else g = new THREE.CylinderGeometry(part.rTop ?? part.r, part.r, part.h, part.rTop !== undefined ? 12 : 8);
+        if (part.rot) {
+            g.rotateX(part.rot[0]);
+            g.rotateY(part.rot[1]);
+            g.rotateZ(part.rot[2]);
+        }
         g.translate(...part.pos);
         return g;
     }
@@ -597,7 +614,9 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
         const grp = new THREE.Group();
         standOn(grp, stop);
 
-        const building = buildingFor(level);
+        // Item 29 (b): the stop is built in the style of its land.
+        const civ = civilizationFor(pi, local, planet.levelIdx.length);
+        const building = buildingFor(level, civ);
         const body = new THREE.Group();
         const mats = {};
         for (const [role, geo] of Object.entries(buildingGeometries(building))) {
@@ -631,7 +650,7 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
         pickables.push(hit);
 
         const label = addLabel('', '');
-        const marker = { kind: 'level', index, local, planet: pi, stop, level, building, grp, body, mat, mats, ring, label, unlocked: false, done: false, squishAt: -1 };
+        const marker = { kind: 'level', index, local, planet: pi, stop, level, civ, building, grp, body, mat, mats, ring, label, unlocked: false, done: false, squishAt: -1 };
         state.levelMarkers.push(marker);
         planet.world.add(grp);
         return marker;
@@ -642,6 +661,7 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
         m.unlocked = isLevelUnlocked(state.save, LEVELS, REGIONS, m.level.id);
         m.done = rec.completed;
         const current = m.index === state.nextIndex && m.unlocked && !m.done;
+        const civColors = (CIVILIZATIONS[m.civ] || CIVILIZATIONS.japan).colors;
         const colors = buildingColors({
             unlocked: m.unlocked,
             done: m.done,
@@ -649,9 +669,9 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
             button: markerColor(m),
             gold: hexNum(THEME.kin600),
             locked: LOCKED_COLOR,
-            wall: BUILDING_WALL,
-            trim: BUILDING_TRIM,
-            stone: BUILDING_STONE,
+            wall: civColors.wall ?? BUILDING_WALL,
+            trim: civColors.trim ?? BUILDING_TRIM,
+            stone: civColors.stone ?? BUILDING_STONE,
             dark: BUILDING_DARK,
             finial: hexNum(THEME.kin400),
         });
@@ -825,10 +845,27 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
     }
 
     // ---- Info sheet ---------------------------------------------------------
-    function openSheet({ title, sub, desc, actionLabel, onAction }) {
+    function openSheet({ title, sub, desc, note, actionLabel, onAction }) {
         sheet.querySelector('#globe-sheet-title').textContent = title;
         sheet.querySelector('#globe-sheet-sub').textContent = sub || '';
         sheet.querySelector('#globe-sheet-desc').textContent = desc || '';
+        const noteEl = sheet.querySelector('#globe-sheet-note');
+        noteEl.textContent = '';
+        if (note) {
+            const tag = document.createElement('span');
+            tag.className = 'globe-sheet-land';
+            // Item 29 (c): a citizen of the land, dressed in its clothes.
+            if (note.civ) {
+                const face = document.createElement('img');
+                face.className = 'globe-sheet-citizen';
+                face.src = citizenFaceUrl(note.civ, 'healthy', 'idle');
+                face.alt = '';
+                tag.append(face);
+            }
+            tag.append(note.land);
+            noteEl.append(tag, note.text);
+        }
+        noteEl.hidden = !note;
         const btn = sheet.querySelector('#globe-sheet-action');
         if (actionLabel && onAction) {
             btn.hidden = false;
@@ -847,6 +884,11 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
     }
     sheet.querySelector('#globe-sheet-close').addEventListener('click', closeSheet);
 
+    function landName(civ) {
+        const land = (CIVILIZATIONS[civ] || CIVILIZATIONS.japan).land;
+        return land.charAt(0).toUpperCase() + land.slice(1);
+    }
+
     function showLevelSheet(marker) {
         const { level, unlocked, done } = marker;
         const rec = levelRecord(state.save, level.id);
@@ -860,6 +902,8 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
             title,
             sub: `${planet.def.name}, mission ${marker.local + 1} of ${planet.levelIdx.length}`,
             desc: done ? `${level.blurb} Best: ${starRow(rec.stars)}` : level.blurb,
+            // Item 29 (b): one line of real public health history from the land.
+            note: { civ: marker.civ, land: landName(marker.civ), text: (CIVILIZATIONS[marker.civ] || CIVILIZATIONS.japan).history },
             actionLabel: done ? 'Play again' : 'Play',
             onAction: () => {
                 closeSheet();
@@ -1051,11 +1095,23 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
 
     // What to turn toward you: the middle of the planet's face, nudged a
     // little toward the chosen level, so the whole road stays on screen.
+    // Item 29 (a): the road goes all the way round, so the planet turns the
+    // chosen level (or the next one on this planet) to face you, nudged a
+    // little ahead along the road so you can see where it leads.
     const FACE_CENTRE = latLngToXYZ(-3, -90, 1);
+    const FACE_NORTH = 0.3;
     function facingStop(p, levelIndex) {
-        const local = levelIndex != null ? p.levelIdx.indexOf(levelIndex) : -1;
-        if (local < 0) return FACE_CENTRE;
-        return slerp(FACE_CENTRE, p.stops[local], 0.12);
+        let local = levelIndex != null ? p.levelIdx.indexOf(levelIndex) : -1;
+        if (local < 0) {
+            const first = p.levelIdx[0];
+            local = Math.min(p.levelIdx.length - 1, Math.max(0, state.nextIndex - first));
+        }
+        const here = p.stops[local];
+        const ahead = p.stops[local + 1] || here;
+        const target = slerp(here, ahead, 0.18);
+        // The view is tilted (item 23), so a stop turned straight at you sits
+        // high on the planet. Turn a point a little north of it instead, so it sits mid-screen.
+        return slerp(target, { x: 0, y: 1, z: 0 }, FACE_NORTH);
     }
 
     // Spin one planet so a surface point faces you.
@@ -1599,8 +1655,83 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
         }
     }
 
+    // ---- Scenery (item 29 a) --------------------------------------------------
+    // Villages, groves, lanterns and people you cannot play, in the gaps
+    // between the levels. Each planet's scenery is merged into one mesh per
+    // colour role, never takes taps and never sits on a level or prize box.
+    function sceneryPartGeometry(part) {
+        if (part.shape === 'ball') {
+            const g = new THREE.SphereGeometry(part.r, 8, 6);
+            g.translate(...part.pos);
+            return g;
+        }
+        return partGeometry(part);
+    }
+    function buildScenery(p) {
+        const keepClear = [...p.stops];
+        for (const chest of CHESTS) {
+            const local = p.levelIdx.indexOf(chest.afterLevelIndex);
+            if (local >= 0) keepClear.push(chestStop(p.stops, local));
+        }
+        const sites = scenerySites(p.stops, { keepClear, road: p.pathPoints, seed: 101 + p.index * 7919 });
+        const byRole = {};
+        const m = new THREE.Matrix4();
+        const q = new THREE.Quaternion();
+        const yawQ = new THREE.Quaternion();
+        const scl = new THREE.Vector3();
+        for (const site of sites) {
+            const at = v3(site.pos).multiplyScalar(GLOBE_RADIUS);
+            q.setFromUnitVectors(UP, at.clone().normalize());
+            yawQ.setFromAxisAngle(UP, site.yaw);
+            q.multiply(yawQ);
+            scl.setScalar(site.size);
+            m.compose(at, q, scl);
+            // Round 45: scenery takes the wall and stone colours of its land.
+            site.civ = civilizationFor(p.index, site.leg, p.stops.length);
+            for (const part of sceneryParts(site.kind)) {
+                const g = sceneryPartGeometry(part);
+                const flat = g.index ? g.toNonIndexed() : g;
+                if (flat !== g) g.dispose();
+                flat.deleteAttribute('uv');
+                flat.applyMatrix4(m);
+                // Only walls, stone and the people's clothes and skin change
+                // with the land (round 46), so the rest stays merged.
+                const tinted = part.role === 'wall' || part.role === 'stone' || part.role === 'cloth' || part.role === 'skin';
+                (byRole[`${tinted ? site.civ : 'japan'}|${part.role}`] ||= []).push(flat);
+            }
+        }
+        const colorsOf = (civ) => {
+            const def = CIVILIZATIONS[civ] || CIVILIZATIONS.japan;
+            const c = def.colors;
+            const o = def.outfit || {};
+            const base = sceneryColors({
+                wall: c.wall ?? BUILDING_WALL,
+                stone: c.stone ?? BUILDING_STONE,
+                dark: BUILDING_DARK,
+                land: p.palette.land.map(hexNum),
+                cloth: [p.palette.button],
+            });
+            return { ...base, cloth: o.cloth ?? base.cloth, skin: o.skin ?? base.skin };
+        };
+        const group = new THREE.Group();
+        group.name = 'scenery';
+        for (const [key, geos] of Object.entries(byRole)) {
+            const [civ, role] = key.split('|');
+            const colors = colorsOf(civ);
+            const geo = mergeGeometries(geos);
+            geos.forEach((g) => g.dispose());
+            if (!geo) continue;
+            const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: colors[role], roughness: role === 'stone' ? 0.8 : 0.55 }));
+            mesh.raycast = () => {};
+            group.add(mesh);
+        }
+        p.world.add(group);
+        p.scenery = { group, sites };
+    }
+
     LEVELS.forEach((level, i) => makeLevelMarker(level, i));
     CHESTS.forEach(makeChestMarker);
+    planets.forEach(buildScenery);
     refresh();
     animate();
 

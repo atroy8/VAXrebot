@@ -7,13 +7,18 @@ export function deathToast({ count = 1, firstThisLevel = false, inWard = false }
     const who = count === 1 ? 'Someone did not survive.' : `${count} people did not survive.`;
     if (!firstThisLevel) return who;
     if (inWard) return `${who} Even with care, some cases are fatal.`;
-    return `${who} Sick people in a ward get care and are half as likely to die.`;
+    return `${who} Deaths come days after people fall sick. A ward halves the risk.`;
 }
 
 // Briefing line: how deadly the disease is for real.
 export function briefingCfr(scenario) {
     if (!scenario || scenario.realCfr == null) return '';
     return `${oneIn(scenario.realCfr)} cases`;
+}
+
+// Round 49: briefing line for the real disease's R0 ('' hides the row).
+export function briefingRealR0(scenario) {
+    return scenario && scenario.realR0 ? String(scenario.realR0) : '';
 }
 
 // Results lines under the numbers. Returns [] or up to three short lines.

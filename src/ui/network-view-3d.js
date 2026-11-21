@@ -18,7 +18,7 @@
 // Round 1 (nightly 2026-10-10): the network is now FLAT and abstract.
 // Nodes sit on one plane (z = 0) viewed head-on, so the graph reads like a
 // clear diagram you can drag, pinch and twist. Links are
-// thick color-coded ribbons (red pulse = live transmission route, faded =
+// thick color-coded bands (red pulse = live transmission route, faded =
 // protected end), infected nodes pulse, and severing a link plays a snap:
 // the two halves whip back to their nodes, sparks fly, a ring flashes and
 // the nodes recoil apart.
@@ -52,6 +52,7 @@ import { fitCamera } from './game-screen-model.js';
 import { pickTapTarget } from './tap-target.js';
 import { layoutStep as forceStep, settleLayout, nextAlpha, layoutForAspect, LAYOUT } from './force-layout.js';
 import { isBoxed } from './care-box-model.js';
+import { citizenFaceUrl, DEFAULT_CIV } from './citizen-faces.js';
 import { linkStyle, LINK_WIDTHS } from './link-style.js';
 import {
     LAYOUT_3D,
@@ -67,7 +68,11 @@ import {
     zoom3d,
     fitOrbit,
     easeOrbit,
-    ribbonOffset,
+    trimToRims,
+    writeCapsule,
+    capsuleIndex,
+    LINE_VERTS,
+    TOKEN_RIM,
     normalizedDepths,
     loadViewMode,
     saveViewMode,
@@ -77,6 +82,8 @@ import {
     layoutForPersonScale,
     MIN_PERSON_PX,
     MAX_PERSON_SCALE,
+    showBodySphere,
+    faceLiftDirection,
 } from './web3d.js';
 
 // 3D web mode (round 15): deep space behind the web, and fog so far people
@@ -97,11 +104,7 @@ const safeStorage = () => {
 
 // Bundle every face frame at build time so the game works fully offline.
 // Map ends up as: textures[state][frame] -> THREE.Texture
-const faceModules = import.meta.glob('../assets/faces/*/*.png', {
-    eager: true,
-    query: '?url',
-    import: 'default',
-});
+// Item 29 (c): each land has its own citizens (src/ui/citizen-faces.js).
 
 // Item 20: length of the gentle death moment (animateDeath).
 export const DEATH_MS = 1600;
@@ -135,6 +138,9 @@ const FACE_SCALE = 1.15;
 const FIT_PAD = 1.2;
 // Height of the button row at the top of the web (Key, 2D/3D), in CSS px.
 export const TOP_BUTTONS_PX = 54;
+// Strip kept clear at the bottom of the web for the one-line tool hint
+// (10 px from the edge, about 34 px tall), in CSS px. Round 33.
+export const BOTTOM_HINT_PX = 48;
 
 // Link ribbon widths and colour keys come from link-style.js.
 const LINK_COLORS = {
@@ -162,6 +168,10 @@ const WARMUP_STEPS = 400;
 const _tmp = new THREE.Vector3();
 const _tmp2 = new THREE.Vector3();
 const _proj = new THREE.Vector3();
+const _a2 = new THREE.Vector3();
+const _b2 = new THREE.Vector3();
+const _cam2 = new THREE.Vector3();
+const _quat = new THREE.Quaternion();
 
 const sphereGeometry = new THREE.SphereGeometry(NODE_RADIUS, 14, 10);
 const sphereMaterials = {};
@@ -179,9 +189,12 @@ const ringGeometry = new THREE.RingGeometry(0.62, 0.78, 36);
 // through the crowd in front of them, like an x-ray alert.
 const pulseMaterial = new THREE.MeshBasicMaterial({ color: 0xff4d6d, transparent: true, opacity: 0.6, depthWrite: false, depthTest: false, fog: false });
 const PULSE_RENDER_ORDER = 6;
-// Red at-risk lines drawn over the faces in 3D (item 15): above faces, below
-// the badges (5) and the sick pulse ring (6).
-export const RISK_OVERLAY_RENDER_ORDER = 4;
+// Red at-risk lines drawn again in 3D with no depth test (item 15), so a red
+// line behind someone's body still shows. Item 27 (round 43): the overlay now
+// draws after the other lines (-1) but before the faces (0), so a red line
+// passes behind every face instead of across it.
+export const RISK_OVERLAY_RENDER_ORDER = -0.5;
+export const FACE_RENDER_ORDER = 0;
 export const RISK_OVERLAY_OPACITY = 0.9;
 const particleMaterial = new THREE.MeshBasicMaterial({ color: 0xdc3545 });
 
@@ -264,15 +277,14 @@ export function badgeKind(node) {
     return null;
 }
 
-function loadFaceTextures() {
+function loadFaceTextures(civ) {
     const loader = new THREE.TextureLoader();
     const textures = {};
     for (const state of STATES) {
         textures[state] = {};
         const frames = { idle: 'idle.png', blink: 'blink.png', reaction: REACTION_FRAME[state] };
         for (const [frame, file] of Object.entries(frames)) {
-            const key = `../assets/faces/${state}/${file}`;
-            const url = faceModules[key];
+            const url = citizenFaceUrl(civ, state, file.replace(/\.png$/, ''));
             const tex = loader.load(url);
             tex.colorSpace = THREE.SRGBColorSpace;
             textures[state][frame] = tex;
@@ -280,8 +292,16 @@ function loadFaceTextures() {
     }
     return textures;
 }
-// Loaded once per page lifetime; shared across level restarts.
-const faceTextures = loadFaceTextures();
+// One set per land, loaded the first time a level in that land starts and
+// kept for the page lifetime (level restarts reuse it).
+const faceTextureSets = new Map();
+export function faceTexturesFor(civ = DEFAULT_CIV) {
+    const key = civ || DEFAULT_CIV;
+    if (!faceTextureSets.has(key)) faceTextureSets.set(key, loadFaceTextures(key));
+    return faceTextureSets.get(key);
+}
+// The set people are drawn from right now (setCivilization switches it).
+let faceTextures = faceTexturesFor(DEFAULT_CIV);
 
 // Sunflower spiral on the z = 0 plane: even spacing, no overlaps at start.
 function sunflowerDisc(n, radius, out) {
@@ -485,6 +505,16 @@ export class NetworkView {
         }
     }
 
+    // Item 29 (c): dress the people for the level's land. Call before
+    // update(); people already on screen switch at once.
+    setCivilization(civ) {
+        this.civ = civ || DEFAULT_CIV;
+        faceTextures = faceTexturesFor(this.civ);
+        for (const obj of this.nodeObjs?.values?.() || []) {
+            obj.sprite.material.map = faceTextures[obj.node.state]?.idle || faceTextures.healthy.idle;
+        }
+    }
+
     // ---- Node / link management -------------------------------------------
 
     makeNodeObj(node, pos) {
@@ -500,6 +530,7 @@ export class NetworkView {
         });
         const sprite = new THREE.Sprite(spriteMaterial);
         sprite.scale.set(FACE_SCALE, FACE_SCALE, 1);
+        sprite.renderOrder = FACE_RENDER_ORDER;
         group.add(sprite);
 
         const pulse = new THREE.Mesh(ringGeometry, pulseMaterial);
@@ -675,9 +706,10 @@ export class NetworkView {
             this.autoFit = true;
             this.physicsSettled = true;
         } else if (linkKey !== this.lastLinkKey) {
-            // A link was severed: let the network relax gently. Vaccinate
-            // changes no links, so the people you are tapping stay put.
-            this.alpha = Math.max(this.alpha || 0, LAYOUT.reheatAlpha);
+            // A link was severed: let the network relax very gently, so the
+            // next line you aim at stays under your thumb (round 32).
+            // Vaccinate changes no links, so the people you tap stay put.
+            this.alpha = Math.max(this.alpha || 0, this.is3d ? LAYOUT_3D.severAlpha : LAYOUT.severAlpha);
             this.physicsSettled = false;
         } else if (boxChanged) {
             // Someone left for the care box: close the gap very gently.
@@ -687,8 +719,9 @@ export class NetworkView {
         this.lastLinkKey = linkKey;
     }
 
-    // Links are flat ribbons (two triangles each) in one mesh, so width and
-    // color can carry meaning; plain GL lines are always 1px.
+    // Links are camera-facing capsules (a band with rounded ends, item 27) in
+    // one mesh, so width and color can carry meaning; plain GL lines are
+    // always 1px. Each capsule has LINE_VERTS points and is filled as a fan.
     rebuildLinks() {
         if (this.linkMesh) {
             this.scene.remove(this.linkMesh);
@@ -701,13 +734,10 @@ export class NetworkView {
             this.riskMesh = null;
         }
         const count = this.links.length;
-        this.linkPositions = new Float32Array(count * 12);
-        this.linkColors = new Float32Array(count * 12);
-        const index = [];
-        for (let i = 0; i < count; i++) {
-            const o = i * 4;
-            index.push(o, o + 1, o + 2, o + 2, o + 1, o + 3);
-        }
+        const floats = count * LINE_VERTS * 3;
+        this.linkPositions = new Float32Array(floats);
+        this.linkColors = new Float32Array(floats);
+        const index = capsuleIndex(count);
         const geo = new THREE.BufferGeometry();
         geo.setAttribute('position', new THREE.BufferAttribute(this.linkPositions, 3));
         geo.setAttribute('color', new THREE.BufferAttribute(this.linkColors, 3));
@@ -723,8 +753,8 @@ export class NetworkView {
         // Item 15 (round 20): in 3D the red at-risk lines are drawn a second
         // time on top of everyone (no depth test), so a red line that passes
         // behind a face still shows from any angle. Other lines stay behind.
-        this.riskPositions = new Float32Array(count * 12);
-        this.riskColors = new Float32Array(count * 12);
+        this.riskPositions = new Float32Array(floats);
+        this.riskColors = new Float32Array(floats);
         const rgeo = new THREE.BufferGeometry();
         rgeo.setAttribute('position', new THREE.BufferAttribute(this.riskPositions, 3));
         rgeo.setAttribute('color', new THREE.BufferAttribute(this.riskColors, 3));
@@ -774,31 +804,34 @@ export class NetworkView {
             // Lines grow with people, but more gently (square root), so a
             // boss web of big faces does not turn into thick bars.
             const w = hidden ? 0 : (style.width * Math.sqrt(this.personScale)) / 2;
+            const start = k;
             if (this.is3d) {
-                // Ribbons turn to face the camera so they keep their width
-                // from every angle.
-                const o = ribbonOffset(pa, pb, this.camera.position, w);
-                pos[k++] = pa.x + o.x; pos[k++] = pa.y + o.y; pos[k++] = pa.z + o.z;
-                pos[k++] = pa.x - o.x; pos[k++] = pa.y - o.y; pos[k++] = pa.z - o.z;
-                pos[k++] = pb.x + o.x; pos[k++] = pb.y + o.y; pos[k++] = pb.z + o.z;
-                pos[k++] = pb.x - o.x; pos[k++] = pb.y - o.y; pos[k++] = pb.z - o.z;
+                // Capsules turn to face the camera so they keep their width
+                // from every angle, and stop at each person's rim (plus the
+                // round end) so no line crosses its own people's faces.
+                const rim = TOKEN_RIM * this.personScale + w;
+                const cut = w > 0 ? trimToRims(pa, pb, this.camera.position, rim, rim) : null;
+                if (cut) k = writeCapsule(pos, k, cut.a, cut.b, this.camera.position, w);
+                else {
+                    // Hidden behind its two people: a zero-area capsule.
+                    for (let v = 0; v < LINE_VERTS; v++) {
+                        pos[k++] = pa.x; pos[k++] = pa.y; pos[k++] = pa.z;
+                    }
+                }
             } else {
-                const dx = pb.x - pa.x;
-                const dy = pb.y - pa.y;
-                const len = Math.hypot(dx, dy) || 1;
-                const nx = (-dy / len) * w;
-                const ny = (dx / len) * w;
-                pos[k++] = pa.x + nx; pos[k++] = pa.y + ny; pos[k++] = -0.1;
-                pos[k++] = pa.x - nx; pos[k++] = pa.y - ny; pos[k++] = -0.1;
-                pos[k++] = pb.x + nx; pos[k++] = pb.y + ny; pos[k++] = -0.1;
-                pos[k++] = pb.x - nx; pos[k++] = pb.y - ny; pos[k++] = -0.1;
+                // Flat view: lines lie just under the faces and run centre to
+                // centre; the faces cover the round ends.
+                _a2.set(pa.x, pa.y, -0.1);
+                _b2.set(pb.x, pb.y, -0.1);
+                _cam2.set((pa.x + pb.x) / 2, (pa.y + pb.y) / 2, 100);
+                k = writeCapsule(pos, k, _a2, _b2, _cam2, w);
             }
             const base = (this.is3d ? LINK_COLORS : LINK_COLORS_2D)[style.color];
             const m = style.pulse ? pulse : 1;
             const onTop = overlay && kind === 'risk' && !hidden;
-            for (let v = 0; v < 4; v++) {
-                // Overlay copy of this quad, or a zero-area quad when not red.
-                const at = k - 12 + v * 3;
+            for (let v = 0; v < LINE_VERTS; v++) {
+                // Overlay copy of this capsule, or a zero-area one when not red.
+                const at = start + v * 3;
                 rpos[at] = onTop ? pos[at] : pa.x;
                 rpos[at + 1] = onTop ? pos[at + 1] : pa.y;
                 rpos[at + 2] = onTop ? pos[at + 2] : pa.z;
@@ -828,7 +861,13 @@ export class NetworkView {
     fitTarget() {
         const pts = [];
         for (const o of this.nodeObjs.values()) if (!o.boxed) pts.push(o.pos);
-        return fitCamera(pts, { fovDeg: this.camera.fov, aspect: this.camera.aspect, pad: FIT_PAD + 0.6 * (this.personScale - 1), topReserve: this.topReserve() });
+        return fitCamera(pts, { fovDeg: this.camera.fov, aspect: this.camera.aspect, pad: FIT_PAD + 0.6 * (this.personScale - 1), topReserve: this.topReserve(), bottomReserve: this.bottomReserve() });
+    }
+
+    // Share of the view's height the tool hint covers at the bottom.
+    bottomReserve() {
+        const h = this.container?.clientHeight || 0;
+        return h > 0 ? Math.min(0.15, BOTTOM_HINT_PX / h) : 0;
     }
 
     // Share of the view's height the Key and 2D/3D buttons cover at the top
@@ -1096,9 +1135,8 @@ export class NetworkView {
             if (this.alpha === 0 && maxSpeed < 0.002) this.physicsSettled = true;
         }
 
-        // Camera-facing direction, reused to float each face sprite just off
-        // the sphere surface so faces stay readable and occlude correctly.
-        _tmp2.set(0, 0, 1); // in 2D the camera always looks straight down
+        // How far each face sprite floats off the sphere surface toward the
+        // camera, so faces stay readable and occlude correctly.
         const faceOffset = NODE_RADIUS + 0.08;
         if (this.is3d) {
             // Slow drift so the depth reads, paused while a tool is chosen
@@ -1120,6 +1158,10 @@ export class NetworkView {
         for (const obj of this.nodeObjs.values()) {
             obj.group.position.copy(obj.pos);
             obj.group.scale.setScalar(this.personScale);
+            // 2D: no body sphere behind the face, so no crescent peeks out
+            // (round 37, see showBodySphere in web3d.js).
+            const body = showBodySphere(this.is3d);
+            if (obj.sphere.visible !== body) obj.sphere.visible = body;
             // In 3D each person (ring, halo, badge) turns to face the camera.
             if (this.is3d) obj.group.quaternion.copy(this.camera.quaternion);
             else obj.group.quaternion.identity();
@@ -1140,7 +1182,12 @@ export class NetworkView {
                 scale = FACE_SCALE * (1 + 0.3 * Math.sin(Math.PI * Math.min(1, Math.max(0, p))));
             }
             obj.sprite.scale.set(scale, scale, 1);
-            obj.sprite.position.copy(_tmp2).multiplyScalar(faceOffset);
+            // Lift the face toward the camera along the person's own line of
+            // sight, so it projects dead centre on the body (round 37).
+            // The group may be turned to face the camera, so undo that turn.
+            const lift = faceLiftDirection(obj.pos, this.camera.position);
+            _quat.copy(obj.group.quaternion).invert();
+            obj.sprite.position.set(lift.x, lift.y, lift.z).applyQuaternion(_quat).multiplyScalar(faceOffset);
         }
 
         // Infected nodes pulse so the threats stand out at a glance.
@@ -1305,11 +1352,13 @@ export class NetworkView {
         // 4. The two nodes recoil apart, and the screen ticks.
         const away = _tmp2.subVectors(b.pos, a.pos);
         if (!this.is3d) away.setZ(0);
-        away.normalize().multiplyScalar(0.55);
+        // Round 32: a small recoil and a gentle reheat, so the rest of the
+        // web stays where the player is aiming next.
+        away.normalize().multiplyScalar(LAYOUT.severRecoil);
         b.vel.add(away);
         a.vel.sub(away);
         this.physicsSettled = false;
-        this.alpha = Math.max(this.alpha || 0, LAYOUT.reheatAlpha);
+        this.alpha = Math.max(this.alpha || 0, this.is3d ? LAYOUT_3D.severAlpha : LAYOUT.severAlpha);
         this.shakeUntil = start + 140;
         this.lastTouch = start;
     }
