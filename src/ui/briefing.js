@@ -1,5 +1,5 @@
 import { toolkitCard } from '../config/toolkits.js';
-import { briefingCfr } from './deaths.js';
+import { briefingCfr, briefingRealR0 } from './deaths.js';
 
 // Briefing screen. There is no difficulty picker any more: each play rolls
 // its own threat (src/config/difficulty-roll.js) and the briefing shows it
@@ -16,6 +16,11 @@ export function fillBriefing(scenario) {
     if (cfrEl) cfrEl.textContent = cfr;
     const row = document.getElementById('briefing-cfr-row');
     if (row) row.hidden = !cfr;
+    const realR0 = briefingRealR0(scenario);
+    const r0El = document.getElementById('briefing-real-r0');
+    if (r0El) r0El.textContent = realR0;
+    const r0Row = document.getElementById('briefing-real-r0-row');
+    if (r0Row) r0Row.hidden = !realR0;
 }
 
 export function threatPipsHtml(pips) {

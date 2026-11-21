@@ -258,7 +258,7 @@ export function rTone(r) {
 }
 
 // { value, headline, lines[] } for the R card.
-export function rExplainer({ r = null, r0 = '' } = {}) {
+export function rExplainer({ r = null, r0 = '', realR0Note = '' } = {}) {
     const value = formatR(r);
     const lines = [];
     let headline;
@@ -279,12 +279,14 @@ export function rExplainer({ r = null, r0 = '' } = {}) {
     }
     const high = r0High(r0);
     if (high != null) {
-        let line = `The briefing estimate is R₀ ${String(r0).trim()}: how fast it spreads when nobody is protected.`;
+        let line = `On this web R₀ is ${String(r0).trim()}: how fast it spreads here when nobody is protected.`;
         if (r != null && Number.isFinite(r) && r > high + 0.5) {
-            line += ' This web is more crowded than a real town, so R runs higher here.';
+            line += ' This web is more crowded than a real town, so R runs above that here.';
         }
         lines.push(line);
     }
+    // Round 49: the real disease's R0, so the game number is not mistaken for it.
+    if (realR0Note) lines.push(realR0Note);
     return { value, headline, lines };
 }
 
