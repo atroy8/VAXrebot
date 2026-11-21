@@ -589,7 +589,7 @@ export class EpidemicSimulator {
             return;
         }
         if (this.autoAdvance.isRunning()) this.autoAdvance.hold();
-        openRCard({ r: this.lastR, r0: this.currentR0 });
+        openRCard({ r: this.lastR, r0: this.currentR0, realR0Note: this.currentScenario?.r0Note || '' });
     }
 
     nextDay() {
@@ -974,7 +974,7 @@ export class EpidemicSimulator {
                 this.rTickTimer = setTimeout(() => el.classList.remove('r-tick-down', 'r-tick-up'), 700);
             }
         }
-        if (isRCardOpen()) openRCard({ r: this.lastR, r0: this.currentR0 });
+        if (isRCardOpen()) openRCard({ r: this.lastR, r0: this.currentR0, realR0Note: this.currentScenario?.r0Note || '' });
     }
 
     updateUI() {

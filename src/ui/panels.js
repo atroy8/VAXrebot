@@ -357,10 +357,10 @@ export function renderLegend() {
 // tap outside, or when the R value changes under it.
 const escapeHtml = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
-export function renderRCard({ r = null, r0 = '' } = {}) {
+export function renderRCard({ r = null, r0 = '', realR0Note = '' } = {}) {
     const card = document.getElementById('r-card');
     if (!card) return null;
-    const { value, headline, lines } = rExplainer({ r, r0 });
+    const { value, headline, lines } = rExplainer({ r, r0, realR0Note });
     const tone = rTone(r) || 'none';
     card.className = `r-card r-card--${tone}`;
     card.innerHTML = `<div class="r-card-top">

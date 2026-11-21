@@ -16,6 +16,11 @@ export function briefingCfr(scenario) {
     return `${oneIn(scenario.realCfr)} cases`;
 }
 
+// Round 49: briefing line for the real disease's R0 ('' hides the row).
+export function briefingRealR0(scenario) {
+    return scenario && scenario.realR0 ? String(scenario.realR0) : '';
+}
+
 // Results lines under the numbers. Returns [] or up to three short lines.
 export function resultsDeathLines({ outcome, stats, scenario, fatalityRate }) {
     const lines = [];
