@@ -70,7 +70,7 @@ export const TOOLKITS = Object.freeze({
     boss: {
         id: 'boss',
         tools: ['vaccinate', 'quarantine', 'severLink'],
-        why: 'The final stand against the carrier. Every tool is yours.',
+        why: 'The final stand against the carrier. Every tool is yours, even the first trial doses of a vaccine.',
     },
 });
 
