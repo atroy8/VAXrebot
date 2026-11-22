@@ -206,6 +206,17 @@
 .tool-name { font-weight: 700; font-size: 0.95rem; line-height: 1.15; }
 .tool-usage { font-size: 0.78rem; color: var(--color-text-secondary); white-space: nowrap; }
 .tool-item.shop-chip .tool-icon { background: #f0b400; }
+/* Round 50: enough funds for a power-up. A gold ring and a slow glow, so the
+   Shop reads as worth a tap without shouting over the tools. */
+.tool-item.shop-chip.can-buy { border-color: #f0b400; }
+.tool-item.shop-chip.can-buy .tool-icon { animation: shop-glow 2.4s ease-in-out infinite; }
+@keyframes shop-glow {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(240, 180, 0, 0); }
+    50% { box-shadow: 0 0 0 6px rgba(240, 180, 0, 0.35); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .tool-item.shop-chip.can-buy .tool-icon { animation: none; box-shadow: 0 0 0 3px rgba(240, 180, 0, 0.35); }
+}
 
 .day-controls { display: flex; gap: 8px; margin-top: auto; }
 .day-controls .btn { min-height: 52px; font-size: 1.05rem; }
@@ -287,7 +298,9 @@
     }
     .tools-list::-webkit-scrollbar { display: none; }
     .tool-item {
-        flex: 0 0 auto;
+        /* Round 50: a short tray (tools plus Shop) shares the full width, so
+           chips grow past 72 px; a long one still scrolls. */
+        flex: 1 0 72px;
         flex-direction: column;
         justify-content: center;
         gap: 2px;
@@ -306,13 +319,17 @@
 /* Locked and spent tools stay tappable so they can explain themselves. */
 #tools-list .tool-item.disabled { pointer-events: auto; cursor: help; }
 
-/* Phones: fade the tray's right edge so it reads as scrollable. */
+/* Phones: when the tray is longer than the screen, the Shop chip stays pinned
+   at the right edge and the other chips slide under it, with a soft shadow on
+   its left so the tray still reads as scrollable (round 50; it used to fade
+   the right edge, which also hid the Shop chip). */
 @media (max-width: 768px) {
-    .tools-list {
-        -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
-        mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+    .tools-list.scrolls .shop-chip {
+        position: sticky;
+        right: 0;
+        z-index: 1;
+        box-shadow: -12px 0 14px -8px rgba(15, 23, 42, 0.55), 0 3px 0 var(--washi-edge, #d6c9a8);
     }
-    .tools-list.at-end { -webkit-mask-image: none; mask-image: none; }
 }
 
 /* Phones: toasts sit just above the tray, not over the HUD. */

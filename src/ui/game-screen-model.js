@@ -162,6 +162,23 @@ export function toolChips(tools, difficulty, day, dailyUsage, charges = {}) {
     return orderChips(chips);
 }
 
+// Round 50 playtest fix: every level opened with three empty power-ups
+// (Eureka! x0, Stay Home Pay x0, Vax Blitz x0) in the tray. On a 390 px phone
+// they pushed the Shop chip off screen, so the tray scrolled sideways on
+// every level, and a player with funds to spend could not see where to spend
+// them. The tray now shows the level's tools, the power-ups the player
+// actually holds, and the Shop chip, which is where empty ones are bought.
+// toolChips() keeps every chip, so tool logic is unchanged.
+export function trayChips(chips) {
+    return chips.filter((c) => !(c.powerUp && c.state === 'empty'));
+}
+
+// The Shop chip glows when the player can afford at least one power-up.
+export function shopCanBuy(funding, costs) {
+    const prices = (costs || []).filter((c) => Number.isFinite(c));
+    return funding != null && prices.length > 0 && funding >= Math.min(...prices);
+}
+
 // Round 28 playtest fix: level 1 opened with two locked chips (Vaccinate
 // day 2, Quarantine day 3) ahead of Sever, the only tool ready on day 1, so
 // the first thing a new player saw in the tray was greyed out. Classic tools
