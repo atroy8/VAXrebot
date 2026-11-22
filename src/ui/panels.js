@@ -3,7 +3,8 @@
 // No game logic here; callers pass plain data.
 import { formatR, rTone, rExplainer, rScalePos } from './game-screen-model.js';
 import { spriteFor } from '../sprites.js';
-import { toolChips, lossReason, titleClass } from './game-screen-model.js';
+import { toolChips, trayChips, shopCanBuy, lossReason, titleClass } from './game-screen-model.js';
+import { POWER_UPS } from '../economy.js';
 import { threatPipsHtml } from './briefing.js';
 
 // Small inline icons for the tool tray (no emoji on the game screen).
@@ -71,11 +72,11 @@ export function renderHeader({ scenarioName, difficultyName, difficultyId, threa
     }
 }
 
-// Bottom tool tray: one button per tool plus a Shop button. Power-ups with
-// no charges stay tappable ('empty') so a tap can open the shop.
+// Bottom tool tray: one button per tool, one per power-up the player holds,
+// plus a Shop button (round 50: empty power-ups live in the shop, not the tray).
 export function renderTools(tools, difficulty, day, dailyUsage, { charges = {}, funding = null, selected = null } = {}) {
     const toolsList = document.getElementById('tools-list');
-    const chips = toolChips(tools, difficulty, day, dailyUsage, charges);
+    const chips = trayChips(toolChips(tools, difficulty, day, dailyUsage, charges));
     const html = chips
         .map((c) => {
             const cls = ['tool-item', c.state === 'locked' || c.state === 'spent' || c.state === 'off' ? 'disabled' : '', c.state === 'off' ? 'off' : '', c.state === 'empty' ? 'empty' : '', selected === c.id ? 'selected' : '']
@@ -89,11 +90,15 @@ export function renderTools(tools, difficulty, day, dailyUsage, { charges = {}, 
                 </button>`;
         })
         .join('');
-    const shop = `<button type="button" class="tool-item shop-chip" data-tool="shop">
+    const canBuy = shopCanBuy(funding, Object.values(POWER_UPS).map((p) => p.cost));
+    const shop = `<button type="button" class="tool-item shop-chip${canBuy ? ' can-buy' : ''}" data-tool="shop">
             <span class="tool-icon">${ICONS.shop}</span>
             <span class="tool-text"><span class="tool-name">Shop</span><span class="tool-usage">${funding == null ? 'Power-ups' : `${funding} funds`}</span></span>
         </button>`;
     toolsList.innerHTML = html + shop;
+    // Round 50: a tray longer than the screen pins the Shop chip at its right
+    // edge (game-screen.css), so Shop never scrolls out of reach.
+    toolsList.classList.toggle('scrolls', toolsList.scrollWidth > toolsList.clientWidth + 4);
 }
 
 // One-line hint over the network for the selected tool; empty hides it.
