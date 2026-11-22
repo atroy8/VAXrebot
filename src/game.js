@@ -220,10 +220,6 @@ export class EpidemicSimulator {
                 this.togglePause();
             }
         });
-        const tray = document.getElementById('tools-list');
-        tray.addEventListener('scroll', () => {
-            tray.classList.toggle('at-end', tray.scrollLeft + tray.clientWidth >= tray.scrollWidth - 4);
-        }, { passive: true });
         document.getElementById('shop-sheet').addEventListener('click', (e) => {
             if (e.target.closest('[data-shop-close]')) this.closeShop();
         });
