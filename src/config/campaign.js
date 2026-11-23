@@ -18,6 +18,16 @@
 // Tuning comes from src/config/campaign-tuning.js (written by
 // scripts/tune-campaign.mjs); levels without an entry use the defaults below.
 import { CAMPAIGN_TUNING } from './campaign-tuning.js';
+
+// Round 51: hand-set tuning that wins over CAMPAIGN_TUNING and that
+// scripts/tune-campaign.mjs leaves alone. Level 1 is a new player's first
+// game. With 2 cuts a day about 1 in 7 sensible first games were lost on
+// day 2 or 3, before Quarantine opens, even after cutting every red line
+// they could on day 1. A third cut a day lets the act-early lesson work
+// when it is followed, while random tapping still rarely wins (about 13%).
+export const ONBOARDING_TUNING = {
+    'mizuho-1': { dailyLimits: { vaccinate: 2, quarantine: 2, severLink: 3 } },
+};
 import { STAR_TARGETS } from './star-targets.js';
 import { toolkitForSlot } from './toolkits.js';
 
@@ -270,7 +280,7 @@ export function buildCampaign() {
                 population: populationFor(pi, slot),
                 // Item 16: the tools this level offers (src/config/toolkits.js).
                 toolkit,
-                tuning: { ...defaultTuning(difficultyId, slot), ...(CAMPAIGN_TUNING[id] || {}) },
+                tuning: { ...defaultTuning(difficultyId, slot), ...(CAMPAIGN_TUNING[id] || {}), ...(ONBOARDING_TUNING[id] || {}) },
             };
             if (variant) level.variant = variant;
             levels.push(level);

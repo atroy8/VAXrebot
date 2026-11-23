@@ -49,10 +49,9 @@ describe('results footer (round 30)', () => {
 
     it('uses the same paper colour as the themed results card', () => {
         const theme = read('src/ui/theme-ai-gold.css');
-        const fade = theme.match(/#game-over-screen \.game-over-actions \{[^}]*(#[0-9a-f]{6}) 14px/i);
-        expect(fade).not.toBeNull();
+        // Round 51: the bar is solid paper, read from the same variable.
+        expect(theme).toMatch(/#game-over-screen \.game-over-actions \{\s*background:\s*var\(--results-paper\)/);
         const paper = theme.match(/#game-over-screen \{\s*--results-paper:\s*(#[0-9a-f]{6})/i);
         expect(paper).not.toBeNull();
-        expect(paper[1].toLowerCase()).toBe(fade[1].toLowerCase());
     });
 });
