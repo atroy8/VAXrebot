@@ -23,6 +23,7 @@ import { writeFileSync } from 'node:fs';
 import { cpus } from 'node:os';
 import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads';
 import { LEVELS } from '../src/config/levels.js';
+import { ONBOARDING_TUNING } from '../src/config/campaign.js';
 import { playRun } from '../src/sim/balance.js';
 
 export function winTarget(i, n = LEVELS.length) {
@@ -45,6 +46,10 @@ export const LIMIT_PRESETS = [
     { vaccinate: 1, quarantine: 2, severLink: 1 },
     { vaccinate: 1, quarantine: 1, severLink: 1 },
 ];
+// Round 51: level indexes the tuner may change (hand-set onboarding levels are left alone).
+export function withoutPinned(indexes, levels = LEVELS, pinned = ONBOARDING_TUNING) {
+    return indexes.filter((li) => !pinned[levels[li]?.id]);
+}
 export const CAPS = [0.25, 0.35, 0.45, 0.55];
 const CLASSIC = ['vaccinate', 'quarantine', 'severLink'];
 
@@ -156,6 +161,8 @@ if (!isMainThread) {
     // TUNE_ONLY=3,17,20 retunes just those level indexes (round 47).
     const all = process.env.TUNE_ONLY ? process.env.TUNE_ONLY.split(',').map(Number) : [];
     if (!all.length) for (let li = FROM; li <= TO; li++) all.push(li);
+    // Round 51: hand-set onboarding levels (src/config/campaign.js) are never retuned.
+    all.splice(0, all.length, ...withoutPinned(all));
     const shards = Array.from({ length: N }, (_, k) => all.filter((_, j) => j % N === k)).filter((s) => s.length);
     await Promise.all(
         shards.map(
