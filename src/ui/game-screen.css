@@ -628,7 +628,21 @@
     margin-left: -8px;
     margin-right: -8px;
     padding: 10px 8px calc(10px + env(safe-area-inset-bottom, 0px));
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0) 0, #fff 14px);
+    background: var(--results-paper, #fff);
+}
+/* Round 51: the bar used to fade in over its own top 14 px, so the line of
+   results text scrolling under it showed through, sliced in half right
+   above Replay and Map. The bar is now solid paper and the fade sits above
+   it, so text melts away before it reaches the buttons. */
+#game-over-screen .game-over-actions::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 100%;
+    height: 24px;
+    background: linear-gradient(180deg, rgba(255, 253, 247, 0), var(--results-paper, #fff));
+    pointer-events: none;
 }
 /* Round 30: the screen's bottom padding (16 px plus the home bar inset)
    left a strip under the sticky buttons where results text scrolled past,
