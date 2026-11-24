@@ -154,6 +154,22 @@ export function dismissToast(message) {
     }
 }
 
+// Round 52: tap feedback (info and error toasts) is about the day just
+// played. When the day turns, a line such as "Sever is used up for today"
+// would sit over a tray that says 3 left, so those fade out. Good news
+// (success) stays.
+export function dismissTapToasts() {
+    const container = document.getElementById('notification-container');
+    if (!container) return;
+    for (const n of [...container.children]) {
+        if (n.dataset.leaving || !TAP_TYPES.some((t) => n.className.includes(t))) continue;
+        clearTimeout(n._timer);
+        n.dataset.leaving = '1';
+        n.style.animation = 'fadeOutRight 0.25s forwards';
+        setTimeout(() => n.remove(), 250);
+    }
+}
+
 // Day banner (replaces the old text log): one line, fades on its own.
 export function showDayBanner({ text, tone = 'calm' }) {
     const el = document.getElementById('day-banner');
