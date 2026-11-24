@@ -166,7 +166,15 @@ function face(state, frame, o = OUTFITS.japan) {
     const ears = [x - r + 6, x + r - 6].map((ex2) => wire('circle', { cx: ex2, cy: y + 30, r: 32 }, { fill: o.skin, sw: 7 })).join('');
     const head = `${o.behind ? o.behind() : ''}${ears}${wire('circle', { cx: x, cy: y, r }, { fill: o.skin })}${hl(x - 70, y - 40, 40, 22, -25, 0.45)}`;
 
-    return { head, hair, eyes, brows, mouth, blush };
+    // Round 53: a beard sits on the jaw under the mouth, glasses over the eyes.
+    const beard = o.beard
+        ? wire('path', { d: `M${x - 156} ${y + 50} Q${x - 150} ${y + 200} ${x} ${y + 222} Q${x + 150} ${y + 200} ${x + 156} ${y + 50} Q${x + 120} ${y + 148} ${x} ${y + 152} Q${x - 120} ${y + 148} ${x - 156} ${y + 50} Z` }, { fill: o.hair, sw: 7 })
+        : '';
+    const glasses = o.glasses
+        ? ex.map((e) => wire('circle', { cx: e, cy: ey, r: 42 }, { sw: 6, shadow: false, gold: '#6b5a44' })).join('')
+            + wire('path', { d: `M${ex[0] + 42} ${ey - 4} q${68 - 42} -14 ${2 * (68 - 42)} 0` }, { sw: 6, shadow: false, gold: '#6b5a44' })
+        : '';
+    return { head, hair, eyes, brows, mouth, blush, beard, glasses };
 }
 
 const sparkle = (cx, cy, s) => wire('path', { d: `M${cx} ${cy - s} Q${cx + s * 0.18} ${cy - s * 0.18} ${cx + s} ${cy} Q${cx + s * 0.18} ${cy + s * 0.18} ${cx} ${cy + s} Q${cx - s * 0.18} ${cy + s * 0.18} ${cx - s} ${cy} Q${cx - s * 0.18} ${cy - s * 0.18} ${cx} ${cy - s}Z` }, { fill: GOLD_LIGHT, sw: 5 });
@@ -225,8 +233,8 @@ function cues(state, frame) {
 const dozeBubbles = () => [[690, 300, 18], [730, 250, 13], [762, 210, 9]]
     .map(([cx, cy, r]) => wire('circle', { cx, cy, r }, { fill: '#fdf2d8', sw: 5 })).join('');
 
-export function citizenSvg(state, frame, { size = 1024, background = '#ffffff', civ = 'japan' } = {}) {
-    const o = OUTFITS[civ] || OUTFITS.japan;
+export function citizenSvg(state, frame, { size = 1024, background = '#ffffff', civ = 'japan', look = null } = {}) {
+    const o = look ? outfitForLook(look) : OUTFITS[civ] || OUTFITS.japan;
     const f = face(state, frame, o);
     const tilt = frame === 'sleepy' ? 'rotate(-11 512 700)' : '';
     const fade = state === 'dead'
@@ -245,7 +253,7 @@ export function citizenSvg(state, frame, { size = 1024, background = '#ffffff', 
   <g transform="translate(512 600) scale(1.1) translate(-512 -600)">
   ${body(state, o)}
   <g clip-path="url(#inner)"><g transform="${tilt}">
-    ${f.head}${f.hair}${f.blush}${f.brows}${f.eyes}${f.mouth}
+    ${f.head}${f.hair}${f.blush}${f.beard || ''}${f.brows}${f.eyes}${f.glasses || ''}${f.mouth}
     ${state === 'quarantined' || state === 'exposed' || state === 'infected' || state === 'recovered' ? cues(state, frame) : ''}
   </g>
   ${state === 'vaccinated' || state === 'dead' ? cues(state, frame) : ''}
@@ -415,3 +423,156 @@ export const OUTFITS = {
 };
 
 export const CIV_IDS = Object.freeze(Object.keys(OUTFITS));
+
+// ---- Round 53: a crowd, not clones -----------------------------------------
+// Every level used to show one person copied across the whole web. Now each
+// level gets a cast of different people: skin tones from light to deep,
+// young and old (grey hair, glasses), beards, short, long, curly and tied
+// back hair, the land's own headwear on some, everyday clothes in several
+// colours, and a few visitors from other lands. Faces, expressions and state
+// cues never change, so a sick person reads the same on everyone.
+
+// Light to deep, shared by every land.
+export const SKIN_TONES = ['#f6e3c4', '#f2d6c0', '#e8c09a', '#d3a17a', '#c08a60', '#b67c56', '#ad7650', '#8d5b3e', '#6e452f', '#4f3222'];
+const ELDER_HAIR = ['#d9d6d0', '#b9b4ac'];
+const CLOTHES = ['#2f3f6e', '#55704a', '#7a2f3a', '#2f6f8f', '#b8342f', '#6b4f8f', '#c87a2f', '#3f7f6a'];
+
+// Where each land's people sit on the tone scale, and their hair colours.
+export const LAND_PEOPLE = {
+    japan: { tones: [0, 1, 2, 3], hair: ['#2b2233', '#3a2a22', '#1d1719'] },
+    sahel: { tones: [6, 7, 8, 9], hair: ['#231a1c', '#1a1414'] },
+    andes: { tones: [3, 4, 5, 6], hair: ['#211a1d', '#2a1d18'] },
+    mughal: { tones: [3, 4, 5, 7], hair: ['#211a1d', '#2a1d18', '#3a2a22'] },
+    nordic: { tones: [0, 1, 2], hair: ['#d4a24a', '#b5733a', '#e8d39a', '#8a5a2b'] },
+    maya: { tones: [4, 5, 6, 7], hair: ['#1d1719', '#2a1d18'] },
+    persia: { tones: [2, 3, 4, 5], hair: ['#2a1d18', '#3a2a22', '#1d1719'] },
+};
+
+export const HAIR_STYLES = ['short', 'long', 'curly', 'ponytail', 'bun'];
+
+function darken(hex, t = 0.35) {
+    return mix(hex, '#000000', t);
+}
+
+function hairStyle(style, hair) {
+    const cap = (top = 194, brow = 72) => wire('path', { d: capPath(top, brow) }, { fill: hair });
+    const shine = hl(H.x - 80, H.y - 150, 50, 18, -18, 0.28);
+    switch (style) {
+        case 'short':
+            return cap(192, 80) + wire('path', { d: `M${H.x - 60} ${H.y - 186} Q${H.x - 70} ${H.y - 130} ${H.x - 40} ${H.y - 88}` }, { sw: 6, shadow: false }) + shine;
+        case 'curly': {
+            let s = cap(200, 70);
+            for (let a = 195; a <= 345; a += 21) {
+                const r = (a * Math.PI) / 180;
+                s += wire('circle', { cx: Math.round(H.x + Math.cos(r) * 178), cy: Math.round(H.y - 20 + Math.sin(r) * 178), r: 48 }, { fill: hair, sw: 7 });
+            }
+            return s + shine;
+        }
+        case 'ponytail':
+            return cap(194, 70) + wire('circle', { cx: H.x + 150, cy: H.y - 150, r: 30 }, { fill: GOLD, sw: 5, gold: GOLD_LIGHT }) + shine;
+        case 'long':
+            return cap(196, 66) + wire('path', { d: `M${H.x + 20} ${H.y - 192} Q${H.x + 10} ${H.y - 120} ${H.x + 40} ${H.y - 84}` }, { sw: 6, shadow: false }) + shine;
+        case 'bun':
+        default:
+            return wire('circle', { cx: H.x, cy: H.y - 200, r: 50 }, { fill: hair })
+                + wire('path', { d: `M${H.x - 36} ${H.y - 222} l72 -26` }, { sw: 8, gold: GOLD_LIGHT })
+                + cap(190, 90) + shine;
+    }
+}
+
+function hairBehind(style, hair) {
+    if (style === 'long') {
+        return wire('path', { d: `M${H.x - 196} ${H.y - 40} Q${H.x - 236} ${H.y + 190} ${H.x - 176} ${H.y + 280} L${H.x + 176} ${H.y + 280} Q${H.x + 236} ${H.y + 190} ${H.x + 196} ${H.y - 40} Z` }, { fill: hair });
+    }
+    if (style === 'ponytail') {
+        return wire('path', { d: `M${H.x + 150} ${H.y - 160} Q${H.x + 270} ${H.y - 100} ${H.x + 230} ${H.y + 120} Q${H.x + 200} ${H.y + 30} ${H.x + 130} ${H.y - 110} Z` }, { fill: hair });
+    }
+    return '';
+}
+
+// The outfit a look is drawn with: the land's clothes and, when the look
+// wears the land's headwear, its hat; otherwise its own hair.
+export function outfitForLook(look) {
+    const base = OUTFITS[look.civ] || OUTFITS.japan;
+    const o = { ...base, skin: look.skin, robe: look.robe || base.robe, beard: !!look.beard, glasses: !!look.glasses };
+    if (look.style === 'headwear' && base.headwear) {
+        // The hat carries the land's own hair colour.
+        return o;
+    }
+    o.hair = look.hair || base.hair;
+    o.brow = darken(o.hair, look.elder ? 0.2 : 0.35);
+    o.headwear = () => hairStyle(look.style, o.hair);
+    o.behind = () => hairBehind(look.style, o.hair);
+    return o;
+}
+
+// A small seeded random source so a level's crowd is the same on a replay
+// with the same seed, and tests are stable.
+export function seededRandom(seed = 1) {
+    let s = (Math.floor(seed) >>> 0) || 1;
+    return () => {
+        s = (s * 1664525 + 1013904223) >>> 0;
+        return s / 4294967296;
+    };
+}
+
+const pick = (list, rng) => list[Math.floor(rng() * list.length) % list.length];
+
+function shuffled(list, rng) {
+    const a = list.slice();
+    for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(rng() * (i + 1));
+        [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+}
+
+// The cast for one level: `count` different looks, mostly people of the land
+// (`civ`) with about one in four visiting from elsewhere. Every cast mixes
+// tones, ages and hair, with at least one elder, one beard, the land's own
+// headwear (or bun in Japan) and two visitors once it has six or more people.
+export function castForLand(civ = 'japan', count = 10, rng = Math.random) {
+    const land = LAND_PEOPLE[civ] ? civ : 'japan';
+    const others = Object.keys(LAND_PEOPLE).filter((c) => c !== land);
+    const visitors = count >= 6 ? Math.max(2, Math.round(count / 4)) : count >= 3 ? 1 : 0;
+    const styles = shuffled(HAIR_STYLES, rng);
+    const tonesFor = (c) => LAND_PEOPLE[c].tones;
+    const looks = [];
+    const visitorLands = shuffled(others, rng);
+    for (let i = 0; i < count; i++) {
+        const visitor = i >= count - visitors;
+        const c = visitor ? visitorLands[(i - (count - visitors)) % visitorLands.length] : land;
+        const people = LAND_PEOPLE[c];
+        const tones = tonesFor(c);
+        // Locals walk the land's tone range in order so neighbours differ.
+        const tone = visitor ? pick(tones, rng) : tones[i % tones.length];
+        const elder = i === 1 || (i > 4 && rng() < 0.18);
+        const wearsHat = c === land ? i === 0 || (i > 2 && rng() < 0.3) : rng() < 0.5;
+        let style = wearsHat ? 'headwear' : styles[i % styles.length];
+        if (style === 'headwear' && !OUTFITS[c].headwear) style = 'bun';
+        // One bearded local per cast, on a hair style that suits it.
+        if (i === 2 && !visitor && ['long', 'ponytail', 'bun'].includes(style)) style = 'short';
+        looks.push({
+            civ: c,
+            skin: SKIN_TONES[tone],
+            tone,
+            hair: elder ? pick(ELDER_HAIR, rng) : pick(people.hair, rng),
+            style,
+            elder,
+            glasses: elder || rng() < 0.12,
+            beard: i === 2 || (style !== 'long' && style !== 'ponytail' && style !== 'bun' && rng() < 0.2),
+            robe: rng() < 0.4 ? undefined : pick(CLOTHES, rng),
+            visitor,
+        });
+    }
+    // A key that names everything drawn, so cached images never mix looks.
+    const keyOf = (l) => [l.civ, l.tone, l.style, l.hair, l.robe || '-', l.elder ? 'e' : '', l.glasses ? 'g' : '', l.beard ? 'b' : ''].join('.');
+    const seen = new Set();
+    for (const l of looks) {
+        // Two people drawn alike get different clothes.
+        for (let k = 0; seen.has(keyOf(l)) && k < CLOTHES.length; k++) l.robe = CLOTHES[k];
+        l.key = keyOf(l);
+        seen.add(l.key);
+    }
+    return looks;
+}

@@ -128,11 +128,13 @@ describe('citizens dressed for their land (item 29 c)', () => {
     it('care box and results faces use the current land', () => {
         setFaceCivilization('andes');
         expect(faceCivilization()).toBe('andes');
-        expect(faceTokenHtml('healthy')).toContain('faces-civ/andes/healthy-idle');
-        expect(faceTokenHtml('infected')).toContain('faces-civ/andes/infected-cough');
+        // Round 53: naming the land shows its face; with no land named the
+        // token shows the level's crowd instead (tests/round53-crowd.test.js).
+        expect(faceTokenHtml('healthy', { civ: 'andes' })).toContain('faces-civ/andes/healthy-idle');
+        expect(faceTokenHtml('infected', { civ: 'andes' })).toContain('faces-civ/andes/infected-cough');
         setFaceCivilization(null);
         expect(faceCivilization()).toBe('japan');
-        expect(faceTokenHtml('healthy')).toContain('faces/healthy/idle');
+        expect(faceTokenHtml('healthy', { civ: 'japan' })).toContain('faces/healthy/idle');
     });
 
     it('the title planet crowd comes from all seven lands', () => {
