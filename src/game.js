@@ -57,6 +57,7 @@ import { renderAverted } from './ui/averted.js';
 import { resultsActions } from './ui/results-actions.js';
 import { civilizationForLevel } from './config/civilizations.js';
 import { setFaceCivilization } from './ui/face-token.js';
+import { castLevel } from './ui/people.js';
 import { guardScreenTaps } from './ui/tap-guard.js';
 import {
     renderHeader,
@@ -390,6 +391,8 @@ export class EpidemicSimulator {
         document.getElementById('pause-game').setAttribute('aria-pressed', 'false');
         // Item 29 (c): the people wear the clothes of the level's land.
         const civ = civilizationForLevel(this.currentLevel);
+        // Round 53: a new crowd of different people for this play.
+        castLevel(civ);
         this.view.setCivilization?.(civ);
         setFaceCivilization(civ);
         // Item 22: the scene behind the web comes from the level's planet. The

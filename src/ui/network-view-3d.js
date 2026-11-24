@@ -53,6 +53,7 @@ import { pickTapTarget } from './tap-target.js';
 import { layoutStep as forceStep, settleLayout, nextAlpha, layoutForAspect, LAYOUT } from './force-layout.js';
 import { isBoxed } from './care-box-model.js';
 import { citizenFaceUrl, DEFAULT_CIV } from './citizen-faces.js';
+import { lookFor, lookFaceUrl } from './people.js';
 import { linkStyle, LINK_WIDTHS } from './link-style.js';
 import {
     LAYOUT_3D,
@@ -303,6 +304,37 @@ export function faceTexturesFor(civ = DEFAULT_CIV) {
 // The set people are drawn from right now (setCivilization switches it).
 let faceTextures = faceTexturesFor(DEFAULT_CIV);
 
+// Round 53: each person wears their own look from the level's cast
+// (src/ui/people.js), drawn from SVG on first use. Until a frame is ready the
+// land's face stands in, so nobody is ever blank.
+const lookTextures = new Map();
+const lookLoader = new THREE.TextureLoader();
+function lookTexture(look, state, frame) {
+    const file = frame === 'reaction' ? (REACTION_FRAME[state] || 'idle.png').replace(/\.png$/, '') : frame;
+    const key = `${look.key}|${state}|${file}`;
+    let tex = lookTextures.get(key);
+    if (!tex) {
+        tex = lookLoader.load(lookFaceUrl(look, state, file), (t) => {
+            t.userData.ready = true;
+        });
+        tex.colorSpace = THREE.SRGBColorSpace;
+        lookTextures.set(key, tex);
+    }
+    return tex.userData.ready ? tex : null;
+}
+// Free the last level's faces (a new cast is drawn every level).
+export function clearLookTextures() {
+    for (const tex of lookTextures.values()) tex.dispose();
+    lookTextures.clear();
+}
+export function faceFor(obj, state, frame = 'idle') {
+    if (obj && obj.look) {
+        const tex = lookTexture(obj.look, state, frame) || lookTexture(obj.look, state, 'idle');
+        if (tex) return tex;
+    }
+    return faceTextures[state]?.[frame] || faceTextures[state]?.idle || faceTextures.healthy.idle;
+}
+
 // Sunflower spiral on the z = 0 plane: even spacing, no overlaps at start.
 function sunflowerDisc(n, radius, out) {
     const golden = Math.PI * (3 - Math.sqrt(5));
@@ -510,8 +542,12 @@ export class NetworkView {
     setCivilization(civ) {
         this.civ = civ || DEFAULT_CIV;
         faceTextures = faceTexturesFor(this.civ);
+        // Round 53: a new level brings a new cast (game.js calls castLevel
+        // first), so the last level's faces are let go.
+        clearLookTextures();
         for (const obj of this.nodeObjs?.values?.() || []) {
-            obj.sprite.material.map = faceTextures[obj.node.state]?.idle || faceTextures.healthy.idle;
+            obj.look = lookFor(obj.node.id);
+            obj.sprite.material.map = faceFor(obj, obj.node.state);
         }
     }
 
@@ -523,8 +559,9 @@ export class NetworkView {
         sphere.userData.nodeId = node.id;
         group.add(sphere);
 
+        const look = lookFor(node.id);
         const spriteMaterial = new THREE.SpriteMaterial({
-            map: faceTextures[node.state]?.idle || faceTextures.healthy.idle,
+            map: faceFor({ look }, node.state),
             transparent: true,
             depthWrite: false,
         });
@@ -561,6 +598,7 @@ export class NetworkView {
 
         return {
             node,
+            look,
             group,
             sphere,
             sprite,
@@ -619,7 +657,7 @@ export class NetworkView {
             // schedule the happy flash for vaccinate / recover actions.
             if (obj.prevState !== node.state) {
                 obj.sphere.material = sphereMaterials[node.state] || sphereMaterials.healthy;
-                obj.sprite.material.map = faceTextures[node.state]?.idle || faceTextures.healthy.idle;
+                obj.sprite.material.map = faceFor(obj, node.state);
                 obj.pulse.visible = node.state === 'infected';
                 if (node.state === 'recovered' || node.state === 'vaccinated') {
                     obj.anim.happyUntil = now + 1000;
@@ -1166,7 +1204,7 @@ export class NetworkView {
             if (this.is3d) obj.group.quaternion.copy(this.camera.quaternion);
             else obj.group.quaternion.identity();
             const frame = this.frameFor(obj, now);
-            const tex = faceTextures[obj.node.state]?.[frame] || faceTextures.healthy.idle;
+            const tex = faceFor(obj, obj.node.state, frame);
             if (obj.sprite.material.map !== tex) obj.sprite.material.map = tex;
             // Sick faces skip the fog too (round 16), so they read at any depth.
             const wantFog = obj.node.state !== 'infected';
@@ -1377,7 +1415,7 @@ export class NetworkView {
         const up = new THREE.Vector3(0, 1, 0);
         if (this.is3d) up.applyQuaternion(this.camera.quaternion);
         const mat = new THREE.SpriteMaterial({
-            map: faceTextures.dead?.idle || faceTextures.recovered?.idle || faceTextures.healthy.idle,
+            map: faceFor(obj, 'dead') || faceTextures.recovered?.idle || faceTextures.healthy.idle,
             color: 0xdfe6f2,
             transparent: true,
             depthWrite: false,
