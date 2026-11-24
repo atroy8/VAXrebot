@@ -298,7 +298,9 @@ export function rExplainer({ r = null, r0 = '', realR0Note = '' } = {}) {
     if (high != null) {
         let line = `On this web R₀ is ${String(r0).trim()}: how fast it spreads here when nobody is protected.`;
         if (r != null && Number.isFinite(r) && r > high + 0.5) {
-            line += ' This web is more crowded than a real town, so R runs above that here.';
+            // Round 52: R₀ here is now this web's own number, so R only runs
+            // well above it when the sick happen to be the busiest people.
+            line += ' The sick here have more contacts than most, so R runs above that.';
         }
         lines.push(line);
     }

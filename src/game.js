@@ -1,5 +1,6 @@
 // EpidemicSimulator: orchestration only. Sim math lives in src/sim/*,
 // rendering in src/ui/*, audio in src/audio.js. Still exposed as window.game.
+import { levelR0Range, webR0, formatR0 } from './sim/r0.js';
 import { rollPopulation } from './config/campaign.js';
 import { scenarios } from './config/scenarios.js';
 import { difficulties } from './config/difficulties.js';
@@ -64,6 +65,7 @@ import {
     addLogEntry,
     showNotification,
     dismissToast,
+    dismissTapToasts,
     showToolHint,
     showDayBanner,
     renderGameOver,
@@ -326,7 +328,15 @@ export class EpidemicSimulator {
         // Briefing shows the mission name; the disease profile still comes
         // from the underlying scenario.
         fillBriefing({ ...this.currentScenario, name: level.name, description: level.blurb });
-        this.currentR0 = this.difficulties[level.difficultyId]?.R0 || '';
+        // Round 52: R₀ here comes from this play's own rules (src/sim/r0.js),
+        // so the HUD's day 1 R lands near it instead of far above a fixed label.
+        const r0 = levelR0Range({
+            networkType: this.currentScenario.networkType,
+            populationRange: this.currentScenario.populationRange,
+            transmissionRate: this.currentScenario.baseTransmissionRate * this.difficulty.transmissionMultiplier,
+            recoveryTime: this.difficulty.recoveryTime,
+        });
+        this.currentR0 = formatR0(r0.lo, r0.hi);
         showThreat({ pips: this.threat.pips, line: threatLine(this.threat.value), r0: this.currentR0 });
         showStarGoal({ parDays: parDaysFor(level), best: levelRecord(this.save, level.id).stars || 0 });
         const lesson = lessonFor(level.id);
@@ -423,6 +433,9 @@ export class EpidemicSimulator {
         this.network = { nodes: out.nodes, links: out.links };
         // Opening snapshot for the no-response baseline on the results screen.
         this.openingSnapshot = snapshotNetwork(this.network);
+        // Round 52: once the web exists, the R card names this web's own R₀.
+        const webR = webR0(this.network, this.currentScenario.baseTransmissionRate * this.difficulty.transmissionMultiplier, this.difficulty.recoveryTime);
+        if (Number.isFinite(webR) && webR > 0) this.currentR0 = formatR0(webR);
     }
 
     handleNodeClick(event, node) {
@@ -595,6 +608,8 @@ export class EpidemicSimulator {
             return;
         }
         this.autoAdvance.cancel();
+        // Round 52: yesterday's tap feedback is out of date once the day turns.
+        dismissTapToasts();
         // Round 48: a care line about waiting for Quarantine is out of date
         // once the day moves on; maybeWrapUp says what is true now.
         const nudges = this.gameState.careNudges;
