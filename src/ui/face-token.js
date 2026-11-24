@@ -3,6 +3,7 @@
 // and then. Plain HTML and CSS, so they are cheap to show by the dozen.
 
 import { citizenFaceUrl, DEFAULT_CIV } from './citizen-faces.js';
+import { lookFor, lookFaceUrl } from './people.js';
 
 // Item 29 (c): the care box and the results show the people of the land
 // being played. game.js sets it when a level starts.
@@ -26,13 +27,18 @@ export const FACE_LOOKS = {
 };
 
 // i staggers the blink so a row of faces never blinks in unison.
-export function faceTokenHtml(state, { i = 0, cls = '', civ = currentCiv } = {}) {
+// Round 53: with no land named, the token shows the level's crowd (the
+// i-th person of the cast, src/ui/people.js), so the care box and the results
+// are as varied as the web. Naming a land keeps that land's one face.
+export function faceTokenHtml(state, { i = 0, cls = '', civ = null } = {}) {
     const look = FACE_LOOKS[state] || FACE_LOOKS.healthy;
     const delay = ((i * 1.37) % 4).toFixed(2);
+    const person = civ ? null : lookFor(i);
+    const src = (frame) => (person ? lookFaceUrl(person, state, frame) : citizenFaceUrl(civ || currentCiv, state, frame));
     return (
         `<span class="face-token ${cls}" style="--ball:${look.color};--blink-delay:-${delay}s" aria-hidden="true">` +
-        `<img class="face-idle" src="${citizenFaceUrl(civ, state, 'idle')}" alt="">` +
-        `<img class="face-blink" src="${citizenFaceUrl(civ, state, look.blink)}" alt="">` +
+        `<img class="face-idle" src="${src('idle')}" alt="">` +
+        `<img class="face-blink" src="${src(look.blink)}" alt="">` +
         `</span>`
     );
 }
