@@ -1,0 +1,126 @@
+/* Native shell (App Store pass). Loaded last, from src/ui/native-shell.js.
+ *
+ * app-shell.css (round 18) already pads the screens for the notch and home
+ * bar and turns off double-tap zoom, text selection and page bounce. This
+ * file finishes that job for the iOS app:
+ *   - one set of --safe-* variables, so a test or a debug page can fake an
+ *     iPhone safe area by setting them on <html>;
+ *   - the few surfaces that still ignored the insets (found by running every
+ *     screen with a 59 px top and 34 px bottom inset);
+ *   - touch behaviour a native app is expected to have;
+ *   - rules that apply only inside the app (html.native-app, set by
+ *     native-shell.js when Capacitor reports a native platform).
+ */
+
+:root {
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-right: env(safe-area-inset-right, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-left: env(safe-area-inset-left, 0px);
+    /* Space under the results card: the card may dip a little into the home
+       bar zone, its buttons never do. */
+    --results-foot: max(var(--space-16, 16px), calc(var(--safe-bottom) - 12px));
+}
+
+/* ---- Touch: feels like an app, not a web page ---------------------------- */
+
+html {
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* No pull to refresh and no rubber band, on the page or behind a level. */
+html,
+body,
+.app-container,
+#game-screen,
+.game-layout {
+    overscroll-behavior: none;
+}
+
+/* Sheets and scrolling screens keep their own scroll and never pass a fling
+   on to the page underneath. */
+.screen,
+.settings-sheet,
+.shop-sheet-panel,
+.onboarding-dialog {
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+}
+
+/* Long press on a picture or a link shows no preview, no drag ghost. */
+img,
+a,
+canvas,
+svg {
+    -webkit-touch-callout: none;
+    -webkit-user-drag: none;
+}
+
+/* ---- Safe area: surfaces the earlier passes missed ------------------------ */
+
+/* In a level the layout fills the screen edge to edge. Its padding keeps the
+   HUD below the notch and Dynamic Island, and the bottom tray (tools, Hint,
+   Next day) above the home bar. This repeats app-shell.css and
+   game-screen.css through the variables, so the rule can be tested and
+   faked in one place. */
+@media (max-width: 768px) {
+    html .game-layout {
+        padding-top: calc(8px + var(--safe-top));
+        padding-right: calc(8px + var(--safe-right));
+        padding-bottom: calc(8px + var(--safe-bottom));
+        padding-left: calc(8px + var(--safe-left));
+    }
+
+    /* Results. The screen and the sticky button bar both added the home bar
+       inset, so on an iPhone the buttons floated 94 px up and the paper skirt
+       under them stuck out below the card. The inset is now counted once. */
+    #game-over-screen.screen {
+        padding-bottom: var(--results-foot);
+    }
+    #game-over-screen.screen .game-over-actions {
+        padding-bottom: max(10px, calc(var(--safe-bottom) - var(--results-foot) + 4px));
+    }
+    #game-over-screen.screen .game-over-actions::after {
+        height: calc(var(--results-foot) + 2px);
+    }
+}
+
+/* The R explainer card hangs from a fixed top; move it down with the HUD. */
+html body .r-card {
+    top: calc(150px + var(--safe-top));
+}
+
+/* Full-screen overlays: keep their cards inside the safe area. */
+.onboarding-overlay,
+.ad-overlay {
+    padding-top: calc(16px + var(--safe-top));
+    padding-bottom: calc(16px + var(--safe-bottom));
+    padding-left: calc(16px + var(--safe-left));
+    padding-right: calc(16px + var(--safe-right));
+}
+
+/* Bottom sheets stop below the status bar however tall the phone is. */
+.settings-sheet {
+    max-height: min(88vh, calc(100dvh - var(--safe-top) - 24px));
+}
+.shop-sheet-panel {
+    max-height: min(85dvh, calc(100dvh - var(--safe-top) - 24px));
+}
+
+/* ---- Only inside the iOS app ------------------------------------------------ */
+
+/* The web preview has a switch that pretends Remove Ads is owned, for
+   playtesting the ad pacing. It must never ship in the store build. */
+html.native-app .settings-switch:has([data-act='preview-owned']) {
+    display: none;
+}
+
+/* The page itself never scrolls in the app; screens scroll inside it. */
+html.native-app,
+html.native-app body {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}

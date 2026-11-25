@@ -143,6 +143,22 @@ export function calculateStars(outcome, stats, level) {
     return 0;
 }
 
+// Round 55 (Adam): points turn into gold at a fixed rate, and gold buys the
+// power-ups. Every POINTS_PER_GOLD points of a win's score is 1 gold, so a
+// better run always pays more (a typical win scores 900 to 1100: about 90 to
+// 110 gold). A loss scores nothing and pays nothing.
+export const POINTS_PER_GOLD = 10;
+
+export function goldForScore(score) {
+    return Math.max(0, Math.floor((Number(score) || 0) / POINTS_PER_GOLD));
+}
+
+export function goldAward(outcome, stats, level) {
+    return goldForScore(calculateScore(outcome, stats, level));
+}
+
+// The old star based award (75, 100, 125). No longer paid; kept so old
+// reports and tests that quote it still read.
 export function fundingAward(stars) {
     if (stars <= 0) return 0;
     return FUNDING_RULES.baseAward + FUNDING_RULES.perStarBonus * stars;
@@ -165,7 +181,7 @@ export function recordCompletion(save, levelId, outcome, stats) {
     const next = {
         ...save, // newer save fields (settings, upgrades, goals, daily) pass through
         version: save.version,
-        funding: save.funding + fundingAward(stars),
+        funding: save.funding + goldAward(outcome, stats, levelId),
         livesSaved: save.livesSaved + livesSavedForRun(outcome, stats),
         levels: { ...save.levels },
         powerups: { ...(save.powerups || {}) },

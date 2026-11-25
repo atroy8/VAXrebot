@@ -85,7 +85,7 @@ export function syncMetaButtons({ hint = null, undo = null } = {}) {
     if (hintBtn && hint) {
         const cost = hintBtn.querySelector('.meta-btn-cost');
         if (cost) cost.textContent = hint.label;
-        hintBtn.setAttribute('aria-label', hint.price > 0 ? `Hint, costs ${hint.price} funding` : 'Hint, free');
+        hintBtn.setAttribute('aria-label', hint.price > 0 ? `Hint, costs ${hint.price} gold` : 'Hint, free');
         hintBtn.classList.toggle('is-off', !!hint.disabled);
     }
     const undoBtn = document.getElementById('undo-btn');

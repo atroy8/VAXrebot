@@ -1,0 +1,118 @@
+/* Round 55 (Adam): better buttons, and a glow that pulses on the next step.
+   Loaded after the theme so these win. Two kinds of glow:
+   - .next-step: put on one play screen button by src/ui/next-step.js
+     (the tool worth picking, or Next day when today is done);
+   - the one main button of each other screen (Play, Begin, Next level)
+     glows on its own, because there the next step never changes. */
+
+@keyframes next-step-pulse {
+    0%, 100% { box-shadow: var(--ns-base, 0 0 0 rgba(0, 0, 0, 0)), 0 0 0 0 rgba(255, 214, 102, 0.75), 0 0 10px 2px rgba(255, 214, 102, 0.45); }
+    50% { box-shadow: var(--ns-base, 0 0 0 rgba(0, 0, 0, 0)), 0 0 0 7px rgba(255, 214, 102, 0), 0 0 22px 8px rgba(255, 214, 102, 0.7); }
+}
+@keyframes next-step-breathe {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.035); }
+}
+@keyframes button-shine {
+    0%, 70% { transform: translateX(-140%) skewX(-20deg); }
+    100% { transform: translateX(260%) skewX(-20deg); }
+}
+
+/* --- A cleaner, more tactile button everywhere ------------------------- */
+html .btn,
+html .tool-item {
+    position: relative;
+}
+/* Play buttons are placed by their own screens: never change their position. */
+html .btn,
+html .tool-item,
+html .start-play,
+html .globe-play {
+    -webkit-tap-highlight-color: transparent;
+    transition: transform 0.09s ease, box-shadow 0.15s ease, filter 0.15s ease;
+}
+/* A soft top highlight, like light on enamel. */
+html .btn:not(.counting)::before,
+html .tool-item::before {
+    content: '';
+    position: absolute;
+    inset: 1px 1px auto 1px;
+    height: 46%;
+    border-radius: inherit;
+    border-bottom-left-radius: 40% 60%;
+    border-bottom-right-radius: 40% 60%;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0));
+    pointer-events: none;
+}
+html .tool-item.disabled::before { opacity: 0.35; }
+html .btn:active,
+html .tool-item:active { filter: brightness(0.94); }
+html .tool-item:not(.disabled):active { transform: translateY(2px) scale(0.98); }
+html .btn:focus-visible,
+html .tool-item:focus-visible {
+    outline: 3px solid #ffe08a;
+    outline-offset: 2px;
+}
+html .btn:disabled { filter: saturate(0.5) brightness(0.9); }
+
+/* --- The next step ------------------------------------------------------ */
+html #game-screen .next-step,
+html #start-simulation,
+html .game-over-actions .btn--primary:not([hidden]) {
+    animation: next-step-pulse 1.5s ease-in-out infinite, next-step-breathe 1.5s ease-in-out infinite;
+    border-color: #ffd666;
+    z-index: 1;
+}
+/* The two Play buttons are centred with their own transform, so they pulse
+   with light only and never scale. */
+html #start-play,
+html #globe-play {
+    animation: next-step-pulse 1.5s ease-in-out infinite;
+}
+/* A tool chip keeps its own shape: glow and a gold rim, a gentler breath. */
+html #game-screen .tool-item.next-step { --ns-base: 0 3px 0 rgba(120, 90, 20, 0.55); }
+html #game-screen .tool-item.next-step .tool-name { color: #7a5200; }
+/* A slow shine crosses the big main buttons. */
+html #start-play,
+html #globe-play,
+html #start-simulation,
+html #game-screen #next-day.next-step,
+html .game-over-actions .btn--primary:not([hidden]) { overflow: hidden; }
+html #start-play::after,
+html #globe-play::after,
+html #start-simulation::after,
+html #game-screen #next-day.next-step::after,
+html .game-over-actions .btn--primary:not([hidden])::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 34%;
+    background: linear-gradient(90deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.32), rgba(255, 255, 255, 0));
+    animation: button-shine 3.2s ease-in-out infinite;
+    pointer-events: none;
+}
+/* Paused, or a countdown already running: no pulse. */
+html #game-screen.is-paused .next-step,
+html #game-screen #next-day.counting { animation: none; }
+/* When two main buttons show on the results, only the last one pulses. */
+html .game-over-actions .btn--primary:not([hidden]) ~ .btn--primary:not([hidden]) { animation: next-step-pulse 1.5s ease-in-out infinite, next-step-breathe 1.5s ease-in-out infinite; }
+html .game-over-actions:has(#next-level:not([hidden])) #try-different-scenario { animation: none; border-color: inherit; }
+html .game-over-actions:has(#next-level:not([hidden])) #try-different-scenario::after { content: none; }
+
+@media (prefers-reduced-motion: reduce) {
+    html #game-screen .next-step,
+    html #start-play,
+    html #globe-play,
+    html #start-simulation,
+    html .game-over-actions .btn--primary:not([hidden]) {
+        animation: none;
+        box-shadow: 0 0 0 3px rgba(255, 214, 102, 0.9), 0 0 16px 4px rgba(255, 214, 102, 0.55);
+    }
+    html #start-play::after,
+    html #globe-play::after,
+    html #start-simulation::after,
+    html #game-screen #next-day.next-step::after,
+    html .game-over-actions .btn--primary:not([hidden])::after { animation: none; content: none; }
+}

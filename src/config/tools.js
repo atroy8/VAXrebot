@@ -12,7 +12,7 @@ for (const id of POWER_UP_IDS) {
     const p = POWER_UPS[id];
     powerUpTools[id] = {
         name: `${p.emoji} ${p.name}`,
-        description: `${p.effect} Uses 1 charge. Buy more with funding.`,
+        description: `${p.effect} Uses 1 charge. Buy more with gold.`,
         availableDay: 1,
         oncePerPerson: false,
         baseDailyLimit: 1,

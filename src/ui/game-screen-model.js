@@ -1,6 +1,7 @@
 // Pure view models for the phone game screen (roadmap item 7). No DOM here,
 // so everything is unit tested in tests/game-screen.test.js.
 import { toolDailyLimit, toolAvailableDay } from '../sim/engine.js';
+import { POWER_UP_FIRST_DAY } from '../config/power-up-rules.js';
 
 // Strip a leading emoji (and any joiners or variation selectors) from a
 // tool name: "💉 Vaccinate" -> "Vaccinate". The config keeps the emoji for
@@ -147,6 +148,8 @@ export function toolChips(tools, difficulty, day, dailyUsage, charges = {}) {
         const label = plainName(tool.name);
         if (tool.consumable) {
             const left = charges[tool.chargeId || id] || 0;
+            // Round 55: power-ups open on day 3 (POWER_UP_FIRST_DAY in src/economy.js).
+            if (left > 0 && day < POWER_UP_FIRST_DAY) return { id, label, usage: `Day ${POWER_UP_FIRST_DAY}`, state: 'locked', powerUp: true, color: tool.color || null, firstDay: POWER_UP_FIRST_DAY };
             return { id, label, usage: `x${left}`, state: left > 0 ? 'ready' : 'empty', powerUp: true, color: tool.color || null };
         }
         const limit = toolDailyLimit(tool, difficulty, id);

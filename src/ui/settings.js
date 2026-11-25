@@ -136,7 +136,7 @@ export function mountSettings({ monetization, haptics = null, gentle = null, aud
                 const btn = e.target.closest('[data-act]');
                 if (!resetArmed) {
                     resetArmed = true;
-                    btn.textContent = 'Tap again to erase all stars and funding';
+                    btn.textContent = 'Tap again to erase all stars and gold';
                 } else {
                     close();
                     onResetProgress?.();

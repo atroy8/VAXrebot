@@ -72,6 +72,7 @@ import { createStorage, loadSave, writeSave } from './save.js';
 import { levelRecord } from './progress.js';
 import { LEVELS } from './config/levels.js';
 import { CHESTS } from './config/chests.js';
+import { POWER_UP_FIRST_DAY, powerUpsOpen, powerUpLockedLine } from './config/power-up-rules.js';
 
 export const POWER_UPS = {
     eureka: {
@@ -104,6 +105,9 @@ export const POWER_UPS = {
 };
 
 export const POWER_UP_IDS = Object.keys(POWER_UPS);
+
+// Round 55: power-ups open on day 3 (src/config/power-up-rules.js).
+export { POWER_UP_FIRST_DAY, powerUpsOpen, powerUpLockedLine };
 
 export function isPowerUp(id) {
     return Object.prototype.hasOwnProperty.call(POWER_UPS, id);
@@ -154,7 +158,7 @@ export function buyCharge(id) {
     const save = readSave();
     const cost = POWER_UPS[id].cost;
     if (save.funding < cost) {
-        return { ok: false, reason: `Not enough funding. ${POWER_UPS[id].name} costs ${cost}.`, save };
+        return { ok: false, reason: `Not enough gold. ${POWER_UPS[id].name} costs ${cost}.`, save };
     }
     save.funding -= cost;
     save.powerups[id] = (save.powerups[id] || 0) + 1;
@@ -308,6 +312,10 @@ const USE_MESSAGES = {
 export function usePowerUp(id, gameApi) {
     if (!isPowerUp(id)) return { ok: false, reason: 'Unknown power-up.', save: readSave() };
     const save = readSave();
+    if (!powerUpsOpen(gameApi.gameState?.day)) {
+        gameApi.notify?.(powerUpLockedLine(), 'info');
+        return { ok: false, reason: 'Power-ups are not open yet.', save };
+    }
     if ((save.powerups[id] || 0) < 1) {
         gameApi.notify?.('No charges left. Open a supply crate or buy more in the shop.', 'error');
         return { ok: false, reason: 'No charges left.', save };

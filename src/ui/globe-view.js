@@ -247,7 +247,7 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
                 <div class="globe-planet-title" id="globe-planet-title" hidden></div>
                 <div class="globe-stats">
                     <span class="globe-stat stat-stars" id="globe-hud-stars">0 stars</span>
-                    <span class="globe-stat stat-funding" id="globe-hud-funding">0 funding</span>
+                    <span class="globe-stat stat-funding" id="globe-hud-funding">0 gold</span>
                     <span class="globe-stat stat-lives" id="globe-hud-lives">0 lives saved</span>
                 </div>
             </div>
@@ -1319,7 +1319,7 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
     function refreshHUD() {
         const stars = totalStars(state.save);
         mountEl.querySelector('#globe-hud-stars').textContent = `${stars} star${stars === 1 ? '' : 's'}`;
-        mountEl.querySelector('#globe-hud-funding').textContent = `${state.save.funding} funding`;
+        mountEl.querySelector('#globe-hud-funding').textContent = `${state.save.funding} gold`;
         mountEl.querySelector('#globe-hud-lives').textContent = `${state.save.livesSaved.toLocaleString()} lives saved`;
     }
 

@@ -45,7 +45,7 @@ describe('privacy and support pages (item 9)', () => {
         // so the App Store privacy answers stay true as features are added.
         const html = read('public/privacy.html');
         const covered = {
-            'vaxrebot-save-v1': ['level progress', 'stars', 'in-game funding', 'power-up charges'],
+            'vaxrebot-save-v1': ['level progress', 'stars', 'in-game gold', 'power-up charges'],
             'vaxrebot-monetization-v1': ['own Remove Ads'],
             'vaxrebot_music_enabled': ['music'],
             'vaxrebot_sound_prefs': ['sound effects', 'planet ambience', 'crowd voices'],

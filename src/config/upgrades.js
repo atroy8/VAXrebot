@@ -70,7 +70,7 @@ export function buyUpgrade(save, id) {
     const owned = Array.isArray(save.upgrades) ? save.upgrades : [];
     if (!upgrade) return { ok: false, reason: 'Unknown upgrade.', save };
     if (owned.includes(id)) return { ok: false, reason: 'You already own this.', save };
-    if (save.funding < upgrade.cost) return { ok: false, reason: `Not enough funding. ${upgrade.name} costs ${upgrade.cost}.`, save };
+    if (save.funding < upgrade.cost) return { ok: false, reason: `Not enough gold. ${upgrade.name} costs ${upgrade.cost}.`, save };
     return { ok: true, save: { ...save, funding: save.funding - upgrade.cost, upgrades: [...owned, id] } };
 }
 
