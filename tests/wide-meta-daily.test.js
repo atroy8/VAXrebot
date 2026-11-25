@@ -3,9 +3,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { LEVELS } from '../src/config/levels.js';
 import { tools } from '../src/config/tools.js';
-import { rollLevelRules } from '../src/config/difficulty-roll.js';
-import { rollPopulation } from '../src/config/campaign.js';
-import { buildOutbreak, openingLimits } from '../src/sim/setup.js';
+import { dealLevel } from '../src/sim/dealer.js';
 import { buildRun, mulberry32 } from '../src/sim/balance.js';
 import { playMetaRun } from '../src/sim/meta-run.js';
 import { calculateStars, parDaysFor } from '../src/progress.js';
@@ -89,41 +87,39 @@ describe('one seeded level per UTC day', () => {
         }
     });
 
-    it('the game builds the day from the same dice in the same order as the bots', () => {
-        // What src/game-meta.js and src/game.js do: rules from dice.rules()
-        // at the briefing, then population, web and cases from dice.run().
+    // Round 57: the day's seed deals the day's web (src/sim/dealer.js), for
+    // the game and the bots alike, and nothing after the deal is random.
+    it('the game deals the day from the same seed as the bots', () => {
         for (const date of DATES.slice(0, 12)) {
             const level = dailyLevel(date);
-            const dice = dailyDice(date);
-            const { scenario, difficulty } = rollLevelRules(level, dice.rules());
-            const rng = dice.run();
-            const population = rollPopulation(scenario.populationRange, rng, null);
-            const out = buildOutbreak({ scenario, population, variant: level.variant || null, rng, opening: openingLimits({ level, scenario, difficulty, tools, population }) });
-            const bot = buildRun(level, mulberry32(dailySeed(date)));
-            expect(JSON.stringify({ nodes: out.nodes, links: out.links, s: scenario, d: difficulty })).toBe(shape(bot));
+            const deal = dealLevel(level, dailySeed(date));
+            const bot = buildRun(level, dailySeed(date));
+            expect(JSON.stringify({ nodes: deal.nodes, links: deal.links, s: deal.scenario, d: deal.difficulty })).toBe(shape(bot));
+            expect(bot.state.stats.par).toEqual({ cases: deal.par.cases, deaths: deal.par.deaths, days: deal.par.days });
             // Starting again (a practice replay) gives the same level again.
-            const again = dice.run();
-            expect(rollPopulation(scenario.populationRange, again, null)).toBe(population);
+            expect(JSON.stringify(dealLevel(level, dailySeed(date)))).toBe(JSON.stringify(deal));
+            // The old dice object still hands out the day's seed.
+            expect(dailyDice(date).seed).toBe(dailySeed(date));
         }
     });
 
-    it('no dice on the play path come from Math.random in a Daily', () => {
+    it('nothing on the play path of a Daily is random, and the deal is never cut short', () => {
         const game = read('src/game.js');
         const meta = read('src/game-meta.js');
-        expect(meta).toContain('const rng = this.daily ? dailyDice(this.daily.date).rules() : undefined;');
-        expect(meta).toContain('this.runRng = this.daily ? dailyDice(this.daily.date).run() : null;');
-        expect(meta).toContain('return rollPopulation(this.currentScenario.populationRange, this.runRng, null);');
-        expect(game).toContain('const population = this.daily ? this.dailyPopulation() : rollPopulation(');
-        // Web and first cases, every night, and the aftermath of a loss.
-        expect(game.match(/rng: this\.runRng \|\| Math\.random,/g).length).toBe(2);
-        expect(game).toContain('this.difficulty.fatalityRate, this.runRng || Math.random);');
+        const deal = read('src/game-deal.js');
+        expect(deal).toContain('this.daily ? dailySeed(this.daily.date) : randomSeed()');
+        // A slow phone must still get the same web: no time limit on the Daily's deal.
+        expect(deal).toContain('while (!done && (this.daily || clock() < until))');
+        expect(game).not.toContain('Math.random');
+        expect(meta).not.toContain('Math.random');
         // Gentle mode, upgrades and power-ups are off, so everyone plays the same game.
         expect(meta).toContain("if (this.daily) return { gentle: false, upgrades: [] };");
+        expect(deal).toContain('meta: this.daily ? null : this.metaInForce || null');
         expect(meta).toMatch(/beforePowerUp\(\) \{\s*if \(this\.daily\) \{/);
-        // Every sim function on the path takes the injected rng.
+        // The night takes no dice at all.
         const actions = read('src/sim/actions.js');
-        expect(actions).toMatch(/simulateSpread\(state, network, rate, rng(, difficulty)?\)/);
-        expect(actions).toContain('updateOutcomes(state, network, difficulty.recoveryTime, difficulty.fatalityRate, rng)');
+        expect(actions).toContain('const spread = simulateSpread(state, network);');
+        expect(actions).toContain('const outcomes = updateOutcomes(state, network, difficulty.recoveryTime);');
     });
 });
 
@@ -138,11 +134,13 @@ describe('the Daily is winnable but not a walkover (bots, 60 dates, the real see
         expect(rate('passive')).toBe(0);
         expect(rate('random')).toBeLessThanOrEqual(0.25);
     });
-    it('a win earns stars from the borrowed level target', () => {
+    // Round 57: stars come from the day's par, which is the same for everyone.
+    it('a win earns stars against the day\'s par', () => {
         const wins = DATES.map((date) => playMetaRun(dailyLevel(date), { bot: 'smart', seed: dailySeed(date) })).filter((r) => r.outcome === 'contained');
         expect(wins.some((r) => r.stars >= 2)).toBe(true);
+        for (const r of wins) expect(r.stats.par).toBeTruthy();
         const level = dailyLevel(START);
-        expect(calculateStars('contained', { initialPopulation: 20, totalDead: 0, totalRecovered: 2, daysUsed: 3 }, level)).toBe(3);
+        expect(calculateStars('contained', { initialPopulation: 20, totalInfected: 4, totalDead: 0, par: { cases: 4, deaths: 0, days: 8 } }, level)).toBe(3);
     });
 });
 

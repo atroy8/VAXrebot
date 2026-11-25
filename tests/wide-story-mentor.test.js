@@ -159,6 +159,7 @@ describe('mentor wiring', () => {
     it('game.js asks for the briefing line and the results line', () => {
         const game = read('../src/game.js');
         expect(game).toContain('storyBriefing(level);');
-        expect(game).toMatch(/storyResults\(\{[^}]*parDays: this\.currentLevel \? parDaysFor\(this\.currentLevel\) : 0 \}\)/);
+        // Round 57: the days come from the deal's par when there is one (speedParDays).
+        expect(game).toMatch(/storyResults\(\{[^}]*parDays: this\.currentLevel \? speedParDays\(stats, this\.currentLevel\) : 0 \}\)/);
     });
 });

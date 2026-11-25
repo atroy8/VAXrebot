@@ -23,27 +23,30 @@ describe('the one sentence: wins', () => {
     const level = LEVELS[0];
     const stats = (over = {}) => ({ initialPopulation: 9, totalInfected: 2, totalDead: 0, totalRecovered: 2, daysUsed: 6, powerUpsUsed: 0, ...over });
 
+    // Round 57: the sentence is the result against par (the best possible
+    // play on the web that was dealt). It replaces the old "finish 1 day
+    // sooner" advice; tests/round57-ui.test.js has every case.
+    const par = { cases: 2, deaths: 0, days: 6 };
+
     it('a perfect win is praised', () => {
-        const meter = { score: 1200, lines: [800, 900, 1000], stars: 3, facts: { pop: 9, survivors: 9 }, next: null };
-        expect(resultsHeadline({ outcome: 'contained', meter })).toBe('Top marks! Fast, and everyone made it.');
-        const lost = { ...meter, facts: { pop: 9, survivors: 8 } };
-        expect(resultsHeadline({ outcome: 'contained', meter: lost })).toBe('Top marks! Fast, and nearly everyone made it.');
+        expect(resultsHeadline({ outcome: 'contained', stats: stats({ par }) })).toBe('Best possible was 2 cases, and you matched it.');
+        // Without a par (a web that was not dealt) the old praise remains.
+        const meter = { score: 1200, stars: 3, facts: { pop: 9, survivors: 9 }, next: null };
+        expect(resultsHeadline({ outcome: 'contained', meter })).toBe('Top marks! Everyone made it.');
     });
 
-    it('any other win names the cheapest way to the next star', () => {
-        const meter = { stars: 2, facts: {}, next: { star: 3, gap: 18, ways: ['finish 1 day sooner', 'lose 1 fewer person'] } };
-        expect(resultsHeadline({ outcome: 'contained', meter })).toBe('For 3 stars next time, finish 1 day sooner.');
-        const one = { stars: 1, facts: {}, next: { star: 2, gap: 40, ways: [] } };
-        expect(resultsHeadline({ outcome: 'contained', meter: one })).toBe('For 2 stars next time, act on day 1 to keep more people well.');
+    it('any other win says exactly how far it was from the best play', () => {
+        expect(resultsHeadline({ outcome: 'contained', stats: stats({ par, totalInfected: 3 }) })).toBe('Best possible was 2 cases. You had 3.');
+        expect(resultsHeadline({ outcome: 'contained', stats: stats({ par, totalDead: 1 }) })).toBe('Best possible was 2 cases with nobody lost. You lost 1.');
     });
 
     it('works on the real star meter for level 1', () => {
-        for (const s of [stats(), stats({ daysUsed: 14, totalDead: 2 }), stats({ daysUsed: 3 })]) {
+        for (const s of [stats({ par }), stats({ par, daysUsed: 14, totalDead: 2 }), stats({ par, totalInfected: 4 })]) {
             const meter = starProgress('contained', s, level);
-            const line = resultsHeadline({ outcome: 'contained', meter });
-            oneSentence(line);
-            if (meter.next) expect(line).toContain(`For ${meter.next.star} star`);
-            else expect(line).toMatch(/^Top marks!/);
+            const line = resultsHeadline({ outcome: 'contained', meter, stats: s });
+            expect(line).not.toContain(String.fromCharCode(0x2014));
+            if (meter.next) expect(line).toMatch(/^Best possible was 2 cases/);
+            else expect(line).toMatch(/matched it/);
         }
     });
 

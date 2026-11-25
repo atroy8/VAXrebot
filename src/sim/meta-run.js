@@ -1,7 +1,7 @@
-// Bot runs for the meta-game checks (wide audience round): the same levels
-// and bots as src/sim/balance.js, plus the things the meta-game adds:
-//   modify   rules modifier (Gentle mode, shop upgrades; src/config/meta-rules.js)
-//   upgrades state modifier for upgrades that act on the fresh state
+// Bot runs for the meta-game checks: the same levels, deals and bots as
+// src/sim/balance.js, plus the things the meta-game adds:
+//   meta     { gentle, upgrades }: Gentle mode and shop upgrades, applied the
+//            way the game applies them (the dealer deals with them in force)
 //   budget   a "restrained" player: total uses allowed per tool for the
 //            whole level ({ vaccinate, quarantine, severLink, all }), used
 //            to prove that bonus goals such as "Use at most 2 vaccines" can
@@ -14,7 +14,6 @@ import { canUseTool } from './engine.js';
 import { applyNodeTool, severLink, advanceDay, caseCapFor } from './actions.js';
 import { calculateStars, goldAward } from '../progress.js';
 import { careBonus } from '../rewards.js';
-import { applyMetaState } from '../config/meta-rules.js';
 import { planDay } from './hint.js';
 import { toolUseTotals } from './run-stats.js';
 
@@ -32,15 +31,17 @@ function playBudgetDay(run, bot, rng, budget) {
 }
 
 // Play one run. Returns { outcome, stats, caseCap, stars, day, funding }.
-export function playMetaRun(level, { bot = 'smart', seed = 1, modify = null, upgrades = [], budget = null } = {}) {
-    const rng = mulberry32(seed);
-    const run = buildRun(level, rng, modify);
-    applyMetaState(run.state, run, { upgrades });
+// `upgrades` alone is accepted as shorthand for meta = { upgrades }.
+// `modify` from metaModifier() is read for the options it was made with.
+export function playMetaRun(level, { bot = 'smart', seed = 1, meta = null, modify = null, upgrades = null, budget = null } = {}) {
+    const rng = mulberry32(seed ^ 0x5bd1e995);
+    const inForce = meta || (modify && modify.meta) || (upgrades && upgrades.length ? { gentle: false, upgrades } : null);
+    const run = buildRun(level, seed, inForce);
     let result = null;
     for (let guard = 0; guard < 60 && !result; guard++) {
         if (budget) playBudgetDay(run, bot, rng, budget);
         else BOTS[bot](run, rng);
-        result = advanceDay(run.state, run.network, { scenario: run.scenario, difficulty: run.difficulty, rng }).result;
+        result = advanceDay(run.state, run.network, { scenario: run.scenario, difficulty: run.difficulty }).result;
     }
     const stats = { ...run.state.stats, daysUsed: run.state.day };
     const stars = calculateStars(result, stats, level);

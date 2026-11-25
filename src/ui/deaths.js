@@ -1,6 +1,6 @@
 // Item 20 (round 24): words for deaths. Pure (no DOM) so tests can read it.
 // Tone: gentle and plain. A death is a loss to notice, never a joke or gore.
-import { oneIn, TREATED_FACTOR } from '../sim/fatality.js';
+import { oneIn } from '../sim/fatality.js';
 import { listPeople } from '../config/people-names.js';
 
 // Toast for a death during play. The first one in a level teaches the rule.
@@ -9,8 +9,10 @@ export function deathToast({ count = 1, firstThisLevel = false, inWard = false, 
     const named = names.length > 0 && names.length === count ? listPeople(names, 2) : '';
     const who = named ? `${named} did not survive.` : count === 1 ? 'Someone did not survive.' : `${count} people did not survive.`;
     if (!firstThisLevel) return who;
-    if (inWard) return `${who} Even with care, some cases are fatal.`;
-    return `${who} Deaths come days after people fall sick. A ward halves the risk.`;
+    // Round 57: only frail people (the heart mark) can be lost, and only
+    // outside a ward, so the first loss says exactly how to prevent the next.
+    if (inWard) return who;
+    return `${who} Frail people are lost on their third night sick. Quarantine saves them.`;
 }
 
 // How deadly the disease is for real. The briefing no longer shows it (the
@@ -61,12 +63,14 @@ export function realR0NoteFor(scenario) {
     return `${scenario.strainName} is based on ${scenario.basedOn}. ${scenario.r0Note}`;
 }
 
-// How the game's own death odds are explained. On the first planet (gentle)
-// a new player is told the danger is turned up, without the raw odds.
+// How the game differs from the real disease, said honestly (round 57).
+// Real outbreaks involve chance; the game shows the worst case so a plan
+// can be made, and marks in advance who is in danger.
+export const WORST_CASE_LINE = 'Real outbreaks involve chance: not every contact catches it, and nobody knows in advance who will. This game shows the worst case, where every contact does, so you can plan.';
 export function gameOddsLine(fatalityRate, gentle = false) {
     if (fatalityRate == null) return '';
-    if (gentle) return 'In the game the danger is turned up so that every choice matters. Ward care halves it.';
-    return `In the game the odds are raised to ${oneIn(fatalityRate)} so every life counts on a small web, and ${oneIn(fatalityRate * TREATED_FACTOR)} with ward care.`;
+    if (gentle) return 'In the game only the people with a heart mark can be lost, and ward care always saves them. For real, care lowers the risk but cannot remove it.';
+    return `In the game the people with a heart mark stand for the ${oneIn(fatalityRate)} who would be in danger on a small web. Ward care always saves them here; for real it lowers the risk but cannot remove it.`;
 }
 
 // The results' Based on card: { title, lines[] }, or null without a real
@@ -78,6 +82,7 @@ export function basedOnCard({ scenario, fatalityRate = null, gentle = false } = 
     if (scenario.cfrNote) lines.push(`For real: ${scenario.cfrNote}`);
     if (scenario.r0Note) lines.push(scenario.r0Note);
     lines.push(scenario.vaccine ? `The real vaccine: ${scenario.vaccine}.` : `No vaccine for ${scenario.basedOn} is licensed yet.`);
+    lines.push(WORST_CASE_LINE);
     const odds = gameOddsLine(fatalityRate, gentle);
     if (odds) lines.push(odds);
     return { title: `Based on: ${scenario.basedOn}`, lines };

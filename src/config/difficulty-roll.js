@@ -1,13 +1,20 @@
-// Per-play difficulty roll. There is no difficulty picker: every time a
-// level starts it rolls its own threat inside a band, and the band rises
-// as the player gets closer to the next prize box (supply crate), then
-// eases right after a box is opened. The level's tuned baseline
-// (src/config/levels.js) still sets the overall climb across the game.
+// The threat of a level. There is no difficulty picker, and since round 57
+// there are no dice either: a level's threat is fixed by where it sits on
+// the road to the next prize box (supply crate). It rises as the box gets
+// closer and eases right after one is opened. The level's puzzle spec
+// (src/config/puzzle-specs.js) sets the overall climb across the game.
 //
-// Pure and seedable: the balance bots use the same roll (src/sim/balance.js).
+// What the threat changes is small, fixed before day 1 and shown: on the
+// levels closest to a prize box the case cap leaves one less spare case
+// (the briefing says so and the HUD shows the cap). It never touches how
+// the infection spreads: that is certain on every level.
+//
+// Pure. The name rollLevelRules is kept from when this was a roll; the
+// second argument (the old dice) is ignored.
 import { LEVELS } from './levels.js';
 import { CHESTS } from './chests.js';
 import { levelRules } from './level-rules.js';
+import { puzzleSpecFor } from './puzzle-specs.js';
 
 const CHEST_AFTER = CHESTS.map((c) => c.afterLevelIndex).sort((a, b) => a - b);
 
@@ -33,28 +40,31 @@ export function threatBand(levelIndex) {
     return { lo: Math.max(0, center - 0.2), hi: Math.min(1, center + 0.2) };
 }
 
-// Roll this play's rules. Returns { scenario, difficulty, threat, pips }.
-// threat in [0, 1] nudges spread speed (0.85x to 1.15x) and the case cap
-// (+1 to -2 points of the town); pips (1 to 5) is what the player sees.
-export function rollLevelRules(level, rng = Math.random) {
-    const index = Math.max(0, LEVELS.findIndex((l) => l.id === level.id));
+// From this threat up, a prize box is close and the cap is one case tighter.
+export const PRIZE_CLOSE_THREAT = 0.6;
+
+// The rules of this level. Returns { scenario, difficulty, threat, pips,
+// spec }: threat in [0, 1] (the middle of the level's band), pips (1 to 5)
+// is what the player sees, spec is the level's puzzle spec with the cap
+// slack in force (also copied to scenario.capSlack for the dealer).
+export function rollLevelRules(level, _rng) {
+    const id = level.templateId || level.id;
+    const index = Math.max(0, LEVELS.findIndex((l) => l.id === id));
     const { scenario, difficulty } = levelRules(level);
     const { lo, hi } = threatBand(index);
-    const threat = lo + (hi - lo) * rng();
-    difficulty.transmissionMultiplier = round3((difficulty.transmissionMultiplier ?? 1) * (0.85 + 0.3 * threat));
-    if (scenario.caseCapFraction != null) {
-        scenario.caseCapFraction = round3(scenario.caseCapFraction + 0.01 - 0.03 * threat);
-    }
+    const threat = round3((lo + hi) / 2);
+    const spec = { ...puzzleSpecFor(level) };
+    if (threat >= PRIZE_CLOSE_THREAT && !spec.tutorial) spec.capSlack = Math.max(1, spec.capSlack - 1);
+    scenario.capSlack = spec.capSlack;
     const overall = LEVELS.length > 1 ? index / (LEVELS.length - 1) : 0;
     const pips = Math.min(5, Math.max(1, 1 + Math.round(overall * 2.4 + threat * 1.6)));
-    return { scenario, difficulty, threat, pips };
+    return { scenario, difficulty, threat, pips, spec };
 }
 
-// One plain line for the briefing, based on the roll.
+// One plain line for the briefing.
 export function threatLine(threat) {
-    if (threat < 0.3) return 'This outbreak is spreading slower than usual.';
-    if (threat < 0.6) return 'This outbreak is spreading at a typical pace.';
-    return 'This outbreak is spreading fast. A prize box is close.';
+    if (threat < PRIZE_CLOSE_THREAT) return 'The case cap leaves room for a few mistakes.';
+    return 'A prize box is close: the case cap leaves one less spare case.';
 }
 
 function round3(x) {

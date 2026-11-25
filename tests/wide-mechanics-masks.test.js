@@ -1,15 +1,20 @@
 // Wide audience round, mechanic 2: masks weaken a line without cutting it.
+// Round 57 rewrote the rule and with it the tests of the rule: a mask no
+// longer halves a chance (there are no chances). A line with a masked
+// person on it takes two nights to cross instead of one.
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { simulateSpread, canUseTool, checkGameOver } from '../src/sim/engine.js';
 import { applyNodeTool, liveR } from '../src/sim/actions.js';
-import { webR0, linkChance } from '../src/sim/r0.js';
+import { webR0 } from '../src/sim/r0.js';
 import { initGameState } from '../src/sim/state.js';
 import { tools } from '../src/config/tools.js';
 import { LEVELS } from '../src/config/levels.js';
 import { levelRules } from '../src/config/level-rules.js';
 import { lessonFor } from '../src/config/lessons.js';
-import { linkFactor, MASK_FACTOR } from '../src/sim/mechanics.js';
+import { maskedLink, crossesTonight, MASK_NIGHTS } from '../src/sim/mechanics.js';
+import { dealLevelCached } from '../src/sim/dealer.js';
+import { solveDeal } from '../src/sim/solver.js';
 import { BOTS, buildRun, mulberry32, summarize } from '../src/sim/balance.js';
 import { nodeMarks, maskedEnds, maskedLine, MASKED_LINE } from '../src/ui/node-marks.js';
 import { linkStyle } from '../src/ui/link-style.js';
@@ -32,42 +37,33 @@ const person = (id, state = 'healthy', extra = {}) => ({ id, state, daysInfected
 const pair = (a = {}, b = {}) => ({ nodes: [person(0, 'infected', a), person(1, 'healthy', b)], links: [{ source: 0, target: 1 }] });
 const maskLevels = LEVELS.filter((l) => l.mechanics?.id === 'masks');
 
-// Share of 4000 seeded nights on which the healthy end caught it.
-function catchRate(a, b, rate = 0.8, rules = null) {
-    const rng = seeded(17);
-    let hits = 0;
-    const N = 4000;
-    for (let i = 0; i < N; i++) {
-        const net = pair(a, b);
-        simulateSpread(initGameState(tools, 2), net, rate, rng, rules);
-        if (net.nodes[1].state === 'infected') hits++;
+// Nights until the healthy end of a pair catches it (null: never in 5 nights).
+function nightsToCross(a, b) {
+    const net = pair(a, b);
+    const state = initGameState(tools, 2);
+    for (let night = 1; night <= 5; night++) {
+        simulateSpread(state, net);
+        if (net.nodes[1].state === 'infected') return night;
     }
-    return hits / N;
+    return null;
 }
 
-describe('a mask halves the chance on its wearer\'s lines', () => {
-    it('one masked end halves it, both ends quarter it, in both directions', () => {
-        expect(MASK_FACTOR).toBe(0.5);
-        expect(linkFactor({}, {})).toBe(1);
-        expect(linkFactor({ masked: true }, {})).toBe(0.5);
-        expect(linkFactor({}, { masked: true })).toBe(0.5);
-        expect(linkFactor({ masked: true }, { masked: true })).toBe(0.25);
-        expect(linkFactor({ masked: true }, {}, 0.3)).toBeCloseTo(0.3, 9);
+describe('a masked line takes two nights to cross', () => {
+    it('a mask on either end, or on both, slows the line by one night', () => {
+        expect(MASK_NIGHTS).toBe(2);
+        expect(maskedLink({}, {})).toBe(false);
+        expect(maskedLink({ masked: true }, {})).toBe(true);
+        expect(maskedLink({}, { masked: true })).toBe(true);
+        expect(crossesTonight({}, {}, {})).toBe(true);
+        expect(crossesTonight({}, { masked: true }, {})).toBe(false);
+        expect(crossesTonight({ charged: true }, { masked: true }, {})).toBe(true);
     });
 
-    it('the dice agree: 0.8 becomes about 0.4 with one mask and 0.2 with two', () => {
-        expect(catchRate({}, {})).toBeGreaterThan(0.77);
-        const sickMasked = catchRate({ masked: true }, {});
-        const healthyMasked = catchRate({}, { masked: true });
-        expect(sickMasked).toBeGreaterThan(0.37);
-        expect(sickMasked).toBeLessThan(0.43);
-        expect(healthyMasked).toBeGreaterThan(0.37);
-        expect(healthyMasked).toBeLessThan(0.43);
-        const both = catchRate({ masked: true }, { masked: true });
-        expect(both).toBeGreaterThan(0.17);
-        expect(both).toBeLessThan(0.23);
-        // A level can set its own strength.
-        expect(catchRate({ masked: true }, {}, 0.8, { maskFactor: 0.25 })).toBeLessThan(0.23);
+    it('with no dice: one night on a plain line, two with one mask or with two', () => {
+        expect(nightsToCross({}, {})).toBe(1);
+        expect(nightsToCross({ masked: true }, {})).toBe(2);
+        expect(nightsToCross({}, { masked: true })).toBe(2);
+        expect(nightsToCross({ masked: true }, { masked: true })).toBe(2);
     });
 
     it('the line stays: a mask weakens, it does not cut', () => {
@@ -81,7 +77,7 @@ describe('a mask halves the chance on its wearer\'s lines', () => {
         expect(state.stats.masksGiven).toBe(1);
         expect(state.stats.linksSevered).toBe(0);
         expect(state.dailyUsage.mask).toBe(1);
-        expect(mechanicToolFeedback('mask', res, net.nodes[1]).toast).toMatch(/half as easily/);
+        expect(mechanicToolFeedback('mask', res, net.nodes[1]).toast).toMatch(/two nights to cross instead of one/);
     });
 
     it('lasts the whole level and is given once per person', () => {
@@ -109,33 +105,23 @@ describe('a mask halves the chance on its wearer\'s lines', () => {
     });
 });
 
-describe('R accounts for masked lines', () => {
-    it('live R drops the moment someone is masked', () => {
-        // One sick person with two healthy contacts.
+describe('R and masked lines', () => {
+    // Round 57: R counts who is in danger, and a masked person still is (the
+    // mask buys a night, it does not stop the case), so R does not move.
+    it('live R still counts a masked contact: a mask delays, it does not protect', () => {
         const net = { nodes: [person(0, 'infected'), person(1), person(2)], links: [{ source: 0, target: 1 }, { source: 0, target: 2 }] };
-        const before = liveR(net, 0.3, 3);
-        expect(before).toBeCloseTo(2 * (1 - 0.7 ** 3), 9);
+        expect(liveR(net)).toBe(2);
         net.nodes[1].masked = true;
-        const one = liveR(net, 0.3, 3);
-        expect(one).toBeCloseTo(1 - 0.7 ** 3 + (1 - 0.85 ** 3), 9);
-        expect(one).toBeLessThan(before);
-        // Masking the sick person covers every line at once.
-        net.nodes[1].masked = false;
+        expect(liveR(net)).toBe(2);
         net.nodes[0].masked = true;
-        expect(liveR(net, 0.3, 3)).toBeCloseTo(2 * (1 - 0.85 ** 3), 9);
-        expect(liveR(net, 0.3, 3, { maskFactor: 0 })).toBe(0);
+        expect(liveR(net)).toBe(2);
     });
 
-    it('web R0 counts a masked line at its lower chance', () => {
+    it('web R0 is contacts per person, masks or not', () => {
         const ring = { nodes: [0, 1, 2, 3].map((id) => ({ id })), links: [[0, 1], [1, 2], [2, 3], [3, 0]].map(([source, target]) => ({ source, target })) };
-        const open = webR0(ring, 0.5, 2);
-        expect(open).toBeCloseTo(1.5, 9);
+        expect(webR0(ring)).toBe(2);
         ring.nodes[0].masked = true;
-        const half = linkChance(0.5, 2, null, 0.5);
-        expect(half).toBeCloseTo(1 - 0.75 ** 2, 9);
-        // Two of the four lines touch the masked person.
-        expect(webR0(ring, 0.5, 2)).toBeCloseTo((2 * 2 * 0.75 + 2 * 2 * half) / 4, 9);
-        expect(webR0(ring, 0.5, 2)).toBeLessThan(open);
+        expect(webR0(ring)).toBe(2);
     });
 });
 
@@ -151,6 +137,9 @@ describe('the view shows a mask and a lighter line', () => {
         expect(maskedLine(risk, 1).width).toBeCloseTo(risk.width * MASKED_LINE.width, 9);
         expect(maskedLine(risk, 1).color).toBe('risk'); // still a red line: it can still spread
         expect(maskedLine(risk, 0)).toBe(risk);
+        // Round 57: once the line has charged it crosses tonight, and is
+        // drawn at full strength again.
+        expect(maskedEnds({ source: a, target: b, charged: true })).toBe(0);
     });
 
     it('is wired into the view, the tray and the game', () => {
@@ -159,9 +148,6 @@ describe('the view shows a mask and a lighter line', () => {
         expect(view).toContain('const pale = masks ? MASKED_LINE.pale : 0;');
         expect(view).toContain("mask: ['healthy', 'infected', 'exposed']");
         expect(read('src/ui/panels.js')).toMatch(/mask:\s*\n\s*'<svg/);
-        const game = read('src/game.js');
-        expect(game).toContain('difficulty.recoveryTime, difficulty);');
-        expect(game).toContain('this.difficulty.recoveryTime, this.difficulty);');
         expect(tools.mask.validTargets).toEqual(['healthy', 'infected', 'exposed']);
     });
 });
@@ -176,16 +162,15 @@ describe('mask levels', () => {
             expect(l.toolkit.tools).toContain('severLink');
             expect(l.toolkit.tools.length).toBeLessThanOrEqual(3);
             const { difficulty } = levelRules(l);
-            expect(difficulty.maskFactor).toBe(0.5);
-            // Cheaper and more plentiful than Sever.
-            expect(difficulty.dailyLimits.mask).toBeGreaterThanOrEqual(difficulty.dailyLimits.severLink);
+            // Round 57: how many masks a day is the tuner's to choose.
+            expect(difficulty.dailyLimits.mask).toBeGreaterThanOrEqual(1);
         }
     });
 
     it('teaches the lesson and names the tool in the briefing', () => {
         const l = maskLevels.find((x) => !x.variant);
         expect(l.lessonId).toBe('masks');
-        expect(lessonFor(l.id).brief).toMatch(/A cut is certain/);
+        expect(lessonFor(l.id).brief).toMatch(/two nights to cross instead of one/);
         expect(variantCallout(l.variant, l.mechanics).title).toBe('New: masks');
         const card = toolkitCard(l.toolkit, l.variant?.toolDays);
         expect(card.tools).toContain('Mask');
@@ -207,23 +192,35 @@ describe('mask levels', () => {
         expect(toolHint('mask').length).toBeLessThanOrEqual(HINT_MAX_CHARS);
     });
 
-    it('the bots use masks, and masks are worth using', () => {
+    it('the bots use masks', () => {
+        let used = 0;
         for (const bot of ['smart', 'beginner']) {
-            const rng = mulberry32(5);
-            const run = buildRun(maskLevels[0], rng);
-            BOTS[bot](run, rng);
-            expect(run.state.stats.masksGiven, bot).toBeGreaterThan(0);
+            for (let seed = 1; seed <= 6; seed++) {
+                const run = buildRun(maskLevels[0], seed);
+                for (let day = 0; day < 3; day++) BOTS[bot](run, mulberry32(seed));
+                used += run.state.stats.masksGiven || 0;
+            }
         }
-        // The smart bot masks the sick first: one mask covers all their lines.
-        const rng = mulberry32(8);
-        const run = buildRun(maskLevels.find((x) => x.toolkit.tools.length === 2), rng);
-        BOTS.smart(run, rng);
-        expect(run.network.nodes.filter((n) => n.state === 'infected').every((n) => n.masked)).toBe(true);
+        expect(used).toBeGreaterThan(0);
+        for (const level of maskLevels) expect(summarize(level, 'passive', 15, 3).counts.contained || 0, level.id).toBe(0);
+    });
+
+    // Round 57: measured with the solver on the very same web, with and
+    // without masks (the old test compared bot win rates between two
+    // differently tuned levels, which the dealer no longer makes comparable).
+    it('masks are worth using: the best play with them is never worse and often better', () => {
+        let better = 0;
+        let total = 0;
         for (const level of maskLevels) {
-            expect(summarize(level, 'passive', 25, 3).counts.contained || 0, level.id).toBe(0);
-            const smart = summarize(level, 'smart', 150, 21).winRate;
-            const bare = { ...level, tuning: { ...level.tuning, dailyLimits: { ...level.tuning.dailyLimits, mask: 0 } } };
-            expect(smart - summarize(bare, 'smart', 150, 21).winRate, level.id).toBeGreaterThan(0.05);
+            for (let seed = 1; seed <= 5; seed++) {
+                const deal = dealLevelCached(level, seed);
+                const bare = { ...deal, difficulty: { ...deal.difficulty, dailyLimits: { ...deal.difficulty.dailyLimits, mask: 0 } } };
+                const without = solveDeal(bare);
+                expect(deal.par.cases, `${level.id} seed ${seed}`).toBeLessThanOrEqual(without.cases);
+                if (deal.par.cases < without.cases) better++;
+                total++;
+            }
         }
+        expect(better / total).toBeGreaterThan(0.25);
     });
 });

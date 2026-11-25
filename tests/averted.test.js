@@ -31,10 +31,12 @@ describe('no-response baseline (cases averted, round 13)', () => {
         expect(snap.nodes[1].state).toBe('healthy');
     });
 
-    it('certain spread infects the whole chain; zero spread infects only the first case', () => {
+    // Round 57: spread is certain, so the old "zero spread" half of this
+    // test is gone and the old rate argument is ignored.
+    it('certain spread infects the whole chain, whatever rate is handed in', () => {
         const snap = snapshotNetwork(chain());
         expect(noResponseRun(snap, { transmissionRate: 1, recoveryTime: 2, fatalityRate: 0 })).toBe(5);
-        expect(noResponseRun(snap, { transmissionRate: 0, recoveryTime: 2, fatalityRate: 0 })).toBe(1);
+        expect(noResponseRun(snap, { transmissionRate: 0, recoveryTime: 2, fatalityRate: 0 })).toBe(5);
     });
 
     it('ends: an outbreak always burns out within the day limit', () => {
@@ -83,7 +85,7 @@ describe('cases averted summary and card', () => {
     it('a win names the baseline and the player result, and counts cases averted', () => {
         const s = avertedSummary({ actual: 8, baseline: 27, population: 33, outcome: 'contained' });
         expect(s.averted).toBe(19);
-        expect(s.text).toBe('With no response, about 27 of 33 people would have caught it. You kept it to 8.');
+        expect(s.text).toBe('With no response, 27 of 33 people would have caught it. You kept it to 8.');
     });
 
     it('says all when nobody would have escaped', () => {
@@ -122,7 +124,8 @@ describe('cases averted summary and card', () => {
     it('the results screen has the card and game.js fills it', () => {
         expect(read('index.html')).toContain('id="averted"');
         const game = read('src/game.js');
-        expect(game).toContain('snapshotNetwork(this.network)');
+        // Round 57: the opening snapshot is taken where the deal is opened.
+        expect(read('src/game-deal.js')).toContain('snapshotNetwork(this.network)');
         expect(game).toContain('this.renderAvertedCard(outcome, stats)');
     });
 });

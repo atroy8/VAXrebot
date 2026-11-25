@@ -104,7 +104,9 @@ describe('the climb starts on the third planet', () => {
             dense += contacts(24, a.links);
             classic += contacts(24, b.links);
         }
-        expect(dense / 60 - classic / 60).toBeGreaterThan(1);
+        // Round 57: the climb is gentler (5.0 contacts on the last planet,
+        // was 5.8): with certain spread one more contact is a far bigger step.
+        expect(dense / 60 - classic / 60).toBeGreaterThan(0.5);
     });
 });
 
@@ -121,9 +123,10 @@ describe('the briefing reports the climb', () => {
     it('and rises on every planet from the third to the last', () => {
         expect(r0[2]).toBeGreaterThan(r0[1]);
         for (let i = 3; i < r0.length; i++) expect(r0[i], REGIONS[i].id).toBeGreaterThan(r0[i - 1] + 0.05);
-        // A climb a player can see: at least 1.2 from the learning planets to the last.
-        expect(r0.at(-1) - r0[1]).toBeGreaterThan(1.2);
-        expect(r0.at(-1)).toBeGreaterThan(4.8);
+        // A climb a player can see: about 1 from the learning planets to the
+        // last (round 57: was 1.2 and up; see PLANET_WEB_DEGREE for why).
+        expect(r0.at(-1) - r0[1]).toBeGreaterThan(0.9);
+        expect(r0.at(-1)).toBeGreaterThan(4.5);
     });
 
     it('the HUD on day 1 starts near the R0 the briefing promised, on dense webs too', () => {
@@ -143,23 +146,23 @@ describe('the briefing reports the climb', () => {
         }
     });
 
-    it('R0 counts the presymptomatic days of a hidden carrier level', () => {
-        const inc = { incubation: { minDays: 1, maxDays: 2, factor: 0.5 } };
-        expect(linkChance(0.2, 3, inc)).toBeCloseTo(1 - 0.8 ** 3 * 0.9 ** 1.5, 9);
-        expect(linkChance(0.2, 3, inc)).toBeGreaterThan(linkChance(0.2, 3));
+    // Round 57: a hidden carrier level has the same R0 as any other web of
+    // its shape: every contact is a certain case, with or without symptoms.
+    it('R0 is contacts per person on a hidden carrier level too', () => {
+        const inc = { incubation: { count: 2, days: 2 } };
+        expect(linkChance(0.2, 3, inc)).toBe(1);
         const ring = { nodes: [0, 1, 2, 3].map((id) => ({ id })), links: [[0, 1], [1, 2], [2, 3], [3, 0]].map(([source, target]) => ({ source, target })) };
-        expect(webR0(ring, 0.2, 3, inc)).toBeCloseTo(2 * linkChance(0.2, 3, inc), 9);
-        // The sampler passes the degree and the rules through.
-        const base = { networkType: 'small-world', populationRange: [20, 20], transmissionRate: 0.9, recoveryTime: 7, samples: 30 };
+        expect(webR0(ring, 0.2, 3, inc)).toBe(2);
+        // The sampler passes the degree through.
+        const base = { networkType: 'small-world', populationRange: [20, 20], samples: 30 };
         const classic = levelR0Range({ ...base, rng: mulberry32(1) });
         const dense = levelR0Range({ ...base, rng: mulberry32(1), degree: 5.8 });
         expect(dense.lo).toBeGreaterThan(classic.hi);
     });
 
-    it('game.js hands the degree and the rules to the briefing R0', () => {
+    it('game.js hands the degree to the briefing R0', () => {
         const game = read('src/game.js');
         expect(game).toContain('degree: this.currentScenario.webDegree,');
-        expect(game).toContain('rules: this.difficulty,');
-        expect(read('src/sim/setup.js')).toContain('generateNetwork(scenario.networkType, population, rng, scenario.webDegree)');
+        expect(read('src/sim/setup.js')).toContain('population, rng, scenario.webDegree)');
     });
 });

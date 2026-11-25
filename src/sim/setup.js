@@ -6,7 +6,8 @@ import { generateNetwork } from './network.js';
 import { placeSuperSpreader, placeEnvoy, placeHub } from './variants.js';
 import { toolDailyLimit, toolAvailableDay } from './engine.js';
 import { caseCapFor } from './actions.js';
-import { markTravellers } from './mechanics.js';
+import { markTravellers, placeCarriers } from './mechanics.js';
+import { frailCount } from './fatality.js';
 
 // Round 47, a fair opening: on the learning planets a level must never be
 // lost at the end of day 1 when the player makes the best day 1 moves. With patient zero a hub (5 contacts on a web of
@@ -105,7 +106,9 @@ export function buildOutbreak({ scenario, population, variant = null, rng = Math
     Math.random = rng;
     let links;
     try {
-        ({ links } = generateNetwork(scenario.networkType, population, rng, scenario.webDegree));
+        // A puzzle may ask for its own shape of web (round 57: carrier levels
+        // use the even small-world web, so the carrier is the only hub).
+        ({ links } = generateNetwork((variant && variant.networkType) || scenario.networkType, population, rng, scenario.webDegree));
     } finally {
         Math.random = saved;
     }
@@ -155,7 +158,24 @@ export function buildOutbreak({ scenario, population, variant = null, rng = Math
         const hub = placeHub(nodes, links, scenario.goal, rng);
         hubId = hub ? hub.id : null;
     }
-    // Travellers (later planets): a few people who swap a contact each night.
+    // Round 57: the frail (src/sim/fatality.js). A few healthy people carry
+    // the heart mark; only they can die, and only outside a ward. Never one
+    // of the marked puzzle people, so each mark on a person means one thing.
+    const frailIds = [];
+    if (scenario.frailRate != null || scenario.frailCount != null) {
+        const pool = nodes.filter((n) => n.state === 'healthy' && !n.envoy && !n.hub && !n.superSpreader);
+        const want = Math.min(pool.length, scenario.frailCount != null ? scenario.frailCount : frailCount(population, scenario.frailRate));
+        while (frailIds.length < want && pool.length) {
+            const n = pool.splice(Math.floor(rng() * pool.length), 1)[0];
+            n.frail = true;
+            frailIds.push(n.id);
+        }
+    }
+    // Travellers (later planets): a few people who swap a contact each night,
+    // each on a route fixed here.
     const travellerIds = scenario.travellers ? markTravellers(nodes, scenario.travellers, rng).map((n) => n.id) : [];
-    return { nodes, links, initialCases, superSpreaderId, envoyId, hubId, travellerIds };
+    // Hidden carriers (later planets): some contacts of the first case
+    // already carry it. Fixed here, unknown to the player until tested.
+    const carrierIds = scenario.hiddenCarriers ? placeCarriers(nodes, links, scenario.hiddenCarriers, rng).map((n) => n.id) : [];
+    return { nodes, links, initialCases, superSpreaderId, envoyId, hubId, travellerIds, frailIds, carrierIds };
 }

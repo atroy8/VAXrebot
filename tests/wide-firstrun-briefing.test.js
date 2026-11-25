@@ -30,10 +30,19 @@ describe('one screen briefing: what shows by default', () => {
         expect(inMore('id="back-to-menu"')).toBe(false);
     });
 
-    it('puts the lesson, the disease profile and the star goal behind More', () => {
-        for (const id of ['briefing-lesson', 'briefing-lesson-text', 'briefing-disease', 'briefing-traits', 'briefing-agent', 'briefing-vector', 'briefing-r0', 'star-goal']) {
+    it('puts the lesson and the disease profile behind More', () => {
+        for (const id of ['briefing-lesson', 'briefing-lesson-text', 'briefing-disease', 'briefing-traits', 'briefing-agent', 'briefing-vector', 'briefing-r0']) {
             expect(inMore(`id="${id}"`), id).toBe(true);
         }
+    });
+
+    // Round 57: the star goal used to be a general line about what stars
+    // reward and sat behind More. It is now the one number that matters on
+    // this deal ("3 stars: stop it at 4 cases."), so it shows by default, in
+    // the Threat box.
+    it('shows the star goal (the deal\'s par) by default, in the Threat box', () => {
+        expect(inMore('id="star-goal"')).toBe(false);
+        expect(screen).toMatch(/<p class="threat-line" id="threat-line"><\/p>[\s\S]{0,200}<p class="star-goal" id="star-goal"/);
     });
 
     it('More is a native disclosure, closed by default, with a 44 px target', () => {

@@ -12,6 +12,10 @@
 //   clear  tested clear today (node.testedClear), top left, gone at dawn
 //   hub    the place that must stay open (node.hub), top right
 //   travel a traveller, who swaps a contact each night (node.traveller), bottom left
+//   frail  a frail person (node.frail, round 57): the only people who can be
+//          lost, and only when they are sick outside a ward. Top right, where
+//          the hub mark sits (a person is never both). Shown while it
+//          matters: gone once they are vaccinated, isolated or recovered.
 
 export const NODE_MARKS = Object.freeze({
     mask: {
@@ -76,7 +80,24 @@ export const NODE_MARKS = Object.freeze({
             g.closePath();
         },
     },
+    frail: {
+        bg: '#e11d74',
+        fg: '#ffffff',
+        pos: [0.52, 0.56],
+        // A heart.
+        path: (g) => {
+            g.moveTo(64, 100);
+            g.bezierCurveTo(20, 70, 24, 34, 46, 34);
+            g.bezierCurveTo(56, 34, 62, 40, 64, 48);
+            g.bezierCurveTo(66, 40, 72, 34, 82, 34);
+            g.bezierCurveTo(104, 34, 108, 70, 64, 100);
+            g.closePath();
+        },
+    },
 });
+
+// States in which the frail mark still tells the player something.
+const FRAIL_SHOWN = ['healthy', 'infected', 'exposed'];
 
 // Which marks a person shows right now, in a fixed order.
 export function nodeMarks(node) {
@@ -86,13 +107,18 @@ export function nodeMarks(node) {
     if (node.testedClear && node.state === 'healthy') out.push('clear');
     if (node.hub) out.push('hub');
     if (node.traveller) out.push('travel');
+    if (node.frail && FRAIL_SHOWN.includes(node.state)) out.push('frail');
     return out;
 }
 
-// A line with a masked person on it spreads less, so it is drawn thinner
-// and paler. Returns the factors the view applies to linkStyle's result.
+// Round 57: a line with a masked person on it takes two nights to cross.
+// While it has not charged it is drawn thinner and paler ("not tonight");
+// once it has charged (link.charged) it is drawn at full strength again:
+// it crosses tonight like any other red line. Returns the factors the view
+// applies to linkStyle's result.
 export const MASKED_LINE = Object.freeze({ width: 0.65, pale: 0.28 });
 export function maskedEnds(link) {
+    if (link && link.charged) return 0;
     return (link && link.source && link.source.masked ? 1 : 0) + (link && link.target && link.target.masked ? 1 : 0);
 }
 

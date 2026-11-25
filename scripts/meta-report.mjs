@@ -3,19 +3,18 @@
 // Usage: node scripts/meta-report.mjs [runs]
 import { LEVELS, REGIONS } from '../src/config/levels.js';
 import { metaSummary, playMetaRun } from '../src/sim/meta-run.js';
-import { metaModifier } from '../src/config/meta-rules.js';
 import { UPGRADES, UPGRADE_IDS } from '../src/config/upgrades.js';
 import { dailyLevel, dailySeed, addDays } from '../src/sim/daily.js';
 
-const runs = Number(process.argv[2]) || 200;
+const runs = Number(process.argv[2]) || 60;
 const pct = (x) => `${(x * 100).toFixed(1)}%`.padStart(6);
 const mean = (xs) => xs.reduce((a, b) => a + b, 0) / xs.length;
 
 const styles = {
     standard: {},
-    gentle: { modify: metaModifier({ gentle: true }) },
-    upgrades: { modify: metaModifier({ upgrades: UPGRADE_IDS }), upgrades: UPGRADE_IDS },
-    'gentle+upgrades': { modify: metaModifier({ gentle: true, upgrades: UPGRADE_IDS }), upgrades: UPGRADE_IDS },
+    gentle: { meta: { gentle: true, upgrades: [] } },
+    upgrades: { meta: { gentle: false, upgrades: UPGRADE_IDS } },
+    'gentle+upgrades': { meta: { gentle: true, upgrades: UPGRADE_IDS } },
 };
 
 console.log(`Meta report, ${runs} runs per bot per level\n`);
@@ -37,7 +36,7 @@ for (const region of REGIONS) {
 console.log('\nEach upgrade alone, smart bot, last planet:');
 const last = LEVELS.filter((l) => l.regionId === REGIONS.at(-1).id);
 for (const u of UPGRADES) {
-    const rate = mean(last.map((l) => metaSummary(l, { modify: metaModifier({ upgrades: [u.id] }), upgrades: [u.id] }, runs, 1).winRate));
+    const rate = mean(last.map((l) => metaSummary(l, { meta: { gentle: false, upgrades: [u.id] } }, runs, 1).winRate));
     console.log(`  ${u.name.padEnd(16)} ${pct(rate)}`);
 }
 

@@ -50,12 +50,11 @@ function winStats(overrides = {}) {
 
 const LEVEL_0 = LEVELS[0].id;
 
-// Round 20: the small-web retune (item 17) gives every level its own star
-// target and a short par. These tests check the scoring formula itself, so
-// they pin the first planet to the classic 800 point target and 18 day par
-// (module state is per test file, so other tests see the real tuning).
+// These tests check the scoring formula itself, so they pin the first
+// planet to the classic 18 day par for the speed bonus (module state is per
+// test file, so other tests see the real tuning). Round 57: the 800 point
+// star target that was pinned here too is gone with the star targets.
 for (const level of LEVELS.filter((l) => l.regionId === REGIONS[0].id)) {
-    level.target = 800;
     level.tuning.parDays = 18;
 }
 
@@ -157,9 +156,9 @@ describe('unlock gating', () => {
 
     it('planet 2 unlocks at 15 stars', () => {
         let save = freshSave();
-        // Solid wins on par: 990 + 80 = 1070 points, 2 stars each = 20 stars.
+        // Round 57: stars come from par. One case over par is 2 stars each = 20 stars.
         for (const level of LEVELS.filter((l) => l.regionId === REGIONS[0].id)) {
-            save = recordCompletion(save, level.id, 'contained', winStats({ totalDead: 1, totalRecovered: 40, daysUsed: parDaysFor(level) }));
+            save = recordCompletion(save, level.id, 'contained', winStats({ totalInfected: 10, par: { cases: 9, deaths: 0, days: 6 } }));
         }
         expect(totalStars(save)).toBe(20);
         const planet2First = LEVELS.find((l) => l.regionId === REGIONS[1].id);
@@ -184,9 +183,11 @@ describe('unlock gating', () => {
 });
 
 describe('points formula', () => {
-    it('scores 10 per survivor plus 2 per recovered', () => {
-        // pop 100, 5 dead, 10 recovered: 950 + 20 = 970
-        expect(calculatePoints('contained', winStats({ totalDead: 5 }), LEVEL_0)).toBe(970);
+    // Round 57: the 2 points per recovered person (which paid for letting
+    // people fall sick) became 1 point per person who never fell sick.
+    it('scores 10 per survivor plus 1 per person kept well', () => {
+        // pop 100, 5 dead, 10 ever sick: 950 + 90 = 1040
+        expect(calculatePoints('contained', winStats({ totalDead: 5 }), LEVEL_0)).toBe(1040);
     });
 
     it('adds a speed bonus for finishing under par days', () => {
@@ -212,35 +213,33 @@ describe('points formula', () => {
     });
 
     it('normalizes per capita so population rolls do not inflate stars', () => {
-        const small = calculateScore('contained', winStats({ initialPopulation: 50, totalDead: 0, totalRecovered: 5 }), LEVEL_0);
-        const big = calculateScore('contained', winStats({ initialPopulation: 200, totalDead: 0, totalRecovered: 20 }), LEVEL_0);
+        const small = calculateScore('contained', winStats({ initialPopulation: 50, totalDead: 0, totalInfected: 5 }), LEVEL_0);
+        const big = calculateScore('contained', winStats({ initialPopulation: 200, totalDead: 0, totalInfected: 20 }), LEVEL_0);
         expect(small).toBeCloseTo(big, 5);
     });
 });
 
-describe('points-to-stars', () => {
-    // LEVEL_0 target is 800: 1 star >= 800, 2 stars >= 1040, 3 stars >= 1280.
-    it('awards 1 star for beating the target', () => {
-        // 5 dead, 10 recovered: 970 points -> score 970
-        expect(calculateStars('contained', winStats({ totalDead: 5 }), LEVEL_0)).toBe(1);
+// Round 57: stars no longer come from points against a per-level target.
+// They compare the result with par (tests/round57-stars.test.js has the
+// full table); these keep the old cases as they now read.
+describe('stars against par', () => {
+    const par = { cases: 10, deaths: 0, days: 6 };
+    it('awards 1 star for a win well over par', () => {
+        expect(calculateStars('contained', winStats({ totalInfected: 30, par }), LEVEL_0)).toBe(1);
     });
 
-    it('awards 2 stars at 130% of target', () => {
-        // 2 dead, 30 recovered, on par: 980 + 60 = 1040
-        const par = parDaysFor(levelById(LEVEL_0));
-        expect(calculateStars('contained', winStats({ totalDead: 2, totalRecovered: 30, daysUsed: par }), LEVEL_0)).toBe(2);
+    it('awards 2 stars within the slack of par (2 cases on a web of 100)', () => {
+        expect(calculateStars('contained', winStats({ totalInfected: 12, par }), LEVEL_0)).toBe(2);
+        expect(calculateStars('contained', winStats({ totalInfected: 13, par }), LEVEL_0)).toBe(1);
     });
 
-    it('awards 3 stars at 160% of target', () => {
-        // 0 dead, 140 recovered, on par: 1000 + 280 = 1280 (130 recovered: 1260)
-        const par = parDaysFor(levelById(LEVEL_0));
-        expect(calculateStars('contained', winStats({ totalDead: 0, totalRecovered: 140, daysUsed: par }), LEVEL_0)).toBe(3);
-        expect(calculateStars('contained', winStats({ totalDead: 0, totalRecovered: 130, daysUsed: par }), LEVEL_0)).toBe(2);
+    it('awards 3 stars for matching par', () => {
+        expect(calculateStars('contained', winStats({ totalInfected: 10, par }), LEVEL_0)).toBe(3);
+        expect(calculateStars('contained', winStats({ totalInfected: 10, totalDead: 1, par }), LEVEL_0)).toBe(2);
     });
 
-    it('awards 0 stars for a messy win below target', () => {
-        // 40 dead: 600 + 20 = 620, still counts as completed but banks nothing
-        expect(calculateStars('contained', winStats({ totalDead: 40 }), LEVEL_0)).toBe(0);
+    it('a messy win still earns its star: any win is at least 1', () => {
+        expect(calculateStars('contained', winStats({ totalDead: 40, totalInfected: 60, par }), LEVEL_0)).toBe(1);
     });
 
     it('awards 0 stars for overwhelmed and timeout', () => {
@@ -281,11 +280,12 @@ describe('lives saved', () => {
 
 describe('recordCompletion', () => {
     it('banks stars, funding, and lives on a win', () => {
-        // 2 dead, 10 recovered: 980 + 20 = 1000 -> 1 star
+        // 2 dead, 10 ever sick: 980 + 90 = 1070 points. No par on these
+        // stats (a web that was not dealt), so the win is 1 star.
         const save = recordCompletion(freshSave(), 'mizuho-1', 'contained', winStats({ totalDead: 2 }));
         expect(save.levels['mizuho-1']).toEqual({ stars: 1, completed: true, bestDeaths: 2 });
-        // Round 55: 10 points = 1 gold, so a score of 1000 pays 100.
-        expect(save.funding).toBe(100);
+        // Round 55: 10 points = 1 gold, so a score of 1070 pays 107.
+        expect(save.funding).toBe(107);
         expect(save.livesSaved).toBe(98);
     });
 
@@ -296,7 +296,7 @@ describe('recordCompletion', () => {
             save,
             'mizuho-1',
             'contained',
-            winStats({ totalDead: 1, totalRecovered: 40, daysUsed: parDaysFor(levelById('mizuho-1')) })
+            winStats({ totalDead: 1, totalInfected: 10, par: { cases: 10, deaths: 0, days: 6 } })
         );
         expect(save.levels['mizuho-1'].stars).toBe(2);
         expect(save.levels['mizuho-1'].bestDeaths).toBe(1);
@@ -361,10 +361,11 @@ describe('level list sanity', () => {
         }
     });
 
-    it('every level has a scoring target', () => {
+    // Round 57: per-level score targets are retired (stars come from par).
+    it('no level has a scoring target any more, and every level has par days for the score', () => {
         for (const level of LEVELS) {
-            expect(typeof level.target).toBe('number');
-            expect(level.target).toBeGreaterThan(0);
+            expect(level.target).toBeUndefined();
+            expect(level.tuning.parDays).toBeGreaterThan(0);
         }
     });
 

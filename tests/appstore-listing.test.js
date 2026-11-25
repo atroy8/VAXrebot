@@ -83,7 +83,7 @@ describe('store listing is true to the game', () => {
         const tools = read('src/config/tools.js');
         for (const t of ['Vaccinate', 'Quarantine', 'Sever Link', 'Test', 'Mask']) expect(tools).toContain(t);
         const lessons = read('src/config/lessons.js');
-        for (const title of ['Herd immunity', 'Contact tracing', 'Masks lower the odds', 'Flatten the curve', 'Keep R below 1', 'Hubs and super-spreaders', 'Ring vaccination', 'Shield the vulnerable', 'Act early']) {
+        for (const title of ['Herd immunity', 'Contact tracing', 'Masks buy time', 'Flatten the curve', 'Keep R below 1', 'Hubs and super-spreaders', 'Ring vaccination', 'Shield the vulnerable', 'Act early']) {
             expect(lessons).toContain(`title: '${title}'`);
         }
         for (const idea of ['R, the number', 'Herd immunity', 'Contact tracing', 'Masks', 'flattening the curve']) {

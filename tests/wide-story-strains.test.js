@@ -151,8 +151,10 @@ describe('gentler death framing on the first planet', () => {
     it('the gentle line gives no raw odds; the plain line still does', () => {
         const gentle = gameOddsLine(0.29, true);
         expect(gentle).not.toMatch(/\d/);
-        expect(gentle).toMatch(/Ward care halves it/);
-        expect(gameOddsLine(0.29, false)).toMatch(/about 1 in 3 .* about 1 in 7 with ward care/);
+        // Round 57: no dice. The frail (heart mark) are the people in danger
+        // and a ward always saves them.
+        expect(gentle).toMatch(/ward care always saves them/);
+        expect(gameOddsLine(0.29, false)).toMatch(/heart mark stand for the about 1 in 3 .*Ward care always saves them here/);
         expect(gameOddsLine(null, true)).toBe('');
     });
 
@@ -178,7 +180,7 @@ describe('deaths are named', () => {
         expect(deathToast({ count: 1, names: ['Aiko the baker'] })).toBe('Aiko the baker did not survive.');
         expect(deathToast({ count: 2, names: ['Aiko the baker', 'Ren the fisher'] })).toBe('Aiko the baker and Ren the fisher did not survive.');
         expect(deathToast({ count: 3, names: ['A the cook', 'B the smith', 'C the clerk'] })).toBe('A the cook, B the smith and 1 other did not survive.');
-        expect(deathToast({ count: 1, firstThisLevel: true, names: ['Aiko the baker'] })).toMatch(/^Aiko the baker did not survive\. .*ward/);
+        expect(deathToast({ count: 1, firstThisLevel: true, names: ['Aiko the baker'] })).toMatch(/^Aiko the baker did not survive\. .*Quarantine saves them/);
         // Without names it reads as before.
         expect(deathToast({ count: 1 })).toBe('Someone did not survive.');
         expect(deathToast({ count: 2, names: ['only one'] })).toBe('2 people did not survive.');

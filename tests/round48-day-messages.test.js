@@ -38,7 +38,7 @@ describe('careNudgeStep', () => {
         mark(w);
         expect(careNudgeStep({ day: 3, sick: 2 }, 2, seen)).toBeNull();
         const o = careNudgeStep({ day: 3, sick: 2 }, 3, seen);
-        expect(o).toEqual({ kind: 'open', text: 'Quarantine is open! 2 sick people still need care: tap them to isolate them.' });
+        expect(o).toEqual({ kind: 'open', text: 'Quarantine is open! 2 frail people still need care: tap them to isolate them.' });
         mark(o);
         expect(careNudgeStep({ day: 3, sick: 1 }, 3, seen)).toBeNull();
         expect(careNudgeStep({ day: 4, sick: 1 }, 4, seen)).toBeNull();
@@ -62,7 +62,7 @@ describe('careNudgeStep', () => {
     });
 
     it('lines are short, singular aware and free of dashes', () => {
-        expect(careOpenLine({ day: 3, sick: 1 })).toBe('Quarantine is open! 1 sick person still needs care: tap them to isolate them.');
+        expect(careOpenLine({ day: 3, sick: 1 })).toBe('Quarantine is open! 1 frail person still needs care: tap them to isolate them.');
         expect(careOpenLine(null)).toBe('');
         for (const line of [careOpenLine({ sick: 1 }), careOpenLine({ sick: 3 })]) {
             expect(line.length).toBeLessThanOrEqual(100);
@@ -73,7 +73,8 @@ describe('careNudgeStep', () => {
     it('matches the engine: day 2 waits for a day 3 Quarantine, day 3 opens', () => {
         const tools = { quarantine: { baseDailyLimit: 2, availableDay: 3 } };
         const difficulty = { toolLimitMultiplier: 1, toolDays: { quarantine: 3 } };
-        const network = { nodes: [{ id: 1, state: 'infected', daysInfected: 1 }, { id: 2, state: 'healthy' }], links: [] };
+        // Round 57: the ward is for the frail.
+        const network = { nodes: [{ id: 1, state: 'infected', daysInfected: 1, frail: true }, { id: 2, state: 'healthy' }], links: [] };
         const day2 = careStillHelps({ day: 2, dailyUsage: {} }, network, tools, difficulty, 6);
         expect(day2).toEqual({ day: 3, sick: 1 });
         const w = careNudgeStep(day2, 2, seen);

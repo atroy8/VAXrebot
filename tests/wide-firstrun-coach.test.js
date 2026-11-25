@@ -51,7 +51,8 @@ describe('coach steps on day 1 (pure state machine)', () => {
         expect(step.id).toBe('sick');
         expect(step.kind).toBe('info');
         expect(step.anchor).toEqual({ type: 'sick' });
-        expect(step.text).toBe('This person is sick. Red lines are where it can jump next.');
+        // Round 57: spread is certain, so the line says "will", not "can".
+        expect(step.text).toBe('This person is sick. Red lines are where it will jump tonight.');
     });
 
     it('then asks for the Sever Link chip, then for a red line', () => {
@@ -351,7 +352,8 @@ describe('coach wiring, markup and style', () => {
     const css = read('src/ui/coach.css');
 
     it('the first level starts the coach; the old cards no longer open by themselves', () => {
-        expect(game).toMatch(/this\.currentLevel\.id === LEVELS\[0\]\.id\) \{\s*import\('\.\/ui\/coach\.js'\)\.then\(\(m\) => m\.startCoach\(this\)\);/);
+        // Round 57: not while the solver is showing its best play.
+        expect(game).toMatch(/this\.currentLevel\.id === LEVELS\[0\]\.id && !this\.demo\) \{\s*import\('\.\/ui\/coach\.js'\)\.then\(\(m\) => m\.startCoach\(this\)\);/);
         expect(game).not.toContain('maybeShowOnboarding');
         expect(read('src/ui/onboarding.js')).not.toContain('maybeShowOnboarding');
     });
