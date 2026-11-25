@@ -180,7 +180,7 @@ describe('goals on the briefing and the results', () => {
         expect(html.match(/goal-line met/g).length).toBe(1);
         expect(html.match(/goal-line earlier/g).length).toBe(1);
         expect(html.match(/goal-line open/g).length).toBe(1);
-        expect(html).toContain(`+${GOAL_FUNDING} funding`);
+        expect(html).toContain(`+${GOAL_FUNDING} gold`);
         expect(resultsGoalsMarkup([])).toBe('');
     });
     it('each renders into its one container, and the briefing row cannot wrap', () => {

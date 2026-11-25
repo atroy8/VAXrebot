@@ -99,7 +99,7 @@ export function renderTools(tools, difficulty, day, dailyUsage, { charges = {}, 
     const canBuy = shopCanBuy(funding, Object.values(POWER_UPS).map((p) => p.cost));
     const shop = `<button type="button" class="tool-item shop-chip${canBuy ? ' can-buy' : ''}" data-tool="shop">
             <span class="tool-icon">${ICONS.shop}</span>
-            <span class="tool-text"><span class="tool-name">Shop</span><span class="tool-usage">${funding == null ? 'Power-ups' : `${funding} funds`}</span></span>
+            <span class="tool-text"><span class="tool-name">Shop</span><span class="tool-usage">${funding == null ? 'Power-ups' : `${funding} gold`}</span></span>
         </button>`;
     toolsList.innerHTML = html + shop;
     // Round 50: a tray longer than the screen pins the Shop chip at its right
@@ -323,7 +323,7 @@ export function renderGameOver({ outcome, stats, difficultyId, threatPips = null
         rewards.className = 'game-over-rewards';
         rewards.innerHTML = `
             <div class="reward-stars">${'★'.repeat(stars)}${'☆'.repeat(3 - stars)}</div>
-            <div class="reward-line">+${fundingEarned} funding earned</div>
+            <div class="reward-line">+${fundingEarned} gold earned</div>
             <div class="reward-line">${livesSaved.toLocaleString()} lives saved in this mission</div>`;
         document.getElementById('game-over-message').after(rewards);
     }

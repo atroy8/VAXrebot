@@ -235,7 +235,7 @@ describe('the Daily is reachable and saved', () => {
     it('only the first attempt is recorded and paid; the campaign save is left alone', () => {
         const game = read('src/game.js');
         expect(game).toContain('if (this.currentLevel && !this.daily) {');
-        expect(game).toContain('const fundingEarned = this.daily?.practice ? 0 : fundingAward(stars);');
+        expect(game).toContain('const fundingEarned = this.daily?.practice ? 0 : goldAward(outcome, stats, this.currentLevel);');
         const meta = read('src/game-meta.js');
         expect(meta).toContain('this.daily.practice = true;');
         expect(meta).toMatch(/if \(counted\) \{\s*this\.save = \{ \.\.\.this\.save, daily, funding:/);

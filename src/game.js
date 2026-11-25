@@ -20,12 +20,18 @@ import {
     isLevelUnlocked,
     calculateStars,
     fundingAward,
+    goldAward,
+    calculateScore,
+    POINTS_PER_GOLD,
     livesSavedForRun,
     recordCompletion,
     parDaysFor,
     levelRecord,
 } from './progress.js';
-import { isPowerUp, usePowerUp, getCharges, getFunding } from './economy.js';
+import { isPowerUp, usePowerUp, getCharges, getFunding, powerUpLockedLine } from './economy.js';
+import { nextStepTarget, markNextStep } from './ui/next-step.js';
+import { shouldSkipToCare, CARE_SKIP_MS } from './ui/care-skip.js';
+import './ui/buttons.css';
 import './ui/game-screen.css';
 import './ui/planet-tint.css';
 import './ui/averted.css';
@@ -253,6 +259,11 @@ export class EpidemicSimulator {
             // Round 38: a used-up tool says the same line a red line tap
             // would (spentToolLine), so the two never stack as two toasts.
             if (toolItem.classList.contains('disabled')) {
+                // Round 55: a power-up before day 3 says when it opens.
+                if (isPowerUp(toolId)) {
+                    showNotification(powerUpLockedLine(), 'info');
+                    return;
+                }
                 const chips = this.currentChips();
                 const chip = chips.find((c) => c.id === toolId);
                 if (chip && chip.state === 'spent') {
@@ -757,6 +768,9 @@ export class EpidemicSimulator {
                 if (first) this.audio.playStinger?.('milestone');
                 else this.haptics.play('tool');
             }
+            // Round 55 (Adam): nothing is left to do until Quarantine opens,
+            // so the days roll on by themselves instead of asking for taps.
+            this.skipToCareDay(care);
             return;
         }
         this.autoAdvance.cancel();
@@ -847,7 +861,7 @@ export class EpidemicSimulator {
         stats.daysUsed = this.gameState.day;
         const stars = calculateStars(outcome, stats, this.currentLevel);
         // A Daily practice replay pays nothing (only the first attempt counts).
-        const fundingEarned = this.daily?.practice ? 0 : fundingAward(stars);
+        const fundingEarned = this.daily?.practice ? 0 : goldAward(outcome, stats, this.currentLevel);
         const livesSaved = livesSavedForRun(outcome, stats);
         // Care bonus for the people looked after (wins only), paid on top.
         const bonus = this.daily?.practice ? { lines: [], total: 0 } : careBonus(outcome, stats, this.currentLevel);
@@ -883,6 +897,8 @@ export class EpidemicSimulator {
                 bonus,
                 stars,
                 baseFunding: fundingEarned,
+                // Round 55: points turn into gold at a fixed rate.
+                awardLabel: `${Math.round(calculateScore(outcome, stats, this.currentLevel))} points, ${POINTS_PER_GOLD} points = 1 gold`,
                 chests,
                 meter: starProgress(outcome, stats, this.currentLevel),
                 sound: (kind, i = 0) => this.playTallySound(kind, i),
@@ -1084,6 +1100,45 @@ export class EpidemicSimulator {
         const nextDayBtn = document.getElementById('next-day');
         if (nextDayBtn) nextDayBtn.disabled = this.gameState.paused;
         this.refreshMetaHud(); // Hint price, Undo button
+        this.refreshNextStep();
+    }
+
+    // Spread is over and the only move left is to isolate the sick, but
+    // Quarantine is not open (or is used up) today: go to the next day after
+    // a short beat, and again each morning, until it opens. Pausing or
+    // leaving the level stops it.
+    skipToCareDay(care) {
+        if (!shouldSkipToCare(care, this.gameState)) return;
+        const state = this.gameState;
+        const day = state.day;
+        clearTimeout(this.careSkipTimer);
+        this.careSkipTimer = setTimeout(() => {
+            if (this.gameState !== state || state.gameOver || state.paused || this.wrapUp || state.day !== day || this.currentScreen !== 'game') return;
+            this.nextDay();
+        }, CARE_SKIP_MS);
+    }
+
+    // Round 55: glow on the button for the next sensible step (next-step.js).
+    refreshNextStep() {
+        if (!this.gameState || !this.network) return;
+        const facts = { gameOver: this.gameState.gameOver, wrapUp: !!this.wrapUp, paused: this.gameState.paused, counting: this.autoAdvance.isRunning(), selectedTool: this.selectedTool };
+        let move = null;
+        if (!facts.gameOver && !facts.wrapUp && !facts.paused && !facts.selectedTool) {
+            try {
+                move = this.peekHint?.() || null;
+            } catch {
+                move = null;
+            }
+            // Spread is over: the one useful move is care for the sick, so
+            // Quarantine glows when it is open today, and nothing while the
+            // days roll on to it (skipToCareDay).
+            if (spreadIsOver(this.network)) {
+                const care = careStillHelps(this.gameState, this.network, this.tools, this.difficulty, this.difficulty.recoveryTime);
+                move = care && care.day <= this.gameState.day ? { toolId: 'quarantine' } : null;
+                if (care && care.day > this.gameState.day) facts.counting = true;
+            }
+        }
+        markNextStep(nextStepTarget({ ...facts, move }));
     }
 
     togglePause() {

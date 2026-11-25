@@ -74,13 +74,13 @@ export function prizeCardHtml(c) {
 // the funding total and the prize boxes play there, at the top of the
 // results, and `el` (inside Details) keeps the bins, the bonus lines and the
 // score meter. The bins then count up the first time Details is opened.
-export function playResultsTally(el, { bins, bonus, stars, baseFunding, chests = [], meter = null, sound = () => {}, lead = null }) {
+export function playResultsTally(el, { bins, bonus, stars, baseFunding, awardLabel = '', chests = [], meter = null, sound = () => {}, lead = null }) {
     if (!el) return { skip() {} };
     const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
     const totalFunding = baseFunding + bonus.total;
     const starsHtml = `<div class="tally-stars" data-stars aria-label="${stars} of 3 stars">${'<span class="tally-star">★</span>'.repeat(3)}</div>`;
     const rewardHtml = `
-        <div class="tally-total" data-total-row hidden><span class="tally-coin" aria-hidden="true"></span><span data-total>+0</span> funding</div>
+        <div class="tally-total" data-total-row hidden><span class="tally-coin" aria-hidden="true"></span><span data-total>+0</span> gold</div>
         <div class="tally-prizes" data-prizes></div>`;
 
     el.hidden = false;
@@ -136,7 +136,7 @@ export function playResultsTally(el, { bins, bonus, stars, baseFunding, chests =
         return `<li class="tally-line"><span>${left}</span><strong>+${l.amount}</strong></li>`;
     }
 
-    const awardLine = { id: 'award', label: `${stars}-star mission reward`, amount: baseFunding };
+    const awardLine = { id: 'award', label: awardLabel || `${stars}-star mission reward`, amount: baseFunding };
 
     // The part that lives in Details when the results are lean.
     function finishDetails() {

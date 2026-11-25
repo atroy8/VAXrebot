@@ -12,7 +12,7 @@ import { tools } from '../config/tools.js';
 import { buildRun, mulberry32, BOTS } from './balance.js';
 import { canUseTool } from './engine.js';
 import { applyNodeTool, severLink, advanceDay, caseCapFor } from './actions.js';
-import { calculateStars, fundingAward } from '../progress.js';
+import { calculateStars, goldAward } from '../progress.js';
 import { careBonus } from '../rewards.js';
 import { applyMetaState } from '../config/meta-rules.js';
 import { planDay } from './hint.js';
@@ -50,7 +50,7 @@ export function playMetaRun(level, { bot = 'smart', seed = 1, modify = null, upg
         caseCap: caseCapFor(run.state, run.scenario),
         stars,
         day: run.state.day,
-        funding: fundingAward(stars) + careBonus(result, stats, level).total,
+        funding: goldAward(result, stats, level) + careBonus(result, stats, level).total,
     };
 }
 

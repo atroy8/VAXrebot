@@ -27,6 +27,7 @@ import {
     calculateScore,
     calculateStars,
     fundingAward,
+    goldAward,
     livesSavedForRun,
     recordCompletion,
     regionProgress,
@@ -283,7 +284,8 @@ describe('recordCompletion', () => {
         // 2 dead, 10 recovered: 980 + 20 = 1000 -> 1 star
         const save = recordCompletion(freshSave(), 'mizuho-1', 'contained', winStats({ totalDead: 2 }));
         expect(save.levels['mizuho-1']).toEqual({ stars: 1, completed: true, bestDeaths: 2 });
-        expect(save.funding).toBe(75);
+        // Round 55: 10 points = 1 gold, so a score of 1000 pays 100.
+        expect(save.funding).toBe(100);
         expect(save.livesSaved).toBe(98);
     });
 
@@ -299,7 +301,11 @@ describe('recordCompletion', () => {
         expect(save.levels['mizuho-1'].stars).toBe(2);
         expect(save.levels['mizuho-1'].bestDeaths).toBe(1);
         // Funding and lives accumulate across both runs.
-        expect(save.funding).toBe(75 + 100);
+        // Round 55: gold follows each run's score (goldAward), not its stars.
+        const first = goldAward('contained', winStats({ totalDead: 10 }), 'mizuho-1');
+        const second = goldAward('contained', winStats({ totalDead: 1, totalRecovered: 40, daysUsed: parDaysFor(levelById('mizuho-1')) }), 'mizuho-1');
+        expect(save.funding).toBe(first + second);
+        expect(second).toBeGreaterThan(first);
         expect(save.livesSaved).toBe(90 + 99);
     });
 

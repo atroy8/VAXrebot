@@ -42,7 +42,7 @@ export function resultsGoalsMarkup(checked = [], fresh = [], saved = []) {
         .map((g) => {
             const state = g.met ? 'met' : before.has(g.id) ? 'earlier' : 'open';
             const mark = g.met ? '✓' : before.has(g.id) ? '✓' : '';
-            const note = paid.has(g.id) ? `<span class="goal-pay">+${GOAL_FUNDING} funding</span>` : state === 'earlier' ? '<span class="goal-note">done before</span>' : '';
+            const note = paid.has(g.id) ? `<span class="goal-pay">+${GOAL_FUNDING} gold</span>` : state === 'earlier' ? '<span class="goal-note">done before</span>' : '';
             return `<li class="goal-line ${state}"><span class="goal-box" aria-hidden="true">${mark}</span><span class="goal-text">${esc(g.label)}</span>${note}</li>`;
         })
         .join('');
@@ -88,7 +88,7 @@ export function upgradesMarkup({ funding = 0, owned = [] } = {}) {
         return `<div class="upgrade-card${has ? ' owned' : ''}">
             <div class="upgrade-icon" aria-hidden="true">${u.icon}</div>
             <div class="upgrade-info"><div class="upgrade-name">${esc(u.name)}</div><div class="upgrade-effect">${esc(u.effect)}</div></div>
-            ${has ? '<span class="upgrade-owned">Owned</span>' : `<button type="button" class="upgrade-buy" data-upgrade="${u.id}" ${can ? '' : 'disabled'}>${u.cost} funding</button>`}
+            ${has ? '<span class="upgrade-owned">Owned</span>' : `<button type="button" class="upgrade-buy" data-upgrade="${u.id}" ${can ? '' : 'disabled'}>${u.cost} gold</button>`}
         </div>`;
     }).join('');
     return `<h3>Field kit</h3>

@@ -98,7 +98,7 @@ export function hintPrice(used, free = HINT_RULES.freePerLevel, cost = HINT_RULE
 // Can the player take a hint? Returns { ok, price, reason? }.
 export function hintOffer({ used = 0, funding = 0, free = HINT_RULES.freePerLevel } = {}) {
     const price = hintPrice(used, free);
-    if (price > funding) return { ok: false, price, reason: `The next hint costs ${price} funding.` };
+    if (price > funding) return { ok: false, price, reason: `The next hint costs ${price} gold.` };
     return { ok: true, price };
 }
 
