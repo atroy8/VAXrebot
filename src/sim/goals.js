@@ -14,6 +14,9 @@ import { toolUseTotals } from './run-stats.js';
 const kitOf = (level) => (level && level.toolkit ? level.toolkit.tools : ['vaccinate', 'quarantine', 'severLink']);
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
+// Round 57: the old "Keep cases at half the cap or less" goal is gone. The
+// cap is now par plus a few spare cases, so half of it is below the best
+// possible play: it could never be met.
 // id -> { label(n), short(n), param, applies(level), met(stats, ctx, n), budget(n) }
 // ctx = { caseCap }. budget(n) is the restrained bot that proves the goal
 // can be met (src/sim/meta-run.js), or null when plain bots are the proof.
@@ -23,13 +26,6 @@ export const GOALS = Object.freeze({
         short: () => 'No deaths',
         applies: () => true,
         met: (stats) => (stats.totalDead || 0) === 0,
-        budget: () => null,
-    },
-    halfCap: {
-        label: () => 'Keep cases at half the cap or less',
-        short: () => 'Half the cap',
-        applies: () => true,
-        met: (stats, ctx) => Number.isFinite(ctx.caseCap) && (stats.totalInfected || 0) <= ctx.caseCap / 2,
         budget: () => null,
     },
     fastR: {
@@ -89,8 +85,13 @@ function hash(text) {
 // The goals a level offers: up to three from its pool, chosen by level id
 // and variant, always the same for the same level.
 // Returns [{ id, n, label, short }].
+export const TUTORIAL_LEVEL_ID = 'mizuho-1';
+
 export function goalsFor(level, targets = GOAL_TARGETS) {
     if (!level || level.daily) return [];
+    // The first level is the tutorial: the coach says cut the red lines, so
+    // it offers no bonus goals (one used to ask for at most 1 cut there).
+    if (level.id === TUTORIAL_LEVEL_ID) return [];
     const pool = ((targets[level.id] || {}).offered || []).filter((g) => GOALS[g.id] && GOALS[g.id].applies(level));
     const key = `${level.id}:${level.variant ? level.variant.type : 'plain'}`;
     const ranked = pool.map((g) => ({ g, k: hash(`${key}:${g.id}`) })).sort((a, b) => a.k - b.k || (a.g.id < b.g.id ? -1 : 1));

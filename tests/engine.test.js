@@ -47,14 +47,14 @@ function freshState() {
 }
 
 describe('simulateSpread', () => {
-    it('infects nothing at zero transmission rate', () => {
+    // Round 57: spread is certain. The rate and the dice are ignored.
+    it('infects every healthy contact of the sick, even at a rate of zero', () => {
         const state = freshState();
         const network = chainNetwork();
         const { events, count } = simulateSpread(state, network, 0, always);
-        expect(count).toBe(0);
-        expect(events).toEqual([]);
-        expect(network.nodes.filter((n) => n.state === 'infected')).toHaveLength(1);
-        expect(state.stats.totalInfected).toBe(0);
+        expect(count).toBe(events.length);
+        expect(count).toBeGreaterThan(0);
+        expect(state.stats.totalInfected).toBe(count);
     });
 
     it('infects every healthy neighbor at rate 1', () => {
@@ -140,15 +140,21 @@ describe('updateOutcomes', () => {
         expect(network.nodes.every((n) => n.state === 'recovered')).toBe(true);
     });
 
-    it('kills everyone at fatality rate 1 and removes them from the network', () => {
+    // Round 57: only frail people outside a ward can die; the rate is ignored.
+    it('at fatality rate 1 nobody dies unless they are frail; the frail are removed from the network', () => {
         const state = freshState();
         const network = sickNetwork();
-        const outcomes = updateOutcomes(state, network, 7, 1, always);
+        const spared = updateOutcomes(state, network, 7, 1, always);
+        expect(spared.every((o) => o.outcome === 'recovered')).toBe(true);
+        const state2 = freshState();
+        const frail = sickNetwork();
+        for (const n of frail.nodes) n.frail = true;
+        const outcomes = updateOutcomes(state2, frail, 7, 0, never);
         expect(outcomes.every((o) => o.outcome === 'died')).toBe(true);
-        expect(state.stats.totalDead).toBe(3);
-        expect(state.stats.totalRecovered).toBe(0);
-        expect(network.nodes).toHaveLength(0);
-        expect(network.links).toHaveLength(0);
+        expect(state2.stats.totalDead).toBe(3);
+        expect(state2.stats.totalRecovered).toBe(0);
+        expect(frail.nodes).toHaveLength(0);
+        expect(frail.links).toHaveLength(0);
     });
 
     it('leaves nodes alone before their recovery time', () => {
@@ -160,11 +166,12 @@ describe('updateOutcomes', () => {
         expect(state.stats.totalDead).toBe(0);
     });
 
-    it('mixed rolls split deaths and recoveries', () => {
+    it('the frail are lost and the others recover, whatever the dice say', () => {
         const state = freshState();
         const network = sickNetwork();
-        // Item 20: the daily chance for 30% over 7 days is about 0.0497.
-        const rolls = [0.01, 0.99, 0.02]; // die, live (recovers on day 7), die
+        network.nodes[0].frail = true;
+        network.nodes[2].frail = true;
+        const rolls = [0.99, 0.01, 0.99];
         let i = 0;
         const outcomes = updateOutcomes(state, network, 7, 0.3, () => rolls[i++]);
         expect(outcomes.filter((o) => o.outcome === 'died')).toHaveLength(2);

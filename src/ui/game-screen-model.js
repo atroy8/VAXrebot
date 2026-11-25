@@ -293,22 +293,22 @@ export function rExplainer({ r = null, r0 = '', realR0Note = '' } = {}) {
     let headline;
     if (r == null || !Number.isFinite(r)) {
         headline = 'R shows after the first day';
-        lines.push('R counts how many people each sick person infects. Health teams watch it every day.');
+        lines.push('R counts how many people each sick person infects. Here that is their healthy contacts: every red line is a new case tonight.');
     } else if (r > 1) {
         const about = r >= 5 ? '5 or more' : r < 1.5 ? 'more than 1' : `about ${Math.round(r)}`;
         headline = 'Growing: R is above 1';
-        lines.push(`Each sick person can still reach ${about} others through red links, so cases multiply.`);
+        lines.push(`Each sick person will reach ${about} others tonight through red links, so cases multiply.`);
         lines.push('Cut red links and isolate the sick to push R under 1. It drops the moment you act.');
     } else if (r === 0) {
         headline = 'Stopped for now: R is 0';
         lines.push('No sick person can reach a healthy one right now. Keep it that way.');
     } else {
         headline = 'Shrinking: R is below 1';
-        lines.push('Each sick person can now reach fewer than one other on average, so the outbreak fades out.');
+        lines.push('Each sick person now reaches fewer than one other on average, so the outbreak fades out.');
     }
     const high = r0High(r0);
     if (high != null) {
-        let line = `On this web R₀ is ${String(r0).trim()}: how fast it spreads here when nobody is protected.`;
+        let line = `On this web R₀ is ${String(r0).trim()}: the contacts a person has, which is how many they infect when nobody is protected.`;
         if (r != null && Number.isFinite(r) && r > high + 0.5) {
             // Round 52: R₀ here is now this web's own number, so R only runs
             // well above it when the sick happen to be the busiest people.
@@ -362,22 +362,22 @@ export function titleClass(name) {
 }
 
 // Round 39: the spread is over but some sick people can still be isolated,
-// where care halves their risk. care is careStillHelps() from the engine:
+// where a frail person always recovers (round 57). care is careStillHelps() from the engine:
 // { day, sick }. One short line, no dashes.
 export function careNudgeLine(care, today) {
     if (!care) return '';
-    const who = care.sick === 1 ? '1 sick person still needs' : `${care.sick} sick people still need`;
+    const who = care.sick === 1 ? '1 frail person still needs' : `${care.sick} frail people still need`;
     if (care.day > today) {
-        return `Spread stopped! Quarantine opens on day ${care.day}. Isolate the sick then: care halves their risk.`;
+        return `Spread stopped! Quarantine opens on day ${care.day}. Isolate the frail then: in a ward they recover.`;
     }
-    return `Spread stopped! ${who} care. Quarantine them: care halves their risk.`;
+    return `Spread stopped! ${who} care. Quarantine them: in a ward they recover.`;
 }
 
 // Round 48: the line for the morning Quarantine opens, after the waiting
 // line told the player to hold on until then.
 export function careOpenLine(care) {
     if (!care) return '';
-    const who = care.sick === 1 ? '1 sick person still needs care: tap them' : `${care.sick} sick people still need care: tap them`;
+    const who = care.sick === 1 ? '1 frail person still needs care: tap them' : `${care.sick} frail people still need care: tap them`;
     return `Quarantine is open! ${who} to isolate them.`;
 }
 

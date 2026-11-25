@@ -13,7 +13,10 @@ import { metaSummary } from './meta-run.js';
 // restraintMetRate: goals with a number ("at most 2 vaccines") get the
 // tightest number the restrained bot still wins with this often, so they
 // are a stretch, not a wall.
-export const GOAL_FAIRNESS = Object.freeze({ minMetRate: 0.15, restraintMetRate: 0.3, maxFreeShare: 0.7 });
+// maxPlainRate (round 57): a goal the plain bots meet in nearly every run is
+// automatic, whatever share of their wins that is (the tutorial is won on
+// day 1 without a single vaccine, so "at most 1 vaccine" asked for nothing).
+export const GOAL_FAIRNESS = Object.freeze({ minMetRate: 0.15, restraintMetRate: 0.3, maxFreeShare: 0.7, maxPlainRate: 0.85 });
 
 // Runs of the plain bots for one level, shared by every goal on it.
 export function basePool(level, runs = 120, seed = 5) {
@@ -41,7 +44,8 @@ export function goalEvidence(level, goal, { runs = 120, seed = 5, pool = null } 
 }
 
 export function isFair(evidence, rules = GOAL_FAIRNESS, minMetRate = rules.minMetRate) {
-    return evidence.metRate >= minMetRate && evidence.freeShare <= rules.maxFreeShare;
+    const plain = Math.max(evidence.byStyle?.smart ?? 0, evidence.byStyle?.beginner ?? 0);
+    return evidence.metRate >= minMetRate && evidence.freeShare <= rules.maxFreeShare && plain <= (rules.maxPlainRate ?? 1);
 }
 
 // Choose the fair goals for a level, with numbers. Returns [{ id, n? }].

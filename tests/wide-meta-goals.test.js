@@ -19,10 +19,12 @@ describe('the goal checks are pure functions of the end-of-level stats', () => {
         expect(goalMet({ id: 'noDeaths' }, 'contained', stats(), ctx)).toBe(true);
         expect(goalMet({ id: 'noDeaths' }, 'contained', stats({ totalDead: 1 }), ctx)).toBe(false);
     });
-    it('Keep cases at half the cap or less', () => {
-        expect(goalMet({ id: 'halfCap' }, 'contained', stats({ totalInfected: 3 }), ctx)).toBe(true);
-        expect(goalMet({ id: 'halfCap' }, 'contained', stats({ totalInfected: 4 }), ctx)).toBe(false);
-        expect(goalMet({ id: 'halfCap' }, 'contained', stats(), { caseCap: Infinity })).toBe(false);
+    // Round 57: the cap is par plus a few spare cases, so "half the cap" is
+    // below the best possible play and can never be met. The goal is retired.
+    it('Keep cases at half the cap or less is gone', () => {
+        expect(GOAL_IDS).not.toContain('halfCap');
+        expect(goalMet({ id: 'halfCap' }, 'contained', stats({ totalInfected: 1 }), ctx)).toBe(false);
+        for (const level of LEVELS) expect(goalsFor(level).some((g) => g.id === 'halfCap'), level.id).toBe(false);
     });
     it('Get R under 1 by day N', () => {
         expect(goalMet({ id: 'fastR', n: 2 }, 'contained', stats({ rTamedDay: 2 }), ctx)).toBe(true);
@@ -71,8 +73,10 @@ describe('each level offers up to three goals, always the same ones', () => {
             }
         }
     });
-    it('every level has at least one goal and most have three', () => {
-        const counts = LEVELS.map((l) => goalsFor(l).length);
+    it('every level after the tutorial has at least one goal and most have three', () => {
+        // Round 57: the tutorial (level 1) offers none.
+        expect(goalsFor(LEVELS[0])).toEqual([]);
+        const counts = LEVELS.slice(1).map((l) => goalsFor(l).length);
         expect(Math.min(...counts)).toBeGreaterThanOrEqual(1);
         expect(counts.filter((c) => c === 3).length).toBeGreaterThanOrEqual(LEVELS.length * 0.8);
     });
@@ -108,7 +112,8 @@ describe('each level offers up to three goals, always the same ones', () => {
 describe('every offered goal is possible and none is free (bots, fresh seeds)', () => {
     // Seeds differ from scripts/tune-goals.mjs (seed 5), so this is a real
     // second look, with looser bars than the tuner used (15% to 30% and 70%).
-    const RUNS = 120;
+    // Round 57: 50 deals a level (was 120 runs): each deals and solves a web first.
+    const RUNS = 50;
     for (const level of LEVELS) {
         it(`${level.id}: ${goalsFor(level).map((g) => g.short).join(', ')}`, () => {
             const pool = basePool(level, RUNS, 9);
@@ -122,7 +127,7 @@ describe('every offered goal is possible and none is free (bots, fresh seeds)', 
                 // to the goal's own budget meets it whenever it wins, by design).
                 expect(Math.max(ev.byStyle.smart, ev.byStyle.beginner), `${goal.label} is not automatic`).toBeLessThan(1);
             }
-        });
+        }, 60000);
     }
 });
 

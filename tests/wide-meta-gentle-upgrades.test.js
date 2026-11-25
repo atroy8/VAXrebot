@@ -6,7 +6,7 @@ import { LEVELS, REGIONS } from '../src/config/levels.js';
 import { tools } from '../src/config/tools.js';
 import { rollLevelRules } from '../src/config/difficulty-roll.js';
 import { applyGentle, GENTLE, shouldOfferGentle, nextLossStreak } from '../src/config/gentle.js';
-import { UPGRADES, UPGRADE_IDS, applyUpgradeRules, applyUpgradeState, buyUpgrade, freeHints, likelyNextCase, EXTRA_WARD_CAP } from '../src/config/upgrades.js';
+import { UPGRADES, UPGRADE_IDS, applyUpgradeRules, applyUpgradeState, buyUpgrade, freeHints, EXTRA_WARD_CAP } from '../src/config/upgrades.js';
 import { applyMetaRules, metaModifier } from '../src/config/meta-rules.js';
 import { metaSummary } from '../src/sim/meta-run.js';
 import { mulberry32, buildRun } from '../src/sim/balance.js';
@@ -22,7 +22,8 @@ import { gentleOfferMarkup, upgradesMarkup, briefingGoalsMarkup, levelMetaLine }
 const read = (p) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
 const mean = (xs) => xs.reduce((a, b) => a + b, 0) / xs.length;
 const lastPlanet = LEVELS.filter((l) => l.regionId === REGIONS.at(-1).id);
-const RUNS = 100;
+// Round 57: every run deals and solves a web first, so fewer runs (was 100).
+const RUNS = 40;
 const gentle = { modify: metaModifier({ gentle: true }) };
 const kitted = { modify: metaModifier({ upgrades: UPGRADE_IDS }), upgrades: UPGRADE_IDS };
 const planetRate = (levels, options) => mean(levels.map((l) => metaSummary(l, options, RUNS, 21).winRate));
@@ -32,10 +33,12 @@ describe('gentle mode is a pure modifier on the rolled rules', () => {
     const rolled = rollLevelRules(level, mulberry32(3));
     const out = applyGentle(rolled);
 
-    it('spread is a little slower and each offered tool gets one more use a day', () => {
-        expect(out.difficulty.transmissionMultiplier).toBeCloseTo(rolled.difficulty.transmissionMultiplier * GENTLE.spreadFactor, 2);
-        expect(GENTLE.spreadFactor).toBeGreaterThanOrEqual(0.8);
-        expect(GENTLE.spreadFactor).toBeLessThan(1);
+    // Round 57: there is no spread rate to slow. Gentle mode is one more use
+    // of each tool a day and one more spare case under the cap.
+    it('each offered tool gets one more use a day and the cap one more spare case', () => {
+        expect(GENTLE).toEqual({ extraUses: 1, extraCap: 1 });
+        expect(out.difficulty.transmissionMultiplier).toBe(rolled.difficulty.transmissionMultiplier);
+        expect(out.scenario.capSlack).toBe(rolled.scenario.capSlack + 1);
         for (const id of level.toolkit.tools) expect(out.difficulty.dailyLimits[id]).toBe(rolled.difficulty.dailyLimits[id] + 1);
         expect(out.difficulty.gentle).toBe(true);
     });
@@ -47,7 +50,7 @@ describe('gentle mode is a pure modifier on the rolled rules', () => {
         expect(toolDailyLimit(tools.vaccinate, g.difficulty, 'vaccinate')).toBe(0);
     });
 
-    it('never changes the rules it was given, the cap or the level length', () => {
+    it('never changes the rules it was given, the fallback cap share or the level length', () => {
         const before = JSON.stringify(rolled);
         applyGentle(rolled);
         expect(JSON.stringify(rolled)).toBe(before);
@@ -78,10 +81,10 @@ describe('gentle mode with the balance bots', () => {
 
     it('doing nothing still never wins, on any level', () => {
         for (const level of LEVELS) {
-            const s = metaSummary(level, { ...gentle, bot: 'passive' }, 25, 3);
+            const s = metaSummary(level, { ...gentle, bot: 'passive' }, 8, 3);
             expect(s.runs.filter((r) => r.outcome === 'contained').length, level.id).toBe(0);
         }
-    });
+    }, 120000);
 
     it('random tapping still does not beat the last planet', () => {
         expect(planetRate(lastPlanet, { ...gentle, bot: 'random' })).toBeLessThanOrEqual(0.15);
@@ -149,13 +152,13 @@ describe('permanent upgrades', () => {
         expect([...costs].sort((a, b) => a - b)).toEqual(costs);
         expect(new Set(costs).size).toBe(costs.length);
         // A win banks about 126 funding (stars plus the care bonus).
-        const typicalWin = mean(LEVELS.filter((l) => l.levelInPlanet % 3 === 0).map((l) => metaSummary(l, {}, 60, 2).meanFundingPerWin));
+        const typicalWin = mean(LEVELS.filter((l) => l.levelInPlanet % 3 === 0).map((l) => metaSummary(l, {}, 30, 2).meanFundingPerWin));
         expect(typicalWin).toBeGreaterThan(100);
         expect(typicalWin).toBeLessThan(160);
         expect(costs[0] / typicalWin).toBeLessThanOrEqual(1.5); // the first one comes quickly
         expect(costs.at(-1) / typicalWin).toBeLessThanOrEqual(4); // the last is a few wins, not a grind
         for (const u of UPGRADES) expect(u.effect.length).toBeGreaterThan(10);
-    });
+    }, 60000);
 
     it('buying spends funding once and refuses a second copy or an empty purse', () => {
         const save = { ...freshSave(), funding: 130 };
@@ -205,53 +208,49 @@ describe('permanent upgrades', () => {
     it('Extra ward: the case cap is a little higher', () => {
         const rolled = rollLevelRules(LEVELS[40], mulberry32(1));
         const out = applyUpgradeRules(rolled, ['extraWard']);
-        expect(out.scenario.caseCapFraction).toBeCloseTo(rolled.scenario.caseCapFraction + EXTRA_WARD_CAP, 3);
-        expect(EXTRA_WARD_CAP).toBeLessThanOrEqual(0.05);
+        // Round 57: the cap is par plus a few spare cases, so the ward adds one case.
+        expect(out.scenario.capSlack).toBe(rolled.scenario.capSlack + EXTRA_WARD_CAP);
+        expect(EXTRA_WARD_CAP).toBe(1);
         expect(JSON.stringify(rollLevelRules(LEVELS[40], mulberry32(1)))).toBe(JSON.stringify(rolled)); // input untouched
     });
 
-    it('Mentor on call: two free hints. Early warning: the person most likely to fall ill', () => {
+    // Round 57: Early warning (the person most likely to fall ill next) is
+    // gone: every red line is a certainty now. Rapid response replaces it.
+    it('Mentor on call: two free hints. Rapid response: Quarantine a day earlier', () => {
         expect(freeHints([])).toBe(1);
         expect(freeHints(['mentor'])).toBe(2);
-        const network = {
-            nodes: [
-                { id: 0, state: 'infected' },
-                { id: 1, state: 'infected' },
-                { id: 2, state: 'healthy' },
-                { id: 3, state: 'healthy' },
-                { id: 4, state: 'vaccinated' },
-            ],
-            links: [
-                { source: 0, target: 2 },
-                { source: 0, target: 3 },
-                { source: 1, target: 3 },
-                { source: 1, target: 4 },
-            ],
-        };
-        const hit = likelyNextCase(network, 0.5);
-        expect(hit.node.id).toBe(3);
-        expect(hit.contacts).toBe(2);
-        expect(hit.chance).toBeCloseTo(0.75, 5);
-        network.nodes[0].state = 'quarantined';
-        network.nodes[1].state = 'quarantined';
-        expect(likelyNextCase(network, 0.5)).toBe(null);
+        expect(UPGRADE_IDS).not.toContain('earlyWarning');
+        const delayed = LEVELS.find((l) => l.toolkit.id === 'full');
+        const dayOf = (owned) => toolAvailableDay(tools.quarantine, applyUpgradeRules(rollLevelRules(delayed), owned).difficulty, 'quarantine');
+        expect(dayOf([])).toBe(3);
+        expect(dayOf(['rapidResponse'])).toBe(2);
+        const none = LEVELS.find((l) => l.toolkit.id === 'festival');
+        expect(applyUpgradeRules(rollLevelRules(none), ['rapidResponse']).difficulty.toolDays?.quarantine).toBeUndefined();
     });
 
     it('owning everything helps the smart bot on the last planet without making it a walkover', () => {
         const base = planetRate(lastPlanet, { bot: 'smart' });
         const all = planetRate(lastPlanet, { ...kitted, bot: 'smart' });
         expect(all).toBeGreaterThan(base);
-        expect(all).toBeLessThanOrEqual(0.87); // "about 85%"
+        // Round 57: this was "about 85% at most". With certain spread one more
+        // cut on day 1 (Field training) is worth far more than it was with
+        // dice: on the same web a sensible player now wins about 19 times in
+        // 20 with the whole kit. Par is worked out again with the kit, so 3
+        // stars still have to be played for (measured: about 3 wins in 4).
+        expect(all).toBeLessThanOrEqual(0.98);
+        const stars3 = mean(lastPlanet.map((l) => metaSummary(l, { ...kitted, bot: 'smart' }, RUNS, 21).runs.filter((r) => r.stars === 3).length / RUNS));
+        expect(stars3).toBeLessThan(0.9); // easier with the kit (about 3 in 4), never automatic
         const passive = lastPlanet.map((l) => metaSummary(l, { ...kitted, bot: 'passive' }, 25, 3).winRate);
         expect(Math.max(...passive)).toBe(0);
-    });
+    }, 60000);
 
     it('the balance guardrails are measured without upgrades or Gentle mode', () => {
         const guard = read('tests/balance.test.js');
         expect(guard).not.toMatch(/meta-rules|upgrades|gentle/i);
         const balance = read('src/sim/balance.js');
-        expect(balance).toContain('export function buildRun(level, rng, modify = null)');
-        expect(balance).toMatch(/export function playRun\(level, bot, seed\) \{\s*const rng = mulberry32\(seed\);\s*const run = buildRun\(level, rng\);/);
+        // Round 57: a run is a deal; playRun deals with no meta options.
+        expect(balance).toContain('export function buildRun(level, seed, meta = null)');
+        expect(balance).toMatch(/export function playRun\(level, bot, seed\) \{\s*return playDeal\(dealLevelCached\(level, seed >>> 0\), bot, seed, level\);/);
     });
 
     it('the shop lists them under the power-ups, with a price or Owned', () => {
@@ -261,7 +260,8 @@ describe('permanent upgrades', () => {
         expect(html).toMatch(/data-upgrade="extraWard" disabled>400 gold/);
         expect(html).not.toContain('data-upgrade="fieldTraining"');
         expect(read('src/game.js')).toContain('this.refreshMetaShop();');
-        expect(read('src/game.js')).toContain('this.metaRunReady();');
+        // Round 57: upgrades that act on the fresh state are applied where the deal is opened.
+        expect(read('src/sim/dealer.js')).toContain('applyMetaState(run.state, run, { upgrades: deal.upgrades })');
         expect(read('src/ui/meta.css')).toMatch(/\.upgrade-buy \{[^}]*min-height: 48px;/s);
     });
 });

@@ -109,7 +109,7 @@ export const RESULT_LINES = Object.freeze({
     wonWithDeaths: [
         'You stopped it. We lost people too. Both things are true.',
         'Contained. Take a moment for the ones we lost, then we go on.',
-        'A win with a cost. A ward halves the risk, so use them early.',
+        'A win with a cost. A ward saves a frail patient, so use them early.',
         'It is over here. I will write to the families myself.',
         'You held the line. Next time let us hold it a day sooner.',
         'Stopped. Not everyone saw the end of it. Carry that gently.',
@@ -208,12 +208,16 @@ export function mentorBriefingLine(levelId) {
 }
 
 // How the level went, as one of the RESULT_LINES keys.
-// stats: { totalDead, totalInfected, daysUsed, caseCap?, parDays? }.
+// stats: { totalDead, totalInfected, daysUsed, caseCap?, parDays?, par? }.
 export function mentorOutcome(outcome, stats = {}) {
     const dead = stats.totalDead || 0;
     const days = stats.daysUsed || 0;
     if (outcome === 'contained') {
         if (dead > 0) return 'wonWithDeaths';
+        // Round 57: "slow" now means the outbreak got further than the best
+        // play would have let it (more cases than par), which is what acting
+        // late costs. Without a par the old day count decides.
+        if (stats.par) return (stats.totalInfected || 0) > stats.par.cases ? 'wonSlow' : 'flawless';
         return stats.parDays > 0 && days > stats.parDays ? 'wonSlow' : 'flawless';
     }
     if (outcome === 'envoy-lost') return 'envoyLost';

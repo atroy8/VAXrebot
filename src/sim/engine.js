@@ -6,66 +6,66 @@
 
 const nodeId = (ref) => (ref && typeof ref === 'object' ? ref.id : ref);
 import { envoyLost } from './variants.js';
-import { canDieOnDay, dailyRisk, riskDaysLeft } from './fatality.js';
-import { incubationOf, maskFactorOf, linkFactor, rollIncubation, isCarrier, isInfectious, isSusceptible, travelCanSpread } from './mechanics.js';
+import { diesTonight, careDaysLeft } from './fatality.js';
+import { crossesTonight, isCarrier, isInfectious, isSusceptible, travelCanSpread } from './mechanics.js';
 
-// One day of spread. Returns { events: [{ source, target }], count }.
-// `transmissionRate` is the fully computed per-contact probability
-// (scenario.baseTransmissionRate * difficulty.transmissionMultiplier).
+// One night of spread. Returns { events: [{ source, target }], count }.
+//
+// Round 57: predictable spread. Every person who can catch it and is
+// joined by a live line to someone who can spread it becomes sick tonight.
+// No dice. A red line on screen therefore means exactly "this person is
+// sick tomorrow unless you act". The 3rd and 4th arguments (the old
+// per-contact chance and the dice) are kept so callers need not change;
+// both are ignored.
 //
 // Protected-node rules (nodes stay visible, never removed):
 // - Quarantined nodes neither infect others nor become infected. Quarantining
 //   an infected node keeps it sick: it ticks daysInfected and resolves via
-//   updateOutcomes (recover/die) while isolated, and counts as active infected
-//   for the win check until it resolves. Isolation is not a cure.
+//   updateOutcomes while isolated, and counts as active infected for the
+//   win check until it resolves. Isolation is not a cure.
 // - Vaccinated nodes remain immune: targets must be 'healthy'.
-// Later planets (src/sim/mechanics.js) pass their rules as the 5th argument:
-// - rules.incubation: a new infection starts hidden (node.incubating days,
-//   state unchanged) and spreads at a reduced rate until symptoms show.
-//   `events` then stays empty (nothing the player may watch happens at the
-//   moment of infection); `hidden` lists the true infections and `onsets`
-//   the people who showed symptoms tonight. `count` is always the number of
-//   NEW KNOWN cases, which is what the day banner and the case count report.
-// - masks (node.masked): the chance on a line is scaled by linkFactor.
-// Without rules, and with nobody masked, the dice are rolled exactly as
-// they always were, so the learning planets play the same games per seed.
-export function simulateSpread(state, network, transmissionRate, rng = Math.random, rules = null) {
+// Later planets (src/sim/mechanics.js):
+// - Masks: a line with a masked end charges for one night (link.charged)
+//   and crosses the next. `charging` lists the lines that charged tonight.
+// - Hidden carriers (dealt with the level) spread like the sick. `onsets`
+//   lists the carriers who showed symptoms tonight. `count` is always the
+//   number of NEW KNOWN cases, which is what the day banner reports.
+// People who caught it tonight do not pass it on until tomorrow night.
+export function simulateSpread(state, network, _transmissionRate, _rng, _rules = null) {
     const events = [];
-    const hidden = [];
-    const inc = incubationOf(rules);
-    const maskFactor = maskFactorOf(rules);
+    const charging = [];
     const byId = new Map(network.nodes.map((n) => [n.id, n]));
-    const spreaders = network.nodes.filter(isInfectious);
+    const spreaders = new Set(network.nodes.filter(isInfectious));
     const carriersBefore = network.nodes.filter(isCarrier);
+    const caught = new Set();
 
-    for (const infected of spreaders) {
-        const base = infected.state === 'infected' ? transmissionRate : transmissionRate * (inc ? inc.factor : 1);
-        for (const link of network.links) {
-            const s = nodeId(link.source);
-            const t = nodeId(link.target);
-            if (s !== infected.id && t !== infected.id) continue;
-            const targetNode = byId.get(s === infected.id ? t : s);
-            if (!isSusceptible(targetNode)) continue;
-            if (rng() < base * linkFactor(infected, targetNode, maskFactor)) {
-                if (inc) {
-                    targetNode.incubating = rollIncubation(inc, rng);
-                    state.stats.hiddenInfections = (state.stats.hiddenInfections || 0) + 1;
-                    if (infected.state !== 'infected') state.stats.silentSpread = (state.stats.silentSpread || 0) + 1;
-                    hidden.push({ source: infected, target: targetNode });
-                } else {
-                    targetNode.state = 'infected';
-                    state.stats.totalInfected++;
-                    events.push({ source: infected, target: targetNode });
-                }
-            }
+    for (const link of network.links) {
+        const a = byId.get(nodeId(link.source));
+        const b = byId.get(nodeId(link.target));
+        if (!a || !b) continue;
+        let from = null;
+        let to = null;
+        if (spreaders.has(a) && (isSusceptible(b) || caught.has(b))) [from, to] = [a, b];
+        else if (spreaders.has(b) && (isSusceptible(a) || caught.has(a))) [from, to] = [b, a];
+        if (!from) continue;
+        if (!crossesTonight(link, a, b)) {
+            charging.push(link);
+            continue;
         }
+        if (caught.has(to)) continue; // already caught it tonight on another line
+        caught.add(to);
+        to.state = 'infected';
+        state.stats.totalInfected++;
+        if (from.state !== 'infected') state.stats.silentSpread = (state.stats.silentSpread || 0) + 1;
+        events.push({ source: from, target: to });
     }
+    for (const link of charging) link.charged = true;
 
     for (const n of network.nodes) {
         if (n.state === 'infected' || (n.state === 'quarantined' && n.sickWhileQuarantined)) n.daysInfected++;
     }
 
-    // Carriers from before tonight move one day closer to symptoms.
+    // Carriers move one night closer to symptoms.
     const onsets = [];
     for (const n of carriersBefore) {
         n.incubating -= 1;
@@ -74,7 +74,7 @@ export function simulateSpread(state, network, transmissionRate, rng = Math.rand
     }
     const newKnown = onsets.filter((o) => o.newCase).length;
 
-    return { events, count: events.length + newKnown, hidden, onsets };
+    return { events, count: events.length + newKnown, hidden: [], onsets, charging };
 }
 
 // A carrier's incubation is over: they are now plainly sick. Someone already
@@ -100,31 +100,27 @@ export function showSymptoms(state, node) {
     return { node, from, newCase };
 }
 
-// Resolve deaths and recoveries for one day. Item 20 (round 24): a sick
-// person may die on any day of their illness after the first two (round 36,
-// deaths lag cases: daysInfected 3 up to recoveryTime), at a daily chance that adds up to `fatalityRate` over the
-// whole illness; sick people in a ward get care and face half that
-// (src/sim/fatality.js). Anyone who reaches recoveryTime alive recovers.
+// Resolve deaths and recoveries for one night. Round 57: no dice
+// (src/sim/fatality.js). A frail person who is sick and not in a ward on the
+// third night of their illness is lost; everyone else who reaches
+// recoveryTime nights recovers, and a frail person in a ward always does.
+// The 4th and 5th arguments (the old death rate and dice) are ignored.
 // Returns an ordered list of { node, outcome: 'died' | 'recovered' }.
 // Dead nodes are removed from the network (nodes and their links).
-export function updateOutcomes(state, network, recoveryTime, fatalityRate, rng = Math.random) {
+export function updateOutcomes(state, network, recoveryTime, _fatalityRate, _rng) {
     const outcomes = [];
 
     for (const node of network.nodes) {
         // Quarantined nodes that were sick when isolated keep resolving:
-        // they tick daysInfected (see simulateSpread) and recover or die here.
+        // they tick daysInfected (see simulateSpread) and recover here.
         const stillSick =
             node.state === 'infected' || (node.state === 'quarantined' && node.sickWhileQuarantined);
         if (!stillSick || node.daysInfected < 1) continue;
-        // Round 36: deaths lag cases, so nobody dies in their first days sick.
-        const daily = canDieOnDay(node.daysInfected, recoveryTime) ? dailyRisk(node, fatalityRate, recoveryTime) : 0;
-        if (daily > 0 && rng() < daily) {
-            const inWard = node.state === 'quarantined';
-            if (inWard) state.stats.diedInWard = (state.stats.diedInWard || 0) + 1;
+        if (diesTonight(node, recoveryTime)) {
             node.state = 'dead';
             node.removed = true;
             state.stats.totalDead++;
-            outcomes.push({ node, outcome: 'died', inWard });
+            outcomes.push({ node, outcome: 'died', inWard: false });
         } else if (node.daysInfected >= recoveryTime) {
             node.state = 'recovered';
             node.sickWhileQuarantined = false; // isolation served its purpose
@@ -149,14 +145,14 @@ function removeDead(network, outcomes) {
 // Outcomes that end with people still sick: the outbreak got away.
 export const LOSS_RESULTS = ['overwhelmed', 'envoy-lost', 'timeout'];
 
-// Item 20: when a level is lost with people still sick, their illness does
-// not stop with the level. Each one's remaining days are rolled at once (no
-// more spread), so the results show what the outbreak really cost. Only the
-// stats change: the web stays as it was when the level ended, so nobody is
-// seen flying to the Cured box on a loss. Runs once per level
+// When a level is lost with people still sick, their illness does not stop
+// with the level. Each one's remaining days are settled at once (no more
+// spread) by the same rule as during play: a frail person who is sick
+// outside a ward is lost, everyone else recovers. Only the stats change: the
+// web stays as it was when the level ended. Runs once per level
 // (state.aftermathDone). Deaths count in totalDead and stats.aftermathDead.
 // Returns [{ node, outcome }] like updateOutcomes.
-export function resolveAftermath(state, network, recoveryTime, fatalityRate, rng = Math.random) {
+export function resolveAftermath(state, network, _recoveryTime, _fatalityRate, _rng) {
     if (state.aftermathDone) return [];
     state.aftermathDone = true;
     const outcomes = [];
@@ -164,9 +160,7 @@ export function resolveAftermath(state, network, recoveryTime, fatalityRate, rng
         const stillSick =
             node.state === 'infected' || (node.state === 'quarantined' && node.sickWhileQuarantined);
         if (!stillSick) continue;
-        const daysLeft = riskDaysLeft(node.daysInfected, recoveryTime);
-        const daily = dailyRisk(node, fatalityRate, recoveryTime);
-        if (rng() < 1 - Math.pow(1 - daily, daysLeft)) {
+        if (node.frail && node.state === 'infected') {
             state.stats.totalDead++;
             state.stats.aftermathDead = (state.stats.aftermathDead || 0) + 1;
             outcomes.push({ node, outcome: 'died' });
@@ -266,13 +260,13 @@ function plain(name) {
     return String(name).replace(/^[^A-Za-z]+/, '').toLowerCase();
 }
 
-// Round 39: once the spread is over, care can still save lives. Sick people
-// in an isolation ward get supportive care, which halves their death risk
-// (see fatality.js), so the game should not fast-forward past a Quarantine
-// the player could still use on them. Returns the plan for the next useful
-// isolation, or null when no move can help the sick any more:
-//   { day, sick } - the first day Quarantine can reach someone still sick,
-//   and how many untreated sick people it could still reach then.
+// Once the spread is over, care can still save lives: a frail person who
+// is sick is lost on the third night of their illness unless they are in a
+// ward (see fatality.js), so the game should not fast-forward past a
+// Quarantine the player could still use on them. Returns the plan for the
+// next useful isolation, or null when no move can help the sick any more:
+//   { day, sick } - the first day Quarantine can reach a frail person in
+//   time, and how many of them it could still reach then.
 // Pure: reads state, tools, difficulty and the web; changes nothing.
 export function careStillHelps(state, network, tools, difficulty, recoveryTime) {
     const tool = tools && tools.quarantine;
@@ -284,14 +278,13 @@ export function careStillHelps(state, network, tools, difficulty, recoveryTime) 
     let day = Math.max(state.day, firstDay);
     if (day === state.day && usedToday >= limit) day = state.day + 1;
     const wait = day - state.day;
-    const rt = recoveryTime || 1;
     const used = state.usedOnPeople;
     let sick = 0;
     for (const n of network.nodes) {
-        if (n.removed || n.state !== 'infected') continue;
+        if (n.removed || n.state !== 'infected' || !n.frail) continue;
         if (tool.oncePerPerson && used && used.has && used.has(`quarantine-${n.id}`)) continue;
-        // Still ill (and so still at risk) on the day isolation can reach them.
-        if ((n.daysInfected || 0) + wait < rt) sick++;
+        // Still alive (and so still worth a ward) on the day isolation can reach them.
+        if (careDaysLeft(n, recoveryTime) > wait) sick++;
     }
     return sick > 0 ? { day, sick } : null;
 }

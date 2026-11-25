@@ -112,9 +112,18 @@ describe('balance bots only use the toolkit', () => {
         });
     }
 
-    it('the tuner only searches limits for kit tools', () => {
-        const src = read('scripts/tune-campaign.mjs');
-        expect(src).toContain('presetsFor(kit)');
+    // Round 57: scripts/tune-campaign.mjs is retired; scripts/tune-puzzles.mjs
+    // (src/sim/puzzle-lab.js) tunes the tool counts now.
+    it('the tuner only searches limits for kit tools', async () => {
+        const { tuningCandidates } = await import('../src/sim/puzzle-lab.js');
+        for (const level of [byKit('festival')[0], byKit('school')[0], byKit('rollout')[0]]) {
+            for (const c of tuningCandidates(level)) {
+                for (const t of CLASSIC_TOOLS) {
+                    if (level.toolkit.tools.includes(t)) expect(c.dailyLimits[t], `${level.id} ${t}`).toBeGreaterThan(0);
+                    else expect(c.dailyLimits[t], `${level.id} ${t}`).toBe(0);
+                }
+            }
+        }
     });
 });
 
@@ -134,7 +143,8 @@ describe('briefing toolkit card', () => {
 
     it('the briefing has a toolkit slot and game.js fills it on every level', () => {
         expect(read('index.html')).toContain('id="briefing-toolkit"');
-        expect(read('src/game.js')).toContain('showToolkit(level.toolkit, level.variant?.toolDays)');
+        // Round 57: the days shown are the ones in force (a tuner or an upgrade can move one).
+        expect(read('src/game.js')).toContain('showToolkit(level.toolkit, this.difficulty.toolDays || level.variant?.toolDays)');
     });
 });
 

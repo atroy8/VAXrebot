@@ -52,16 +52,18 @@ describe('tray order matches the order tools open (round 28)', () => {
 });
 
 describe('top marks copy (round 28)', () => {
-    const level = { target: 100 };
-    const stats = (dead) => ({ initialPopulation: 11, totalDead: dead, totalRecovered: 3, daysUsed: 1, powerUpsUsed: 0 });
+    // Round 57: top marks mean the best possible play (par), so the copy
+    // says that instead of "Fast". "Everyone made it" still needs nobody lost.
+    const level = {};
+    const stats = (dead) => ({ initialPopulation: 11, totalInfected: 3, totalDead: dead, totalRecovered: 3, daysUsed: 1, powerUpsUsed: 0, par: { cases: 3, deaths: dead, days: 6 } });
     it('says everyone made it when nobody died', () => {
         const p = starProgress('contained', stats(0), level);
         expect(p.next).toBeNull();
-        expect(starHint(p)).toBe('Top marks! Fast, and everyone made it.');
+        expect(starHint(p)).toBe('Top marks! That was the best possible play, and everyone made it.');
     });
-    it('keeps "nearly everyone" when someone died', () => {
+    it('does not say everyone made it when someone died', () => {
         const p = starProgress('contained', stats(1), level);
-        if (!p.next) expect(starHint(p)).toContain('nearly everyone');
-        expect(starHint({ next: null, facts: { pop: 11, survivors: 10 } })).toContain('nearly everyone');
+        expect(p.next).toBeNull();
+        expect(starHint(p)).toBe('Top marks! That was the best possible play.');
     });
 });

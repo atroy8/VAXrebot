@@ -1,15 +1,16 @@
 // Daily puzzle (wide audience round): one seeded level per calendar day
-// (UTC). Everyone gets the same web, the same first cases and the same
-// stream of dice, so the same moves always give the same outcome and
-// friends can compare. Pure: no DOM, no storage, no clock unless asked.
+// (UTC). Everyone gets the same web, the same first cases and the same par,
+// and since nothing after the deal is random the same moves always give the
+// same outcome, so friends can compare. Pure: no DOM, no storage, no clock
+// unless asked.
 //
 // The level is borrowed from the middle of the campaign (the three medium
 // planets, no boss), so it is approachable for anyone past the first worlds.
-// The run is built exactly the way the balance bots build one
-// (buildRun in src/sim/balance.js with the day's seed), which is how
+// The run is dealt exactly the way the balance bots deal one
+// (dealLevel in src/sim/dealer.js with the day's seed), which is how
 // scripts/meta-report.mjs and the tests prove it is winnable.
 import { LEVELS } from '../config/levels.js';
-import { mulberry32 } from './balance.js';
+import { mulberry32 } from './rng.js';
 
 export const DAILY_PREFIX = 'daily-';
 export const DAILY_NAME = 'Daily Outbreak';
@@ -59,22 +60,14 @@ export function isDailyLevel(level) {
     return !!level && level.daily === true;
 }
 
-// The day's dice. One stream, read in the same order as buildRun: the first
-// number rolls the threat (rules), the rest roll the web, the first cases
-// and every night. `run` starts after the threat roll, so the game can take
-// the rules at the briefing and the rest when the level starts, any number
-// of times, and always get the same level.
+// The day's seed deals the day's web (src/sim/dealer.js). Round 57: there
+// are no dice after the deal, so the Daily is truly identical for everyone:
+// the same web, the same first cases, the same par, and the same moves
+// always give the same result. dailyDice is kept for callers of the old
+// shape: both streams start from the day's seed.
 export function dailyDice(dateStr) {
     const seed = dailySeed(dateStr);
-    return {
-        seed,
-        rules: () => mulberry32(seed),
-        run: () => {
-            const rng = mulberry32(seed);
-            rng(); // the threat roll
-            return rng;
-        },
-    };
+    return { seed, rules: () => mulberry32(seed), run: () => mulberry32(seed) };
 }
 
 // ---- Streak ---------------------------------------------------------------
@@ -123,10 +116,13 @@ export function caseSquares(activeByDay = [], max = 20) {
 
 const OUTCOME_WORDS = { overwhelmed: 'overwhelmed', 'envoy-lost': 'Envoy lost', timeout: 'out of time', burnout: 'burned out' };
 
-export function dailyShareText({ date, outcome, days = 0, lost = 0, stars = 0, activeByDay = [], streak = 0 } = {}) {
+// cases and par (round 57): "par 4, you 4" on a win, since the Daily's par is
+// the same for everyone.
+export function dailyShareText({ date, outcome, days = 0, lost = 0, stars = 0, activeByDay = [], streak = 0, cases = null, par = null } = {}) {
     const dayWord = `${days} day${days === 1 ? '' : 's'}`;
     const result = outcome === 'contained' ? `contained in ${dayWord}, ${lost} lost, ${stars} star${stars === 1 ? '' : 's'}` : `${OUTCOME_WORDS[outcome] || 'not contained'} on day ${days}, ${lost} lost`;
     const lines = [`Galactic Outbreak Daily ${date}: ${result}`];
+    if (par && cases != null) lines.push(`par ${par.cases}, you ${cases}`);
     const squares = caseSquares(activeByDay);
     if (squares) lines.push(squares);
     if (streak > 1) lines.push(`Streak: ${streak} days`);

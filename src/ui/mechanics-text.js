@@ -9,15 +9,15 @@ export function mechanicToolFeedback(toolId, result = {}, node = {}) {
     if (toolId === 'test') {
         if (result.positive) {
             return {
-                toast: 'Positive! This person is carrying it without symptoms. Isolate them before they pass it on.',
+                toast: 'Positive! This person is carrying it without symptoms and passes it on tonight. Isolate them or cut their lines.',
                 tone: 'success',
                 log: `Person ${node.id} tested positive.`,
             };
         }
-        return { toast: 'Tested clear today. They could still catch it tomorrow.', tone: 'info', log: `Person ${node.id} tested clear.` };
+        return { toast: 'Tested clear: not a carrier. They can still catch it over a red line.', tone: 'info', log: `Person ${node.id} tested clear.` };
     }
     if (toolId === 'mask') {
-        return { toast: 'Masked. Every line to this person now spreads half as easily.', tone: 'info', log: `Person ${node.id} now wears a mask.` };
+        return { toast: 'Masked. Every line of this person now takes two nights to cross instead of one.', tone: 'info', log: `Person ${node.id} now wears a mask.` };
     }
     return { toast: '', tone: 'info', log: '' };
 }
@@ -56,7 +56,7 @@ export function hiddenChainsLine(stats = {}) {
     if (!all) return '';
     const silent = stats.silentSpread || 0;
     const found = stats.testsPositive || 0;
-    const carried = all === 1 ? '1 person carried it unseen at first.' : `${all} people carried it unseen at first.`;
+    const carried = all === 1 ? '1 person carried it unseen from the start.' : `${all} people carried it unseen from the start.`;
     const passed = silent > 0 ? ` ${silent === 1 ? '1 infection was' : `${silent} infections were`} passed on by people with no symptoms yet.` : '';
     const tests = found > 0 ? ` Your tests caught ${found} ${found === 1 ? 'carrier' : 'carriers'} early.` : ' No test found a carrier this time.';
     return `Hidden chains: ${carried}${passed}${tests}`;
@@ -90,5 +90,5 @@ export function mechanicsResultsLine(stats = {}, scenario = null) {
 export function travelLine(spread) {
     const moves = (spread && spread.travel) || [];
     if (!moves.length) return '';
-    return moves.length === 1 ? 'A traveller moved on overnight. Look for their new line.' : `${moves.length} travellers moved on overnight. Look for their new lines.`;
+    return moves.length === 1 ? 'A traveller moved on overnight, as the dotted line showed.' : `${moves.length} travellers moved on overnight, as the dotted lines showed.`;
 }

@@ -16,8 +16,8 @@
 // (PLANET_WEB_DEGREE below).
 //
 // A level's mechanics entry is { id, ...rules }:
-//   incubation  { minDays, maxDays, factor }  see src/sim/mechanics.js
-//   maskFactor  share of the usual chance that passes a masked person
+//   incubation  { count, days }  hidden carriers dealt with the level, see src/sim/mechanics.js
+//   toolDays    first day of a tool on this level, when the mechanic moves it
 //   tools       extra tool ids added to the level's toolkit
 //   drop        classic tools that make room when the kit would pass three
 //               (the tray fits three tools and Shop on a phone)
@@ -43,28 +43,34 @@ export const MECHANIC_TOOLS = Object.freeze(['test', 'mask']);
 
 const INCUBATION = Object.freeze({
     id: 'incubation',
-    incubation: { minDays: 1, maxDays: 2, factor: 0.5 },
+    // Round 57: two of the first case's contacts already carry it when the
+    // level is dealt, and fall sick after two nights (src/sim/mechanics.js).
+    incubation: { count: 2, days: 2 },
     tools: ['test'],
-    toolLimits: { test: 2 },
+    // Enough tests to be certain on day 1 whatever order they are used in
+    // (the dealer only deals webs where contacts - 1 <= tests).
+    toolLimits: { test: 5 },
+    // Tests and wards are ready at once: finding and isolating a carrier is
+    // the point of the level.
+    toolDays: { test: 1, quarantine: 1 },
     drop: ['vaccinate'],
-    why: 'People here carry it for a day or two before they feel sick, so a vaccine would come too late. Test the contacts of the sick, isolate the carriers you find, and cut the lines around them.',
+    why: 'Two people here already carry it and feel fine, so a vaccine would come too late. Test the contacts of the sick person, isolate a carrier you find, and cut the lines around the others.',
     lessonId: 'hidden-carriers',
     callout: {
-        title: 'New: hidden carriers',
-        text: 'A newly infected person looks healthy for a day or two and can already pass it on. Use Test on the contacts of the sick to find them, then isolate them.',
+        title: 'New: 2 hidden carriers',
+        text: 'Two contacts of the sick person already carry it. They look healthy, pass it on from tonight, and fall sick in 2 days. Use Test on the contacts to find out which two, then isolate them or cut their lines.',
     },
 });
 
 const MASKS = Object.freeze({
     id: 'masks',
-    maskFactor: 0.5,
     tools: ['mask'],
-    toolLimits: { mask: 3 },
-    whyAdd: 'Masks arrived too: one halves the spread on every line of the person who wears it.',
+    toolLimits: { mask: 2 },
+    whyAdd: 'Masks arrived too: a line with a masked person on it takes two nights to cross instead of one.',
     lessonId: 'masks',
     callout: {
         title: 'New: masks',
-        text: 'A mask does not cut a line. It halves the chance on every line of the person who wears it, both ways, for the whole level. You get more masks than cuts.',
+        text: 'A mask does not cut a line. Every line of the person who wears it takes two nights to cross instead of one: it charges the first night and crosses the second. A mask buys you a day to cut, vaccinate or isolate.',
     },
 });
 
@@ -102,7 +108,7 @@ const TRAVELLERS = Object.freeze({
     lessonId: 'borders-leak',
     callout: {
         title: 'New: travellers',
-        text: 'The people with the arrow mark travel. Each night they drop one contact and make a new one far away, so check their new line every morning. An isolated traveller stays put.',
+        text: 'The people with the arrow mark travel. Each night they drop their oldest contact and make a new one. The dotted line shows where each one goes tonight, so you can plan for it. An isolated traveller stays put.',
     },
 });
 
@@ -123,14 +129,19 @@ export function mechanicsFor(planetIndex, slotIndex) {
     return m ? JSON.parse(JSON.stringify(m)) : null;
 }
 
-// R0 that climbs (wide audience round). The briefing's "R0 here" is contacts
-// per person times the chance per contact over a sick spell (src/sim/r0.js),
-// and that chance is close to 1 on every level, so R0 sat near 3.5 to 4 from
-// the first planet to the last. From the third planet on, each planet's
-// people have more contacts (the web generators in src/sim/network.js take
-// this as their degree), so the disease really is more contagious there and
-// the briefing says so. The learning planets keep the classic 4 (null here).
-export const PLANET_WEB_DEGREE = Object.freeze([null, null, 4.4, 4.7, 5.0, 5.3, 5.6, 5.8]);
+// R0 that climbs. The briefing's "R0 here" is the number of contacts a
+// person has (src/sim/r0.js): with predictable spread every contact of a
+// sick person catches it, so contacts ARE the reproduction number. From the
+// third planet on, each planet's people have a few more contacts (the web
+// generators in src/sim/network.js take this as their degree), so the
+// disease really is more contagious there and the briefing says so. The
+// learning planets keep the classic 4 (null here).
+// Round 57: the climb is gentler than before (it ran up to 5.8). When every
+// contact is a certain case, one more contact per person is a much bigger
+// step than it was with dice, and above about 5 the best possible play
+// still lost a third of the town. Later planets are now harder because of
+// their puzzles (src/config/puzzle-specs.js), not because they are denser.
+export const PLANET_WEB_DEGREE = Object.freeze([null, null, 4.2, 4.3, 4.4, 4.6, 4.8, 5.0]);
 
 export function webDegreeFor(planetIndex) {
     if (planetIndex == null || planetIndex < FIRST_MECHANICS_PLANET) return null;

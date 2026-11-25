@@ -15,20 +15,20 @@
 //   envoy          protect one marked person: if they fall ill, you lose
 //   noVaccines     no vaccine doses on this world (cut links and isolate)
 //   noQuarantine   no isolation wards (vaccinate and cut links)
-// Tuning comes from src/config/campaign-tuning.js (written by
-// scripts/tune-campaign.mjs); levels without an entry use the defaults below.
-import { CAMPAIGN_TUNING } from './campaign-tuning.js';
+// Round 57: tuning comes from the level's puzzle spec. The tool counts and
+// first cases are picked by scripts/tune-puzzles.mjs (src/config/puzzle-tuning.js);
+// levels without an entry use the defaults below. The old spread
+// multipliers, star targets and their tuners are retired: spread is certain
+// and stars come from the solver's par (src/sim/solver.js, src/progress.js).
+import { puzzleTuning, TUTORIAL_LEVEL_ID, FINALE_TUNING } from './puzzle-specs.js';
 
-// Round 51: hand-set tuning that wins over CAMPAIGN_TUNING and that
-// scripts/tune-campaign.mjs leaves alone. Level 1 is a new player's first
-// game. With 2 cuts a day about 1 in 7 sensible first games were lost on
-// day 2 or 3, before Quarantine opens, even after cutting every red line
-// they could on day 1. A third cut a day lets the act-early lesson work
-// when it is followed, while random tapping still rarely wins (about 13%).
+// Hand-set tuning that wins over the tuner's table and that
+// scripts/tune-puzzles.mjs leaves alone. Level 1 is a new player's first
+// game: one first case and three cuts a day, so "cut the red lines" (the
+// coach's lesson) is also the best play.
 export const ONBOARDING_TUNING = {
-    'mizuho-1': { dailyLimits: { vaccinate: 2, quarantine: 2, severLink: 3 } },
+    [TUTORIAL_LEVEL_ID]: { initialInfected: 1, dailyLimits: { vaccinate: 2, quarantine: 2, severLink: 3 } },
 };
-import { STAR_TARGETS } from './star-targets.js';
 import { toolkitForSlot } from './toolkits.js';
 import { mechanicsFor } from './planet-mechanics.js';
 
@@ -191,30 +191,30 @@ export function planetStarRequirement(planetIndex) {
     return Math.round(1.5 * LEVELS_PER_PLANET * planetIndex);
 }
 
-// Default tuning before scripts/tune-campaign.mjs has run for a level.
+// Default tuning before scripts/tune-puzzles.mjs has picked a level's
+// numbers. caseCapFraction is only a fallback for a web that was not dealt
+// (the dealer sets an exact cap from par); parDays is the fallback for the
+// score's speed bonus (a dealt level uses the solver's own days).
 export function defaultTuning(difficultyId, slot) {
     const caps = { easy: 0.45, medium: 0.38, hard: 0.32 };
     const limits = {
-        easy: { vaccinate: 3, quarantine: 2, severLink: 2 },
-        medium: { vaccinate: 2, quarantine: 2, severLink: 2 },
-        hard: { vaccinate: 2, quarantine: 1, severLink: 2 },
+        easy: { vaccinate: 2, quarantine: 2, severLink: 2 },
+        medium: { vaccinate: 2, quarantine: 1, severLink: 2 },
+        hard: { vaccinate: 1, quarantine: 1, severLink: 2 },
     };
     const dailyLimits = { ...limits[difficultyId] };
     if (slot.variant === 'noVaccines') {
         dailyLimits.vaccinate = 0;
         dailyLimits.severLink += 1;
-        dailyLimits.quarantine += 1;
     }
     if (slot.variant === 'noQuarantine') {
         dailyLimits.quarantine = 0;
-        dailyLimits.vaccinate += 1;
         dailyLimits.severLink += 1;
     }
     return {
-        initialInfected: 2,
-        transmissionMultiplier: 1,
+        initialInfected: 1,
         caseCapFraction: caps[difficultyId],
-        parDays: 12,
+        parDays: 8,
         dailyLimits,
     };
 }
@@ -222,10 +222,11 @@ export function defaultTuning(difficultyId, slot) {
 function variantFor(slot) {
     if (!slot.variant) return undefined;
     if (slot.variant === 'superSpreader') {
-        // The carrier knows about half the web (a bit more on a boss); on
-        // puzzle levels quarantine arrives a day early so isolating the
-        // carrier is possible in time.
-        return { type: 'superSpreader', degreeShare: slot.boss ? 0.56 : 0.5, toolDays: { quarantine: 2 }, boss: !!slot.boss };
+        // Round 57: the carrier has a few more contacts than there are cuts
+        // on day 1 (carrierExtra, a little more on a boss), so the puzzle is
+        // who to save tonight. Quarantine arrives a day early, in time for
+        // the people the carrier reaches.
+        return { type: 'superSpreader', carrierExtra: slot.boss ? 3 : 2, toolDays: { quarantine: 2 }, boss: !!slot.boss };
     }
     if (slot.variant === 'envoy') return { type: 'envoy', minDistance: 3 };
     return { type: slot.variant };
@@ -314,13 +315,11 @@ export function buildCampaign() {
                 scenarioId: slot.scenarioId,
                 difficultyId,
                 blurb: slot.variant ? VARIANT_BLURB[slot.variant] : BLURB[slot.scenarioId],
-                // Per-level star target (round 17, scripts/tune-stars.mjs).
-                target: STAR_TARGETS[id] ?? 800,
                 lessonId,
                 population: populationFor(pi, slot),
                 // Item 16: the tools this level offers (src/config/toolkits.js).
                 toolkit,
-                tuning: { ...defaultTuning(difficultyId, slot), ...(CAMPAIGN_TUNING[id] || {}), ...(ONBOARDING_TUNING[id] || {}) },
+                tuning: { ...defaultTuning(difficultyId, slot), ...(puzzleTuning(id) || {}), ...(ONBOARDING_TUNING[id] || {}), ...(FINALE_TUNING[id] || {}) },
             };
             if (variant) level.variant = variant;
             if (mechanics) {
@@ -328,7 +327,13 @@ export function buildCampaign() {
                 if (mechanics.blurb && !slot.variant) level.blurb = mechanics.blurb;
                 // Daily uses of the tools the mechanic adds, unless tuned.
                 level.tuning.dailyLimits = { ...(mechanics.toolLimits || {}), ...level.tuning.dailyLimits };
+                // The days a mechanic moves a tool to (Test on day 1).
+                if (mechanics.toolDays) toolkit.toolDays = { ...(toolkit.toolDays || {}), ...mechanics.toolDays };
             }
+            // The tuner may move a tool's first day too: the kit carries it,
+            // so the briefing and the tray always agree.
+            if (level.tuning.toolDays) toolkit.toolDays = { ...(toolkit.toolDays || {}), ...level.tuning.toolDays };
+            if (variant && level.tuning.carrierExtra != null) variant.carrierExtra = level.tuning.carrierExtra;
             levels.push(level);
         });
     });

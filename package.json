@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "balance": "node scripts/balance.mjs",
+    "puzzles": "node scripts/tune-puzzles.mjs",
     "art:import": "node scripts/import-art.mjs",
     "art:guides": "node scripts/render-art-guides.mjs",
     "art:draw": "node scripts/draw-art.mjs",

@@ -1,10 +1,12 @@
 import { toolkitCard } from '../config/toolkits.js';
 import { briefingStrain } from './deaths.js';
+import { parBriefingLine, DEALING_LINE } from './par-text.js';
 import './briefing-lean.css';
 
-// Briefing screen. There is no difficulty picker any more: each play rolls
-// its own threat (src/config/difficulty-roll.js) and the briefing shows it
-// as one to five pips plus a plain line about how fast it is spreading.
+// Briefing screen. There is no difficulty picker: a level's threat is fixed
+// by where it sits on the road to the next prize box
+// (src/config/difficulty-roll.js) and the briefing shows it as one to five
+// pips plus a plain line about the case cap.
 
 export function fillBriefing(scenario) {
     document.getElementById('briefing-title').textContent = scenario.name;
@@ -94,13 +96,14 @@ export function showVariantCallout(callout) {
     card.hidden = false;
 }
 
-// Star goal (round 17): one line under the threat so players know what the
-// stars reward before they start: lives kept and beating par.
-export function starGoalLine({ parDays = 0, best = 0 } = {}) {
-    const stars = '★'.repeat(best) + '☆'.repeat(3 - best);
-    const par = parDays > 0 ? `, and every day you finish before day ${parDays} adds points` : '';
-    if (best >= 3) return `Your best: ${stars}. A perfect response!`;
-    return `Stars reward lives kept${par}.${best > 0 ? ` Your best: ${stars}` : ''}`;
+// Star goal: one line under the threat so players know what 3 stars means
+// before they start. Round 57: it is the deal's par, the best possible play
+// on this exact web ("3 stars: stop it at 4 cases."), without the moves.
+// While the web is still being dealt it says so (src/game-deal.js fills the
+// line in as soon as par is known).
+export function starGoalLine({ par = null, best = 0, goal = null } = {}) {
+    if (!par) return DEALING_LINE;
+    return parBriefingLine(par, { best, goal });
 }
 
 export function showStarGoal(opts) {
