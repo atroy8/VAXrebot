@@ -8,11 +8,14 @@
 //   parDays                 par for the speed bonus in scoring (src/progress.js)
 //   caseCapFraction         share of people who may fall sick before the
 //                           outbreak is 'overwhelmed' (scenario override)
+// level.mechanics (later planets) adds difficulty.incubation, maskFactor and
+// the daily limits of the tools the mechanic brings (Test, Mask).
 // Pure: returns fresh objects and never mutates the shared configs.
 import { scenarios } from './scenarios.js';
 import { difficulties } from './difficulties.js';
 import { CLASSIC_TOOLS } from './toolkits.js';
 import { gameFatality } from '../sim/fatality.js';
+import { webDegreeFor } from './planet-mechanics.js';
 
 export function levelRules(level) {
     const t = level.tuning || {};
@@ -21,6 +24,10 @@ export function levelRules(level) {
     if (t.caseCapFraction != null) scenario.caseCapFraction = t.caseCapFraction;
     // Item 14: each planet sets its own web size (src/config/campaign.js).
     if (Array.isArray(level.population)) scenario.populationRange = [...level.population];
+    // Wide audience round: later planets have denser webs, so R0 climbs
+    // (planet-mechanics.js). Absent on the learning planets.
+    const degree = webDegreeFor(level.planetIndex);
+    if (degree != null) scenario.webDegree = degree;
     const difficulty = { ...difficulties[level.difficultyId] };
     // Item 20: the death rate follows the disease's real CFR, scaled for
     // small webs (src/sim/fatality.js), not the difficulty.
@@ -39,6 +46,20 @@ export function levelRules(level) {
     // Toolkits and puzzle levels can bring a tool forward (a vaccine rollout
     // on day 1, quarantine on day 2 on super-spreader levels). See
     // toolAvailableDay in src/sim/engine.js. The variant wins a tie.
+    // Later planets (src/config/planet-mechanics.js): the level's new rules
+    // ride on the difficulty, next to the daily limits of any tools they add.
+    const m = level.mechanics;
+    if (m) {
+        if (m.incubation) difficulty.incubation = { ...m.incubation };
+        if (m.maskFactor != null) difficulty.maskFactor = m.maskFactor;
+        const limits = { ...(difficulty.dailyLimits || {}) };
+        for (const [id, n] of Object.entries(m.toolLimits || {})) if (limits[id] == null) limits[id] = n;
+        difficulty.dailyLimits = limits;
+        difficulty.mechanics = m.id;
+        // A new way to win rides on the scenario (src/sim/mechanics.js).
+        if (m.goal) scenario.goal = { ...m.goal };
+        if (m.travellers) scenario.travellers = { ...m.travellers };
+    }
     const toolDays = { ...(level.toolkit?.toolDays || {}), ...(level.variant?.toolDays || {}) };
     if (Object.keys(toolDays).length) difficulty.toolDays = toolDays;
     return { scenario, difficulty };

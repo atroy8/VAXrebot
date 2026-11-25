@@ -1,0 +1,233 @@
+/* Meta-game UI (wide audience round): Hint and Undo buttons, the move
+   marker, bonus goals, the Gentle offer, permanent upgrades and the Daily
+   puzzle. Self-contained so it merges cleanly: nothing here restyles
+   existing elements. Mobile first (390 px), touch targets 44 px or more. */
+
+/* ---- Hint and Undo in the tray ------------------------------------------- */
+.day-controls .meta-btn {
+    flex: 0 0 auto;
+    min-width: 56px;
+    min-height: 52px;
+    padding: 4px 8px;
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1px;
+    line-height: 1;
+}
+.day-controls .meta-btn[hidden] { display: none; }
+.day-controls .meta-btn svg { flex: none; }
+.day-controls .meta-btn .meta-btn-cost { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.02em; }
+.day-controls .meta-btn.is-off { opacity: 0.5; }
+/* Next day keeps the rest of the row but may shrink below its usual width. */
+.day-controls .meta-btn ~ .next-day-btn { min-width: 0; }
+
+/* ---- The marker that points at a move --------------------------------------- */
+.meta-mark {
+    position: fixed;
+    left: 0;
+    top: 0;
+    pointer-events: none;
+    z-index: 60;
+    --mark: #ffd54a;
+}
+.meta-mark--warn { --mark: #ff5d73; }
+.meta-mark--ring {
+    width: 64px;
+    height: 64px;
+    margin: -32px 0 0 -32px;
+    border-radius: 50%;
+    border: 4px solid var(--mark);
+    box-shadow: 0 0 0 3px rgba(20, 24, 60, 0.55), 0 0 18px 4px var(--mark);
+    animation: metaPulse 0.9s ease-in-out infinite;
+}
+.meta-mark--bar {
+    height: 22px;
+    margin-top: -11px;
+    border-radius: 11px;
+    border: 4px solid var(--mark);
+    box-shadow: 0 0 0 2px rgba(20, 24, 60, 0.5), 0 0 14px 3px var(--mark);
+    transform-origin: 0 50%;
+    animation: metaPulse 0.9s ease-in-out infinite;
+}
+.meta-mark--tag {
+    margin-left: -70px;
+    width: 140px;
+    text-align: center;
+    font: 700 0.72rem/1.2 'Fredoka', system-ui, sans-serif;
+    color: #fff;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+}
+.meta-mark--tag::after { content: ''; }
+@keyframes metaPulse {
+    0%, 100% { box-shadow: 0 0 0 3px rgba(20, 24, 60, 0.55), 0 0 10px 2px var(--mark); opacity: 1; }
+    50% { box-shadow: 0 0 0 3px rgba(20, 24, 60, 0.55), 0 0 26px 10px var(--mark); opacity: 0.8; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .meta-mark--ring, .meta-mark--bar { animation: none; }
+}
+
+/* ---- Bonus goals: one short row on the briefing ------------------------------ */
+.briefing-goals[hidden], .results-goals[hidden] { display: none; }
+.goal-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: nowrap;
+    overflow: hidden;
+    margin: 8px 0;
+    font: 600 0.72rem/1.1 'Fredoka', system-ui, sans-serif;
+}
+.goal-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex: 0 1 auto;
+    min-width: 0;
+    padding: 5px 7px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.14);
+    border: 1.5px solid rgba(214, 160, 30, 0.7);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.goal-chip.done { background: rgba(126, 217, 87, 0.22); border-color: #4fae2e; }
+.goal-chip.gentle-tag { border-color: #5aa9de; background: rgba(143, 211, 255, 0.22); flex: none; }
+.goal-box {
+    flex: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 4px;
+    border: 1.5px solid currentColor;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.7rem;
+    line-height: 1;
+}
+
+/* ---- Bonus goals on the results ----------------------------------------------- */
+.results-goals {
+    margin: 10px 0;
+    padding: 10px 12px;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1.5px solid rgba(255, 213, 74, 0.45);
+    text-align: left;
+}
+.goal-title { display: block; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
+.goal-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; }
+.goal-line { display: flex; align-items: center; gap: 8px; font-size: 0.9rem; }
+.goal-line .goal-text { flex: 1; min-width: 0; }
+.goal-line.open { opacity: 0.7; }
+.goal-line.met .goal-box { background: #7ed957; border-color: #7ed957; color: #12301a; }
+.goal-line.earlier .goal-box { border-color: #7ed957; color: #7ed957; }
+.goal-pay { font-weight: 700; color: #ffd54a; white-space: nowrap; font-size: 0.8rem; }
+.goal-note { opacity: 0.7; white-space: nowrap; font-size: 0.75rem; }
+
+/* ---- Gentle mode offer and Daily share box (results) --------------------------- */
+.results-meta:empty { display: none; }
+.gentle-offer, .daily-result {
+    margin: 10px 0;
+    padding: 12px;
+    border-radius: 14px;
+    background: rgba(143, 211, 255, 0.14);
+    border: 1.5px solid rgba(143, 211, 255, 0.6);
+    text-align: center;
+}
+.gentle-offer p, .daily-result p { margin: 6px 0 10px; font-size: 0.88rem; line-height: 1.35; }
+.gentle-offer .btn, .daily-result .btn { min-height: 48px; width: 100%; }
+.daily-result { background: rgba(255, 213, 74, 0.12); border-color: rgba(255, 213, 74, 0.6); }
+.daily-share-text {
+    margin: 0 0 10px;
+    padding: 10px;
+    border-radius: 10px;
+    background: rgba(26, 39, 99, 0.1);
+    font: 600 0.82rem/1.5 'Fredoka', system-ui, sans-serif;
+    white-space: pre-wrap;
+    word-break: break-word;
+    text-align: left;
+    user-select: text;
+    -webkit-user-select: text;
+}
+.daily-share-status { display: block; min-height: 1.2em; margin-top: 6px; font-size: 0.8rem; }
+
+/* ---- Daily button on the home screen -------------------------------------------- */
+.daily-btn {
+    position: absolute;
+    left: 50%;
+    top: calc(env(safe-area-inset-top, 0px) + 126px);
+    transform: translateX(-50%);
+    z-index: 6;
+    min-height: 48px;
+    min-width: 168px;
+    padding: 6px 18px;
+    border-radius: 999px;
+    border: 2px solid #f2c14e;
+    background: linear-gradient(180deg, #2b3f8f, #1a2763);
+    color: #fff;
+    font-family: 'Fredoka', system-ui, sans-serif;
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    line-height: 1.15;
+    box-shadow: 0 4px 0 rgba(0, 0, 0, 0.3);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+.daily-btn:active { transform: translateX(-50%) translateY(2px); box-shadow: 0 2px 0 rgba(0, 0, 0, 0.3); }
+.daily-btn-title { font-weight: 700; font-size: 0.98rem; }
+.daily-btn-sub { font-size: 0.72rem; color: #ffd54a; font-weight: 600; }
+.daily-btn.done { border-color: #7ed957; }
+.daily-btn.done .daily-btn-sub { color: #9df08a; }
+/* On the start page the HUD is hidden: sit just above the big Play button. */
+.globe-home.on-start .daily-btn { top: auto; bottom: calc(env(safe-area-inset-bottom, 0px) + 122px); }
+
+/* ---- Permanent upgrades in the shop sheet --------------------------------------- */
+.upgrade-shop {
+    font-family: 'Fredoka', 'Comic Sans MS', system-ui, sans-serif;
+    background: linear-gradient(160deg, #f4fbff 0%, #e6f3ff 100%);
+    border: 2px solid #b9daf5;
+    border-radius: 18px;
+    padding: 14px;
+    margin: 12px 0;
+}
+.upgrade-shop h3 { margin: 0 0 2px; font-size: 1.1rem; color: #1d4b7a; text-align: center; }
+.upgrade-sub { margin: 0 0 10px; font-size: 0.8rem; color: #4d7396; text-align: center; }
+.upgrade-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-radius: 14px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    background: #fff;
+    border: 2px solid #9cc8ee;
+}
+.upgrade-card.owned { border-color: #7ed957; background: #f3fff0; }
+.upgrade-icon { flex: 0 0 40px; width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.3rem; background: #dceefd; }
+.upgrade-info { flex: 1; min-width: 0; }
+.upgrade-name { font-weight: 700; color: #1d3f66; font-size: 0.95rem; }
+.upgrade-effect { font-size: 0.76rem; color: #4d6a88; line-height: 1.3; margin-top: 2px; }
+.upgrade-buy {
+    flex: 0 0 auto;
+    font-family: inherit;
+    font-weight: 700;
+    font-size: 0.82rem;
+    color: #fff;
+    background: #2f7fd1;
+    border: none;
+    border-radius: 999px;
+    padding: 10px 12px;
+    min-height: 48px;
+    min-width: 92px;
+    cursor: pointer;
+    box-shadow: 0 3px 0 rgba(0, 0, 0, 0.18);
+}
+.upgrade-buy:disabled { background: #c2cedb; box-shadow: none; cursor: not-allowed; }
+.upgrade-owned { flex: none; font-weight: 700; font-size: 0.8rem; color: #2e7d32; padding: 0 8px; }
+.upgrade-msg { text-align: center; font-size: 0.8rem; font-weight: 600; color: #2e7d32; min-height: 1.2em; margin-top: 4px; }
+.upgrade-msg.error { color: #c62828; }

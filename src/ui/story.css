@@ -1,0 +1,71 @@
+/* Story pieces (wide audience pass): the mentor's line on the briefing and
+   the results, and the results' Based on card. Kept in its own file so the
+   blocks can be moved in the markup without touching other stylesheets. */
+
+.mentor-line {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 8px 0 12px;
+    padding: 8px 12px 8px 8px;
+    border-radius: 16px;
+    background: rgba(236, 210, 126, 0.12);
+    border: 1px solid rgba(236, 210, 126, 0.35);
+    text-align: left;
+}
+.mentor-line[hidden] { display: none; }
+.mentor-face {
+    flex: 0 0 44px;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    object-fit: cover;
+    background: #2f6f8f;
+    border: 2px solid #ecd27e;
+}
+.mentor-say {
+    margin: 0;
+    font-size: 0.9rem;
+    line-height: 1.35;
+    min-width: 0;
+}
+.mentor-name {
+    display: block;
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    opacity: 0.8;
+}
+
+/* The trait line is a full sentence: give it the whole row of the grid. */
+#briefing-traits-row { grid-column: 1 / -1; }
+
+.based-on {
+    margin: 10px 0 0;
+    padding: 0 12px;
+    border-radius: 12px;
+    background: rgba(207, 224, 255, 0.1);
+    text-align: left;
+    font-size: 0.9rem;
+    line-height: 1.35;
+}
+.based-on[hidden] { display: none; }
+.based-on-title {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 700;
+    cursor: pointer;
+    list-style: none;
+}
+.based-on-title::-webkit-details-marker { display: none; }
+.based-on-title::after {
+    content: '+';
+    margin-left: auto;
+    font-size: 1.2rem;
+    line-height: 1;
+}
+.based-on[open] .based-on-title::after { content: '\2212'; }
+.based-on-line { margin: 0 0 8px; }
+.based-on-line:last-child { padding-bottom: 6px; }

@@ -87,15 +87,45 @@ export const LESSONS = {
     'contact-tracing': {
         title: 'Contact tracing',
         brief: 'No vaccines here. Follow the links from each sick person and break them before the next person catches it.',
+        // On worlds with hidden carriers the same lesson says how to trace.
+        briefHidden: 'No vaccines here, and people pass it on before they feel sick. Test the contacts of each sick person and isolate the carriers you find.',
         win: 'Contact tracing means finding everyone a sick person met and keeping them apart. It ended outbreaks of Ebola and SARS before vaccines existed.',
         retry: 'Chains slipped through. Follow each red link from a sick person and cut it, then isolate the sick.',
+    },
+    // Later planets (src/config/planet-mechanics.js).
+    'hidden-carriers': {
+        title: 'Hidden carriers',
+        brief: 'People here pass it on a day or two before they feel sick. You fight what you cannot see: test the contacts of the sick.',
+        win: 'With COVID-19, close to half of all spread came from people who did not feel sick yet. Testing contacts finds them in time.',
+        retry: 'It spread through people who still looked healthy. Each morning, test the contacts of anyone who fell ill and isolate carriers.',
+    },
+    'masks': {
+        title: 'Masks lower the odds',
+        brief: 'A cut is certain but stops one line. A mask halves every line of its wearer. Mask the busiest people near the sick.',
+        win: 'A mask works both ways: the wearer spreads less and catches less. No layer is perfect, so health teams stack them.',
+        retry: 'Masks only halve the odds, so use them where they cover the most lines: on the sick and on busy people next to them.',
+    },
+    'keep-it-open': {
+        title: 'Keep it open',
+        brief: 'The marked place must stay open, so its lines cannot be cut. Stop the spread before it gets there.',
+        win: 'Closing schools and markets slows spread but costs learning and pay. Well aimed measures can protect people and keep them open.',
+        retry: 'It ran through the place you had to keep open. Cut the lines that lead toward it first, while it is still a step away.',
+    },
+    'borders-leak': {
+        title: 'Borders leak',
+        brief: 'Travellers swap one contact for a new one each night, so a group that is safe today may not be tomorrow. Watch where they go.',
+        win: 'Travel carries an outbreak between places faster than borders can close. Checking and vaccinating travellers works better than walls.',
+        retry: 'A traveller carried it into a new group. Vaccinate or isolate the travellers early, and check their new line each morning.',
     },
 };
 
 export function lessonFor(levelId) {
     const level = levelById(levelId);
     const key = level ? level.lessonId : levelId;
-    return LESSONS[key] || null;
+    const lesson = LESSONS[key] || null;
+    // A level with hidden carriers gets the brief that mentions testing.
+    if (lesson && lesson.briefHidden && level && level.mechanics && level.mechanics.incubation) return { ...lesson, brief: lesson.briefHidden };
+    return lesson;
 }
 
 // The one-line takeaway for the results screen. Wins get the real-world fact,

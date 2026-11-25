@@ -6,6 +6,7 @@ import { spriteFor } from '../sprites.js';
 import { toolChips, trayChips, shopCanBuy, lossReason, titleClass } from './game-screen-model.js';
 import { POWER_UPS } from '../economy.js';
 import { threatPipsHtml } from './briefing.js';
+import { renderResultsLead } from './results-lead.js';
 
 // Small inline icons for the tool tray (no emoji on the game screen).
 const ICONS = {
@@ -15,12 +16,17 @@ const ICONS = {
         '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round" d="M4 11l8-7 8 7v9H4z"/><path fill="currentColor" d="M10 14h4v6h-4z"/></svg>',
     severLink:
         '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="18" r="3" fill="none" stroke="currentColor" stroke-width="2.4"/><circle cx="18" cy="18" r="3" fill="none" stroke="currentColor" stroke-width="2.4"/><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" d="M8 16L17 4M16 16L7 4"/></svg>',
+    // Later planets: a test tube and a face mask.
+    test:
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" d="M8 3h8M10 3v12a2.5 2.5 0 0 0 5 0V3M10 11h5"/></svg>',
+    mask:
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" d="M6 8c4-2 8-2 12 0v5c0 3-3 5-6 5s-6-2-6-5zM6 10H4a2 2 0 0 0 2 3M18 10h2a2 2 0 0 1-2 3M9 12h6"/></svg>',
     powerUp:
         '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>',
     shop:
         '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" d="M4 7h16l-1.5 12h-13zM9 7a3 3 0 0 1 6 0"/></svg>',
 };
-const TOOL_COLORS = { vaccinate: '#7c3aed', quarantine: '#f97316', severLink: '#0ea5e9' };
+const TOOL_COLORS = { vaccinate: '#7c3aed', quarantine: '#f97316', severLink: '#0ea5e9', test: '#0d9488', mask: '#2563eb' };
 
 export function renderHeader({ scenarioName, difficultyName, difficultyId, threatPips = null, day, infected, protected: protectedCount, population, paused = false, cases = null, caseCap = Infinity, r = null, actionsLeft = null, deaths = 0 }) {
     const title = document.getElementById('game-scenario-name');
@@ -242,7 +248,7 @@ export function showNotification(message, type = 'info') {
     }, 3000);
 }
 
-export function renderGameOver({ outcome, stats, difficultyId, threatPips = null, stars = 0, fundingEarned = 0, livesSaved = 0, caseCap = Infinity, tally = false, deathLines = [] }) {
+export function renderGameOver({ outcome, stats, difficultyId, threatPips = null, stars = 0, fundingEarned = 0, livesSaved = 0, caseCap = Infinity, tally = false, deathLines = [], headline = '' }) {
     const attackRate = stats.initialPopulation > 0 ? (stats.totalInfected / stats.initialPopulation) * 100 : 0;
     const caseFatalityRate = stats.totalInfected > 0 ? (stats.totalDead / stats.totalInfected) * 100 : 0;
 
@@ -274,6 +280,9 @@ export function renderGameOver({ outcome, stats, difficultyId, threatPips = null
                 : 'The simulation period has ended. Analyze the results and try a new strategy.';
 
     document.getElementById('game-over-title').textContent = title;
+    // Lean results: one sentence leads (results-headline.js) and the numbers
+    // below wait, closed, in Details. A loss has no stars or reward to show.
+    renderResultsLead({ headline, tally });
     document.getElementById('final-total-infected').textContent = stats.totalInfected;
     document.getElementById('final-total-dead').textContent = stats.totalDead;
     document.getElementById('final-total-recovered').textContent = stats.totalRecovered;
@@ -302,7 +311,7 @@ export function renderGameOver({ outcome, stats, difficultyId, threatPips = null
     // outbreak numbers folded away under a summary the player can open.
     document.getElementById('game-over-screen').classList.toggle('has-tally', !!tally);
     const statsWrap = document.getElementById('final-stats-wrap');
-    if (statsWrap) statsWrap.open = !tally;
+    if (statsWrap) statsWrap.open = true; // it sits inside Details now, which starts closed
     const tallyEl = document.getElementById('results-tally');
     if (tallyEl && !tally) {
         tallyEl.hidden = true;

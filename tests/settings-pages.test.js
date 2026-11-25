@@ -48,6 +48,7 @@ describe('privacy and support pages (item 9)', () => {
             'vaxrebot-save-v1': ['level progress', 'stars', 'in-game funding', 'power-up charges'],
             'vaxrebot-monetization-v1': ['own Remove Ads'],
             'vaxrebot_music_enabled': ['music'],
+            'vaxrebot_sound_prefs': ['sound effects', 'planet ambience', 'crowd voices'],
             'vaxrebot-haptics-v1': ['vibration'],
             'galactic-outbreak.view-3d.v1': ['2D or 3D'],
             'galactic-outbreak.prologue-seen.v1': ['seen the story'],

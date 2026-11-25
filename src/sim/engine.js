@@ -7,6 +7,7 @@
 const nodeId = (ref) => (ref && typeof ref === 'object' ? ref.id : ref);
 import { envoyLost } from './variants.js';
 import { canDieOnDay, dailyRisk, riskDaysLeft } from './fatality.js';
+import { incubationOf, maskFactorOf, linkFactor, rollIncubation, isCarrier, isInfectious, isSusceptible, travelCanSpread } from './mechanics.js';
 
 // One day of spread. Returns { events: [{ source, target }], count }.
 // `transmissionRate` is the fully computed per-contact probability
@@ -18,21 +19,44 @@ import { canDieOnDay, dailyRisk, riskDaysLeft } from './fatality.js';
 //   updateOutcomes (recover/die) while isolated, and counts as active infected
 //   for the win check until it resolves. Isolation is not a cure.
 // - Vaccinated nodes remain immune: targets must be 'healthy'.
-export function simulateSpread(state, network, transmissionRate, rng = Math.random) {
+// Later planets (src/sim/mechanics.js) pass their rules as the 5th argument:
+// - rules.incubation: a new infection starts hidden (node.incubating days,
+//   state unchanged) and spreads at a reduced rate until symptoms show.
+//   `events` then stays empty (nothing the player may watch happens at the
+//   moment of infection); `hidden` lists the true infections and `onsets`
+//   the people who showed symptoms tonight. `count` is always the number of
+//   NEW KNOWN cases, which is what the day banner and the case count report.
+// - masks (node.masked): the chance on a line is scaled by linkFactor.
+// Without rules, and with nobody masked, the dice are rolled exactly as
+// they always were, so the learning planets play the same games per seed.
+export function simulateSpread(state, network, transmissionRate, rng = Math.random, rules = null) {
     const events = [];
+    const hidden = [];
+    const inc = incubationOf(rules);
+    const maskFactor = maskFactorOf(rules);
     const byId = new Map(network.nodes.map((n) => [n.id, n]));
-    const spreaders = network.nodes.filter((n) => n.state === 'infected');
+    const spreaders = network.nodes.filter(isInfectious);
+    const carriersBefore = network.nodes.filter(isCarrier);
 
     for (const infected of spreaders) {
+        const base = infected.state === 'infected' ? transmissionRate : transmissionRate * (inc ? inc.factor : 1);
         for (const link of network.links) {
             const s = nodeId(link.source);
             const t = nodeId(link.target);
             if (s !== infected.id && t !== infected.id) continue;
             const targetNode = byId.get(s === infected.id ? t : s);
-            if (targetNode && targetNode.state === 'healthy' && rng() < transmissionRate) {
-                targetNode.state = 'infected';
-                state.stats.totalInfected++;
-                events.push({ source: infected, target: targetNode });
+            if (!isSusceptible(targetNode)) continue;
+            if (rng() < base * linkFactor(infected, targetNode, maskFactor)) {
+                if (inc) {
+                    targetNode.incubating = rollIncubation(inc, rng);
+                    state.stats.hiddenInfections = (state.stats.hiddenInfections || 0) + 1;
+                    if (infected.state !== 'infected') state.stats.silentSpread = (state.stats.silentSpread || 0) + 1;
+                    hidden.push({ source: infected, target: targetNode });
+                } else {
+                    targetNode.state = 'infected';
+                    state.stats.totalInfected++;
+                    events.push({ source: infected, target: targetNode });
+                }
             }
         }
     }
@@ -41,7 +65,39 @@ export function simulateSpread(state, network, transmissionRate, rng = Math.rand
         if (n.state === 'infected' || (n.state === 'quarantined' && n.sickWhileQuarantined)) n.daysInfected++;
     }
 
-    return { events, count: events.length };
+    // Carriers from before tonight move one day closer to symptoms.
+    const onsets = [];
+    for (const n of carriersBefore) {
+        n.incubating -= 1;
+        if (n.incubating > 0) continue;
+        onsets.push(showSymptoms(state, n));
+    }
+    const newKnown = onsets.filter((o) => o.newCase).length;
+
+    return { events, count: events.length + newKnown, hidden, onsets };
+}
+
+// A carrier's incubation is over: they are now plainly sick. Someone already
+// in isolation stays there and is now a patient. A known carrier (tested
+// positive) was counted as a case already. Returns { node, from, newCase }.
+export function showSymptoms(state, node) {
+    const from = node.state;
+    delete node.incubating;
+    node.daysInfected = 1;
+    if (from === 'quarantined') {
+        node.sickWhileQuarantined = true;
+        if (state.stats.isolated > 0) state.stats.isolated--;
+        state.stats.treated = (state.stats.treated || 0) + 1;
+    } else {
+        node.state = 'infected';
+        if (from === 'vaccinated') state.stats.lateVaccines = (state.stats.lateVaccines || 0) + 1;
+    }
+    const newCase = !node.knownCase;
+    if (newCase) {
+        node.knownCase = true;
+        state.stats.totalInfected++;
+    }
+    return { node, from, newCase };
 }
 
 // Resolve deaths and recoveries for one day. Item 20 (round 24): a sick
@@ -130,16 +186,21 @@ export function resolveAftermath(state, network, recoveryTime, fatalityRate, rng
 // this is true it stays true for the rest of the run.
 // Sick and able to spread, now or once a Stay Home Pay break ends.
 function infectiousSoon(n) {
-    return n.state === 'infected' || (n.state === 'quarantined' && n.sickWhileQuarantined && n.homeUntilDay != null);
+    return n.state === 'infected' || (n.state === 'quarantined' && n.sickWhileQuarantined && n.homeUntilDay != null) || (isCarrier(n) && n.state !== 'quarantined');
 }
 
 export function spreadIsOver(network) {
+    // Travellers (later planets) redraw a line each night, so no sick or
+    // healthy pair is safely apart while one of them can still roam.
+    if (network.nodes.some((n) => n.traveller) && travelCanSpread(network)) return false;
     const byId = new Map(network.nodes.map((n) => [n.id, n]));
     for (const link of network.links) {
         const a = byId.get(nodeId(link.source));
         const b = byId.get(nodeId(link.target));
         if (!a || !b || a.removed || b.removed) continue;
-        if ((infectiousSoon(a) && b.state === 'healthy') || (infectiousSoon(b) && a.state === 'healthy')) {
+        // Hidden carriers count here (the truth), or the game would fast
+        // forward while someone was still passing it on unseen.
+        if ((infectiousSoon(a) && isSusceptible(b)) || (infectiousSoon(b) && isSusceptible(a))) {
             return false;
         }
     }
@@ -166,27 +227,40 @@ export const OVERWHELMED_DEATH_FLOOR = 5;
 // is out of control and the verdict is 'overwhelmed'. Without it, a fast
 // epidemic that infected nearly everyone and then burned out would score
 // as a containment win. Callers pass Infinity (the default) to disable it.
-export function checkGameOver(state, network, durationDays, caseCap = Infinity) {
+// Goal (optional 5th arg, later planets, see src/sim/mechanics.js): on a
+// 'holdLine' level the dawn after goal.days is a win if neither loss line
+// was reached and the player acted at all: the vaccine shipment has landed.
+export function checkGameOver(state, network, durationDays, caseCap = Infinity, goal = null) {
     // Envoy levels: if the Envoy falls ill the mission is lost, whatever else.
     if (state.envoyId != null && envoyLost(network, state.envoyId)) return 'envoy-lost';
+    // Carriers who have not shown symptoms yet (src/sim/mechanics.js) are
+    // still part of the outbreak: no all clear while anyone is incubating.
     const activeInfected = network.nodes.filter(
-        (n) => n.state === 'infected' || (n.state === 'quarantined' && n.sickWhileQuarantined)
+        (n) => n.state === 'infected' || (n.state === 'quarantined' && n.sickWhileQuarantined) || isCarrier(n)
     ).length;
     if (activeInfected === 0) {
-        const intervened = state.stats.totalProtected + state.stats.linksSevered > 0;
+        // Masks (later planets) are a response too.
+        const intervened = state.stats.totalProtected + state.stats.linksSevered + (state.stats.masksGiven || 0) > 0;
         return intervened ? 'contained' : 'burnout';
     }
     const initial = state.stats.initialPopulation;
     const deathLine = Math.max(initial * OVERWHELMED_DEATH_FRACTION, OVERWHELMED_DEATH_FLOOR);
     if (initial > 0 && state.stats.totalDead >= deathLine) return 'overwhelmed';
     if (state.stats.totalInfected >= caseCap) return 'overwhelmed';
+    if (goal && goal.type === 'holdLine' && state.day > goal.days) {
+        const acted = state.stats.totalProtected + state.stats.linksSevered + (state.stats.masksGiven || 0) > 0;
+        if (acted) {
+            state.stats.heldLine = true;
+            return 'contained';
+        }
+    }
     // Out of time, unless the outbreak can no longer grow: then the last sick
     // people are just recovering, and the run plays on until they do.
     if (state.day >= durationDays && !spreadIsOver(network)) return 'timeout';
     return null;
 }
 
-const NONE_HERE = { vaccinate: 'vaccines', quarantine: 'isolation wards', severLink: 'link cutting' };
+const NONE_HERE = { vaccinate: 'vaccines', quarantine: 'isolation wards', severLink: 'link cutting', test: 'test kits', mask: 'masks' };
 
 function plain(name) {
     return String(name).replace(/^[^A-Za-z]+/, '').toLowerCase();
@@ -268,6 +342,17 @@ export function canUseTool(state, tools, toolId, difficulty, target = null) {
         }
         if (target.state === 'vaccinated' || target.state === 'quarantined') {
             return { allowed: false, reason: `Person is already protected.` };
+        }
+        if (toolId === 'test') {
+            if (target.state === 'exposed') return { allowed: false, reason: 'Already tested positive. Isolate them.' };
+            if (target.state !== 'healthy') return { allowed: false, reason: 'Test people who look healthy. The sick are already known.' };
+            if (target.testedClear) return { allowed: false, reason: 'Already tested clear today.' };
+        }
+        if (toolId === 'quarantine' && target.hub && target.state === 'healthy') {
+            return { allowed: false, reason: 'This place must stay open. Protect it instead.' };
+        }
+        if (toolId === 'mask' && target.masked) {
+            return { allowed: false, reason: 'This person already wears a mask.' };
         }
         if (toolId === 'vaccinate' && target.state !== 'healthy') {
             return { allowed: false, reason: 'Vaccine only works on healthy individuals.' };

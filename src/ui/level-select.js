@@ -11,6 +11,7 @@ import {
 } from '../progress.js';
 import { scenarios } from '../config/scenarios.js';
 import { difficulties } from '../config/difficulties.js';
+import { goalPips } from '../sim/goals.js';
 
 function starRow(stars) {
     return '★'.repeat(stars) + '☆'.repeat(3 - stars);
@@ -58,6 +59,7 @@ export function renderLevelSelect({ save, levels, regions }) {
                             <p>${level.blurb}</p>
                             <div class="level-meta">
                                 <span class="level-stars">${starRow(rec.stars)}</span>
+                                <span class="level-goal-pips" title="Bonus goals">${goalPips(level, (save.goals && save.goals[level.id]) || [])}</span>
                                 <span class="level-difficulty">${difficulty.icon} ${difficulty.name}</span>
                             </div>
                         </div>`;

@@ -54,7 +54,10 @@ import { layoutStep as forceStep, settleLayout, nextAlpha, layoutForAspect, LAYO
 import { isBoxed } from './care-box-model.js';
 import { citizenFaceUrl, DEFAULT_CIV } from './citizen-faces.js';
 import { lookFor, lookFaceUrl } from './people.js';
-import { linkStyle, LINK_WIDTHS } from './link-style.js';
+import { linkStyle, LINK_WIDTHS, RISK_BEADS, riskBeads } from './link-style.js';
+import { NODE_MARKS, nodeMarks, MASKED_LINE, maskedEnds, maskedLine } from './node-marks.js';
+import { SPREAD, spreadPlan, spreadEase, shownState } from './spread-anim.js';
+import { layoutClustered, spreadAspect, nextFitBias, FIT_TRIES, FIT_TOLERANCE, settleClustered, assignGroups, clusterForces, clusterParams } from './web-clusters.js';
 import {
     LAYOUT_3D,
     ORBIT,
@@ -93,7 +96,10 @@ const SPACE_FOG = 0x0d1a3d;
 // Who each person tool can be used on (mirrors canUseTool in src/sim/engine.js).
 export const TOOL_TARGET_STATES = {
     vaccinate: ['healthy'],
-    quarantine: ['healthy', 'infected', 'recovered'],
+    quarantine: ['healthy', 'infected', 'recovered', 'exposed'],
+    // Later planets (src/sim/mechanics.js).
+    test: ['healthy'],
+    mask: ['healthy', 'infected', 'exposed'],
 };
 const safeStorage = () => {
     try {
@@ -163,6 +169,8 @@ const LINK_COLORS_2D = {
     cuttable: new THREE.Color(0x5f7699),
 };
 
+// How long after a level starts a change of view size lays the web out again.
+export const REARRANGE_WINDOW_MS = 2500;
 // Physics lives in force-layout.js (stable, cools to rest).
 const WARMUP_STEPS = 400;
 
@@ -198,6 +206,14 @@ export const RISK_OVERLAY_RENDER_ORDER = -0.5;
 export const FACE_RENDER_ORDER = 0;
 export const RISK_OVERLAY_OPACITY = 0.9;
 const particleMaterial = new THREE.MeshBasicMaterial({ color: 0xdc3545 });
+// Wide audience: pale beads on at-risk lines (see RISK_BEADS in link-style.js).
+const beadGeometry = new THREE.CircleGeometry(1, 12);
+const beadMaterial = new THREE.MeshBasicMaterial({ color: new THREE.Color(RISK_BEADS.color), transparent: true, opacity: 0.95, depthWrite: false, depthTest: false, fog: false });
+export const BEAD_RENDER_ORDER = -0.4;
+const _beadM = new THREE.Matrix4();
+const _beadP = new THREE.Vector3();
+const _beadS = new THREE.Vector3();
+const _beadQ = new THREE.Quaternion();
 
 // Puzzle badges (round 14): a vermilion crown for the super-spreader and a
 // gold star for the Envoy, drawn once on a canvas, plus a halo ring each.
@@ -271,6 +287,16 @@ function getBadgeMaterials() {
     return badgeMaterials;
 }
 const haloGeometry = new THREE.RingGeometry(0.8, 0.98, 40);
+// Later planets: small marks on a person (mask, tested clear, hub), drawn
+// like the badges above. See src/ui/node-marks.js for who gets which.
+let markMaterials = null;
+function getMarkMaterial(kind) {
+    markMaterials = markMaterials || {};
+    if (!markMaterials[kind]) {
+        markMaterials[kind] = new THREE.SpriteMaterial({ map: badgeTexture(NODE_MARKS[kind]), transparent: true, depthWrite: false, depthTest: false });
+    }
+    return markMaterials[kind];
+}
 
 export function badgeKind(node) {
     if (node && node.superSpreader) return 'superSpreader';
@@ -328,6 +354,9 @@ export function clearLookTextures() {
     lookTextures.clear();
 }
 export function faceFor(obj, state, frame = 'idle') {
+    // Wide audience: while a germ is on its way to this person they keep
+    // the face they had (see animateVirus and src/ui/spread-anim.js).
+    if (obj && obj.heldState) state = shownState(state, obj.heldState, obj.holdUntil, performance.now());
     if (obj && obj.look) {
         const tex = lookTexture(obj.look, state, frame) || lookTexture(obj.look, state, 'idle');
         if (tex) return tex;
@@ -524,6 +553,15 @@ export class NetworkView {
             this.physicsSettled = false;
             this.autoFit = true;
         }
+        // Wide audience: a web laid out moments ago for a different room (the
+        // HUD and tray had not taken their final height yet) is laid out
+        // again for the real one, so it fills the view and nobody overlaps.
+        // Only right after a level starts, never mid-play.
+        const arr = this._arranged;
+        if (this.nodeObjs.size && arr && arr.fresh && !this.is3d && performance.now() - arr.at < REARRANGE_WINDOW_MS && (Math.abs(w - arr.w) > arr.w * 0.04 || Math.abs(h - arr.h) > arr.h * 0.04)) {
+            this.arrange(true);
+            return;
+        }
         if (this.nodeObjs.size) {
             // Round 25: the first level can be set up before the game screen
             // has its real size; size people again for the real view so
@@ -656,15 +694,26 @@ export class NetworkView {
             // State changes: swap sphere color, reset face to idle, and
             // schedule the happy flash for vaccinate / recover actions.
             if (obj.prevState !== node.state) {
-                obj.sphere.material = sphereMaterials[node.state] || sphereMaterials.healthy;
+                // Wide audience: a germ is on its way to this person
+                // (animateVirus). They keep their old face until it lands;
+                // tick() flips them then, with a pulse.
+                if (node.state === 'infected' && obj.incomingUntil > now && !obj.heldState) {
+                    obj.heldState = obj.prevState;
+                    obj.holdUntil = obj.incomingUntil;
+                } else if (node.state !== 'infected') {
+                    obj.heldState = null;
+                }
+                const shown = shownState(node.state, obj.heldState, obj.holdUntil, now);
+                obj.sphere.material = sphereMaterials[shown] || sphereMaterials.healthy;
                 obj.sprite.material.map = faceFor(obj, node.state);
-                obj.pulse.visible = node.state === 'infected';
+                obj.pulse.visible = shown === 'infected';
                 if (node.state === 'recovered' || node.state === 'vaccinated') {
                     obj.anim.happyUntil = now + 1000;
                     obj.anim.bounceUntil = now + 450;
                 }
                 obj.prevState = node.state;
             }
+            this.syncMarks(obj, node);
 
             // Isolated, in treatment or cured: the person leaves the network
             // and flies to the care box on the right (game.js animates it).
@@ -716,12 +765,49 @@ export class NetworkView {
         // Frame the network and (re)run the layout when the population changes.
         const linkKey = this.links.length;
         if (countChanged || isInitial) {
-            // Settle, frame, size people for the phone, and settle again with
-            // room for the bigger people (two passes are enough to converge).
-            if (isInitial) this.personScale = 1;
+            this.arrange(isInitial);
+        } else if (linkKey !== this.lastLinkKey) {
+            // A link was severed: let the network relax very gently, so the
+            // next line you aim at stays under your thumb (round 32).
+            // Vaccinate changes no links, so the people you tap stay put.
+            this.alpha = Math.max(this.alpha || 0, this.is3d ? LAYOUT_3D.severAlpha : LAYOUT.severAlpha);
+            this.physicsSettled = false;
+        } else if (boxChanged) {
+            // Someone left for the care box: close the gap very gently.
+            this.alpha = Math.max(this.alpha || 0, LAYOUT.reheatAlpha * 0.5);
+            this.physicsSettled = false;
+        }
+        this.lastLinkKey = linkKey;
+    }
+
+    // Lay the web out and frame it. Called when a level starts (isInitial)
+    // or the number of people changes.
+    arrange(isInitial) {
+        // Settle, frame, size people for the phone, and settle again with
+        // room for the bigger people (two passes are enough to converge).
+        if (isInitial) this.personScale = 1;
+        // Wide audience: groups of people who know each other are drawn
+        // together (src/ui/web-clusters.js), so the web reads as groups
+        // joined by a few bridges instead of a ball of crossing lines.
+        // A new flat web gets the full clustered layout with untangling;
+        // later passes only adjust spacing, gently, so it stays untangled.
+        const fresh = isInitial && !this.is3d;
+        if (fresh) this._aspectBias = 1;
+        else assignGroups(this.layoutObjs(), this.layoutPairs());
+        // Groups stacked down a tall phone can make a thin column that
+        // leaves half the width empty. So a new flat web is laid out,
+        // measured against the room it has, and laid out again wider or
+        // thinner (nextFitBias) up to FIT_TRIES times; the best is kept.
+        let bestFit = null;
+        for (let attempt = 0; attempt < (fresh ? FIT_TRIES : 1); attempt++) {
+            if (fresh) {
+                this.personScale = 1;
+                this._layoutParams = null;
+                layoutClustered(this.layoutObjs(), this.layoutPairs(), { maxSteps: WARMUP_STEPS, P: this.layoutParams() });
+            }
             for (let pass = 0; pass < 5; pass++) {
-                if (this.is3d) settleLayout3d(this.layoutObjs(), this.layoutPairs(), { maxSteps: WARMUP_STEPS, P: this.layoutParams3d() });
-                else settleLayout(this.layoutObjs(), this.layoutPairs(), { maxSteps: WARMUP_STEPS, P: this.layoutParams() });
+                if (this.is3d) settleClustered(this.layoutObjs(), this.layoutPairs(), { maxSteps: WARMUP_STEPS, P: this.layoutParams3d(), step: layoutStep3d, next: nextAlpha3d });
+                else if (!fresh || pass > 0) settleClustered(this.layoutObjs(), this.layoutPairs(), { alpha: fresh ? 0.35 : 1, maxSteps: WARMUP_STEPS, P: this.layoutParams() });
                 // Round 16: a level opens with the web turned so the first sick
                 // people face you, instead of hiding behind the crowd.
                 if (isInitial && this.is3d) this.faceTheSick();
@@ -748,23 +834,35 @@ export class NetworkView {
             // People may have grown in the nudges: clear lines once more at
             // their final size (2D only).
             if (!this.is3d) untangleLines(this.layoutObjs(), this.layoutPairs(), this.layoutParams());
-            this.alpha = 0;
-            for (const o of this.nodeObjs.values()) o.vel.set(0, 0, 0);
-            this.frameNetwork();
-            this.autoFit = true;
-            this.physicsSettled = true;
-        } else if (linkKey !== this.lastLinkKey) {
-            // A link was severed: let the network relax very gently, so the
-            // next line you aim at stays under your thumb (round 32).
-            // Vaccinate changes no links, so the people you tap stay put.
-            this.alpha = Math.max(this.alpha || 0, this.is3d ? LAYOUT_3D.severAlpha : LAYOUT.severAlpha);
-            this.physicsSettled = false;
-        } else if (boxChanged) {
-            // Someone left for the care box: close the gap very gently.
-            this.alpha = Math.max(this.alpha || 0, LAYOUT.reheatAlpha * 0.5);
-            this.physicsSettled = false;
+            if (!fresh) break;
+            const objs = this.layoutObjs();
+            const got = spreadAspect(objs, FIT_PAD + 0.6 * (this.personScale - 1));
+            const want = this.usableAspect();
+            const miss = Math.abs(Math.log(got / want));
+            // Kept for playtests (like container.__net): what each try measured.
+            if (attempt === 0) this._fitLog = [];
+            this._fitLog.push({ attempt, bias: this._aspectBias, got, want, scale: this.personScale, cw: this.container?.clientWidth, ch: this.container?.clientHeight });
+            // Best = people need the least growing to reach 46 px, which is
+            // the layout that uses the room best.
+            if (!bestFit || this.personScale < bestFit.scale - 0.01 || (Math.abs(this.personScale - bestFit.scale) <= 0.01 && miss < bestFit.miss)) bestFit = { miss, bias: this._aspectBias, scale: this.personScale, spots: objs.map((o) => [o, o.pos.x, o.pos.y]) };
+            const next = nextFitBias(this._aspectBias, got, want);
+            if (miss < FIT_TOLERANCE || next === this._aspectBias) break;
+            this._aspectBias = next;
         }
-        this.lastLinkKey = linkKey;
+        if (bestFit) {
+            for (const [o, x, y] of bestFit.spots) o.pos.set(x, y, 0);
+            this._aspectBias = bestFit.bias;
+            this.personScale = bestFit.scale;
+            this._layoutParams = null;
+        }
+        this.alpha = 0;
+        for (const o of this.nodeObjs.values()) o.vel.set(0, 0, 0);
+        this.frameNetwork();
+        this.autoFit = true;
+        this.physicsSettled = true;
+        // The game screen often gets its final size a moment after the level
+        // is set up; resize() lays a new flat web out again for the real room.
+        this._arranged = { at: performance.now(), w: this.container?.clientWidth || 0, h: this.container?.clientHeight || 0, fresh: isInitial && !this.is3d };
     }
 
     // Links are camera-facing capsules (a band with rounded ends, item 27) in
@@ -814,16 +912,51 @@ export class NetworkView {
         this.riskMesh.frustumCulled = false;
         this.riskMesh.renderOrder = RISK_OVERLAY_RENDER_ORDER;
         this.scene.add(this.riskMesh);
+
+        // Beads on at-risk lines: drawn over the lines and under the faces.
+        if (this.beadMesh) {
+            this.scene.remove(this.beadMesh);
+            this.beadMesh.dispose();
+            this.beadMesh = null;
+        }
+        if (count > 0) {
+            this.beadMesh = new THREE.InstancedMesh(beadGeometry, beadMaterial, count * RISK_BEADS.max);
+            this.beadMesh.count = 0;
+            this.beadMesh.frustumCulled = false;
+            this.beadMesh.renderOrder = BEAD_RENDER_ORDER;
+            this.scene.add(this.beadMesh);
+        }
         this.syncLinkPositions(performance.now());
+    }
+
+    // Later planets: show or hide a person's small marks (node-marks.js).
+    syncMarks(obj, node) {
+        const want = nodeMarks(node);
+        if (!want.length && !obj.marks) return;
+        obj.marks = obj.marks || {};
+        for (const kind of Object.keys(NODE_MARKS)) {
+            const on = want.includes(kind);
+            let sprite = obj.marks[kind];
+            if (on && !sprite) {
+                sprite = new THREE.Sprite(getMarkMaterial(kind));
+                sprite.scale.set(0.62, 0.62, 1);
+                sprite.position.set(NODE_MARKS[kind].pos[0], NODE_MARKS[kind].pos[1], 0.6);
+                sprite.renderOrder = 5;
+                obj.group.add(sprite);
+                obj.marks[kind] = sprite;
+            }
+            if (sprite) sprite.visible = on;
+        }
     }
 
     // 'risk' = an infectious, unisolated node touching a healthy one (the
     // virus can cross here tomorrow). 'blocked' = a protected end.
-    linkKind(link) {
-        const s = link.source && link.source.state;
-        const t = link.target && link.target.state;
-        const hot = (x) => x === 'infected';
-        const open = (x) => x === 'healthy' || x === 'exposed';
+    linkKind(link, stateOf = null) {
+        const s = link.source && (stateOf ? stateOf(link.source) : link.source.state);
+        const t = link.target && (stateOf ? stateOf(link.target) : link.target.state);
+        // A known carrier ('exposed', tested positive) spreads it too.
+        const hot = (x) => x === 'infected' || x === 'exposed';
+        const open = (x) => x === 'healthy';
         if ((hot(s) && open(t)) || (hot(t) && open(s))) return 'risk';
         const safe = (x) => x === 'vaccinated' || x === 'quarantined' || x === 'recovered';
         if (safe(s) || safe(t)) return 'blocked';
@@ -841,24 +974,38 @@ export class NetworkView {
         const pulse = 0.65 + 0.35 * Math.abs(Math.sin(now / 260));
         let k = 0;
         let c = 0;
+        const shownOf = (n) => {
+            const o = this.nodeObjs.get(n.id);
+            return o ? shownState(n.state, o.heldState, o.holdUntil, now) : n.state;
+        };
+        let beads = 0;
+        const beadPhase = this.reduceMotion ? 0.5 : now / RISK_BEADS.periodMs;
+        if (this.is3d) _beadQ.copy(this.camera.quaternion);
+        else _beadQ.identity();
         for (const link of this.links) {
             const a = this.nodeObjs.get(link.source && link.source.id);
             const b = this.nodeObjs.get(link.target && link.target.id);
             const pa = a ? a.pos : _tmp.set(0, 0, 0);
             const pb = b ? b.pos : _tmp2.set(0, 0, 0);
-            const kind = this.linkKind(link);
+            // Lines are drawn from the states people are shown in, so a
+            // line turns red when the germ lands, not before.
+            const kind = this.linkKind(link, shownOf);
             const hidden = (a && a.boxed) || (b && b.boxed);
-            const style = linkStyle(kind, severing);
+            // A masked end makes the line thinner and paler: it spreads less.
+            const masks = maskedEnds(link);
+            const style = maskedLine(linkStyle(kind, severing), masks);
             // Lines grow with people, but more gently (square root), so a
             // boss web of big faces does not turn into thick bars.
             const w = hidden ? 0 : (style.width * Math.sqrt(this.personScale)) / 2;
             const start = k;
+            let span = null; // the visible part of the line, for the beads
             if (this.is3d) {
                 // Capsules turn to face the camera so they keep their width
                 // from every angle, and stop at each person's rim (plus the
                 // round end) so no line crosses its own people's faces.
                 const rim = TOKEN_RIM * this.personScale + w;
                 const cut = w > 0 ? trimToRims(pa, pb, this.camera.position, rim, rim) : null;
+                span = cut;
                 if (cut) k = writeCapsule(pos, k, cut.a, cut.b, this.camera.position, w);
                 else {
                     // Hidden behind its two people: a zero-area capsule.
@@ -873,9 +1020,34 @@ export class NetworkView {
                 _b2.set(pb.x, pb.y, -0.1);
                 _cam2.set((pa.x + pb.x) / 2, (pa.y + pb.y) / 2, 100);
                 k = writeCapsule(pos, k, _a2, _b2, _cam2, w);
+                const len = Math.hypot(pb.x - pa.x, pb.y - pa.y);
+                const rim = TOKEN_RIM * this.personScale;
+                if (len > rim * 2 + 0.3) {
+                    const ux = ((pb.x - pa.x) / len) * rim;
+                    const uy = ((pb.y - pa.y) / len) * rim;
+                    span = { a: { x: pa.x + ux, y: pa.y + uy, z: -0.08 }, b: { x: pb.x - ux, y: pb.y - uy, z: -0.08 } };
+                }
+            }
+            if (style.beads && span && w > 0 && this.beadMesh) {
+                // Beads run from the sick person toward the person at risk.
+                const fromA = link.source && shownOf(link.source) === 'infected';
+                const p0 = fromA ? span.a : span.b;
+                const p1 = fromA ? span.b : span.a;
+                const length = Math.hypot(p1.x - p0.x, p1.y - p0.y, p1.z - p0.z);
+                for (const bead of riskBeads(length, beadPhase, Math.sqrt(this.personScale))) {
+                    const r = w * RISK_BEADS.size * bead.size;
+                    if (r <= 0) continue;
+                    _beadP.set(p0.x + (p1.x - p0.x) * bead.u, p0.y + (p1.y - p0.y) * bead.u, p0.z + (p1.z - p0.z) * bead.u);
+                    _beadS.set(r, r, r);
+                    this.beadMesh.setMatrixAt(beads++, _beadM.compose(_beadP, _beadQ, _beadS));
+                }
             }
             const base = (this.is3d ? LINK_COLORS : LINK_COLORS_2D)[style.color];
             const m = style.pulse ? pulse : 1;
+            const pale = masks ? MASKED_LINE.pale : 0;
+            const cr = base.r * m + (1 - base.r * m) * pale;
+            const cg = base.g * m + (1 - base.g * m) * pale;
+            const cb = base.b * m + (1 - base.b * m) * pale;
             const onTop = overlay && kind === 'risk' && !hidden;
             for (let v = 0; v < LINE_VERTS; v++) {
                 // Overlay copy of this capsule, or a zero-area one when not red.
@@ -883,12 +1055,16 @@ export class NetworkView {
                 rpos[at] = onTop ? pos[at] : pa.x;
                 rpos[at + 1] = onTop ? pos[at + 1] : pa.y;
                 rpos[at + 2] = onTop ? pos[at + 2] : pa.z;
-                rcol[c] = base.r * m; rcol[c + 1] = base.g * m; rcol[c + 2] = base.b * m;
-                col[c++] = base.r * m; col[c++] = base.g * m; col[c++] = base.b * m;
+                rcol[c] = cr; rcol[c + 1] = cg; rcol[c + 2] = cb;
+                col[c++] = cr; col[c++] = cg; col[c++] = cb;
             }
         }
         this.linkMesh.geometry.attributes.position.needsUpdate = true;
         this.linkMesh.geometry.attributes.color.needsUpdate = true;
+        if (this.beadMesh) {
+            this.beadMesh.count = beads;
+            this.beadMesh.instanceMatrix.needsUpdate = true;
+        }
         if (this.riskMesh) {
             this.riskMesh.visible = overlay;
             this.riskMesh.geometry.attributes.position.needsUpdate = true;
@@ -1122,22 +1298,30 @@ export class NetworkView {
         return w > 0 && h > 0 ? w / h : 1;
     }
 
+    // Width over height of the room the web really has: the view minus the
+    // strips kept clear for the buttons at the top and the hint at the bottom.
+    usableAspect() {
+        return this.viewAspect() / Math.max(0.3, 1 - this.topReserve() - this.bottomReserve());
+    }
+
     layoutParams() {
         const aspect = Math.round(this.viewAspect() * 20) / 20; // ignore tiny resizes
-        if (!this._layoutParams || this._layoutAspect !== aspect || this._layoutScale !== this.personScale) {
+        if (!this._layoutParams || this._layoutAspect !== aspect || this._layoutScale !== this.personScale || this._layoutPeople !== this.nodeObjs.size) {
             this._layoutAspect = aspect;
             this._layoutScale = this.personScale;
-            this._layoutParams = layoutForPersonScale(layoutForAspect(aspect), this.personScale);
+            this._layoutPeople = this.nodeObjs.size;
+            this._layoutParams = clusterParams(layoutForPersonScale(layoutForAspect(aspect * (this._aspectBias || 1)), this.personScale), this.nodeObjs.size);
         }
         return this._layoutParams;
     }
 
     layoutParams3d() {
         const aspect = Math.round(this.viewAspect() * 20) / 20;
-        if (!this._layout3d || this._layout3dAspect !== aspect || this._layout3dScale !== this.personScale) {
+        if (!this._layout3d || this._layout3dAspect !== aspect || this._layout3dScale !== this.personScale || this._layout3dPeople !== this.nodeObjs.size) {
             this._layout3dAspect = aspect;
             this._layout3dScale = this.personScale;
-            this._layout3d = layoutForPersonScale(layout3dForAspect(aspect, LAYOUT_3D), this.personScale);
+            this._layout3dPeople = this.nodeObjs.size;
+            this._layout3d = clusterParams(layoutForPersonScale(layout3dForAspect(aspect, LAYOUT_3D), this.personScale), this.nodeObjs.size);
         }
         return this._layout3d;
     }
@@ -1173,6 +1357,8 @@ export class NetworkView {
 
     // One cooled step; returns the fastest node speed.
     layoutStep() {
+        // Group forces first (web-clusters.js), then the plain step.
+        clusterForces(this.layoutObjs(), this.layoutPairs(), this.alpha, this.is3d ? this.layoutParams3d() : this.layoutParams());
         if (this.is3d) {
             const sp = layoutStep3d(this.layoutObjs(), this.layoutPairs(), this.alpha, this.layoutParams3d());
             this.alpha = nextAlpha3d(this.alpha);
@@ -1186,7 +1372,7 @@ export class NetworkView {
     // ---- Per-frame ----------------------------------------------------------
 
     frameFor(obj, now) {
-        const state = obj.node.state;
+        const state = shownState(obj.node.state, obj.heldState, obj.holdUntil, now);
         const anim = obj.anim;
         if (state === 'dead') return 'reaction';
         if (now < anim.happyUntil) return 'reaction';
@@ -1251,11 +1437,14 @@ export class NetworkView {
             // In 3D each person (ring, halo, badge) turns to face the camera.
             if (this.is3d) obj.group.quaternion.copy(this.camera.quaternion);
             else obj.group.quaternion.identity();
+            // The germ has landed: flip to the real state, with a pulse.
+            if (obj.heldState && now >= obj.holdUntil) this.landInfection(obj, now);
+            const shown = shownState(obj.node.state, obj.heldState, obj.holdUntil, now);
             const frame = this.frameFor(obj, now);
             const tex = faceFor(obj, obj.node.state, frame);
             if (obj.sprite.material.map !== tex) obj.sprite.material.map = tex;
             // Sick faces skip the fog too (round 16), so they read at any depth.
-            const wantFog = obj.node.state !== 'infected';
+            const wantFog = shown !== 'infected';
             if (obj.sprite.material.fog !== wantFog) {
                 obj.sprite.material.fog = wantFog;
                 obj.sprite.material.needsUpdate = true;
@@ -1758,15 +1947,99 @@ export class NetworkView {
 
     // ---- Same supporting API as the D3 view ----------------------------------
 
+    // A new infection, shown as cause then effect (src/ui/spread-anim.js):
+    // a germ runs along the line from the sick person to the new case, who
+    // keeps their old face until it lands, then flips with a pulse.
+    // game.js calls this just before update(), which sees incomingUntil.
     animateVirus(source, target) {
         if (!this.scene) return;
         const a = this.nodeObjs.get(source && source.id);
         const b = this.nodeObjs.get(target && target.id);
         if (!a || !b) return;
-        const mesh = new THREE.Mesh(particleGeometry, particleMaterial);
-        mesh.position.copy(a.pos);
-        this.scene.add(mesh);
-        this.particles.push({ mesh, from: a.pos.clone(), to: b.pos.clone(), start: performance.now() });
+        const start = performance.now();
+        const plan = spreadPlan(this.reduceMotion);
+        if (!plan.moving) {
+            // Reduced motion: nothing travels. A still ring marks the new
+            // case and fades.
+            this.pulseRing(b, start, plan.pulseMs, false);
+            return;
+        }
+        b.incomingUntil = start + plan.flipAtMs;
+        const scene = this.scene;
+        // Dark rim, red body and a pale heart, so it reads without colour.
+        const germ = new THREE.Group();
+        const layers = [
+            [1, 0x4a0f1a],
+            [0.78, 0xff4d6d],
+            [0.36, 0xfff3d6],
+        ].map(([r, color], i) => {
+            const mat = new THREE.MeshBasicMaterial({ color, transparent: true, depthWrite: false, depthTest: false, fog: false });
+            const m = new THREE.Mesh(beadGeometry, mat);
+            m.scale.setScalar(r);
+            m.renderOrder = 7 + i * 0.1;
+            germ.add(m);
+            return mat;
+        });
+        scene.add(germ);
+        const from = new THREE.Vector3();
+        const to = new THREE.Vector3();
+        this.effects.push({
+            update: (now) => {
+                const t = Math.min(1, (now - start) / plan.travelMs);
+                // Follow the two people if the layout is still moving.
+                from.copy(a.pos);
+                to.copy(b.pos);
+                germ.position.lerpVectors(from, to, spreadEase(t));
+                if (!this.is3d) germ.position.setZ(0.2);
+                else germ.quaternion.copy(this.camera.quaternion);
+                // Swells out of the sick person, a touch smaller on arrival.
+                const size = 0.3 * this.personScale * (0.55 + 0.45 * Math.sin(Math.PI * Math.min(1, t * 1.15)));
+                germ.scale.setScalar(size);
+                return t >= 1;
+            },
+            dispose: () => {
+                scene.remove(germ);
+                for (const mat of layers) mat.dispose();
+            },
+        });
+    }
+
+    // The moment a germ lands: the person turns sick, the face bounces and
+    // a ring opens around them.
+    landInfection(obj, now = performance.now()) {
+        obj.heldState = null;
+        obj.incomingUntil = 0;
+        const state = obj.node.state;
+        obj.sphere.material = sphereMaterials[state] || sphereMaterials.healthy;
+        obj.sprite.material.map = faceFor(obj, state);
+        obj.pulse.visible = state === 'infected';
+        obj.anim.bounceUntil = now + SPREAD.bounceMs;
+        this.pulseRing(obj, now, SPREAD.pulseMs, true);
+    }
+
+    // One ring around a person that fades (and opens out, when `grow`).
+    pulseRing(obj, start, ms, grow) {
+        if (!this.scene) return;
+        const scene = this.scene;
+        const mat = new THREE.MeshBasicMaterial({ color: 0xff4d6d, transparent: true, depthWrite: false, depthTest: false, fog: false });
+        const ring = new THREE.Mesh(ringGeometry, mat);
+        ring.renderOrder = PULSE_RENDER_ORDER;
+        scene.add(ring);
+        this.effects.push({
+            update: (now) => {
+                const t = Math.min(1, Math.max(0, (now - start) / ms));
+                ring.position.copy(obj.pos);
+                if (this.is3d) ring.quaternion.copy(this.camera.quaternion);
+                else ring.position.setZ(0.05);
+                ring.scale.setScalar(this.personScale * (grow ? 1 + 0.9 * (1 - (1 - t) ** 2) : 1.25));
+                mat.opacity = 0.85 * (1 - t);
+                return t >= 1;
+            },
+            dispose: () => {
+                scene.remove(ring);
+                mat.dispose();
+            },
+        });
     }
 
     setPaused(paused) {

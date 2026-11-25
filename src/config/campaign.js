@@ -30,6 +30,7 @@ export const ONBOARDING_TUNING = {
 };
 import { STAR_TARGETS } from './star-targets.js';
 import { toolkitForSlot } from './toolkits.js';
+import { mechanicsFor } from './planet-mechanics.js';
 
 export const SYSTEMS = [
     {
@@ -230,6 +231,40 @@ function variantFor(slot) {
     return { type: slot.variant };
 }
 
+// The tray fits three tools and Shop on a phone (tests/round50-tray.test.js),
+// so a mechanic that adds a tool to a full kit also names the classic tool
+// it replaces (mechanics.drop), and its `why` line explains the whole kit.
+export const MAX_KIT_TOOLS = 3;
+export function applyMechanicsToKit(toolkit, mechanics) {
+    for (const t of mechanics.tools || []) if (!toolkit.tools.includes(t)) toolkit.tools.push(t);
+    for (const t of mechanics.drop || []) {
+        if (toolkit.tools.length <= MAX_KIT_TOOLS) break;
+        toolkit.tools = toolkit.tools.filter((x) => x !== t);
+        if (toolkit.toolDays) delete toolkit.toolDays[t];
+    }
+    if (mechanics.why) toolkit.why = mechanics.why;
+    else if (mechanics.whyAdd) toolkit.why = `${toolkit.why} ${mechanics.whyAdd}`;
+    return toolkit;
+}
+
+// Wide audience round: levels with a new idea teach that idea, so the core
+// rotation reaches fewer levels on later planets and a core lesson could be
+// left out. Each missing one goes to the last plain level (no variant, no
+// mechanic) from the third planet on whose kit fits it and whose lesson is
+// taught elsewhere too. The learning planets are never touched.
+function keepEveryCoreLesson(levels) {
+    const count = (id) => levels.filter((l) => l.lessonId === id).length;
+    for (const lessonId of CORE_LESSONS) {
+        if (count(lessonId)) continue;
+        for (let i = levels.length - 1; i >= 0; i--) {
+            const l = levels[i];
+            if (l.planetIndex < 2 || l.variant || l.mechanics || !lessonFits(lessonId, l.toolkit.tools) || count(l.lessonId) < 2) continue;
+            l.lessonId = lessonId;
+            break;
+        }
+    }
+}
+
 export function buildCampaign() {
     const regions = [];
     const levels = [];
@@ -251,7 +286,12 @@ export function buildCampaign() {
             const place = planet.places[(k + Math.floor(k / 5)) % planet.places.length];
             const variant = variantFor(slot);
             const toolkit = toolkitForSlot(k);
+            // Later planets add one new idea each (planet-mechanics.js):
+            // its tools join the kit and the briefing says why.
+            const mechanics = mechanicsFor(pi, k);
+            if (mechanics) applyMechanicsToKit(toolkit, mechanics);
             let lessonId = slot.variant ? VARIANT_LESSON[slot.variant] : null;
+            if (!lessonId && mechanics && mechanics.lessonId) lessonId = mechanics.lessonId;
             if (!lessonId) {
                 // Next core lesson in the rotation that fits this toolkit.
                 for (let tries = 0; tries < CORE_LESSONS.length; tries++) {
@@ -283,10 +323,17 @@ export function buildCampaign() {
                 tuning: { ...defaultTuning(difficultyId, slot), ...(CAMPAIGN_TUNING[id] || {}), ...(ONBOARDING_TUNING[id] || {}) },
             };
             if (variant) level.variant = variant;
+            if (mechanics) {
+                level.mechanics = mechanics;
+                if (mechanics.blurb && !slot.variant) level.blurb = mechanics.blurb;
+                // Daily uses of the tools the mechanic adds, unless tuned.
+                level.tuning.dailyLimits = { ...(mechanics.toolLimits || {}), ...level.tuning.dailyLimits };
+            }
             levels.push(level);
         });
     });
     // The very first level teaches the tools: always the act-early lesson.
     levels[0].lessonId = 'act-early';
+    keepEveryCoreLesson(levels);
     return { regions, levels };
 }

@@ -22,6 +22,7 @@ import { showNotification } from './panels.js';
 import './globe-candy.css';
 import './start-page.css';
 import { startPageMarkup, layoutPeople, bindPeopleTaps } from './start-page.js';
+import { levelMetaLine } from './meta-panels.js';
 import { starRow, levelLabelHtml, clampLabelX, LOCK_ICON as LOCK_SVG } from './globe-labels.js';
 import { latLngToXYZ, windingPath, chestStop, globeFitDistance, faceRotation, angleDelta, slerp, facesCamera, tiltedOffset, PLANET_VIEW_AIM_UP } from './globe-math.js';
 import { PLANETS, SYSTEM_LAYOUTS, SUN_RADIUS } from '../config/solar-system.js';
@@ -901,7 +902,7 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
         openSheet({
             title,
             sub: `${planet.def.name}, mission ${marker.local + 1} of ${planet.levelIdx.length}`,
-            desc: done ? `${level.blurb} Best: ${starRow(rec.stars)}` : level.blurb,
+            desc: done ? `${level.blurb} Best: ${starRow(rec.stars)}${levelMetaLine(level, state.save)}` : level.blurb,
             // Item 29 (b): one line of real public health history from the land.
             note: { civ: marker.civ, land: landName(marker.civ), text: (CIVILIZATIONS[marker.civ] || CIVILIZATIONS.japan).history },
             actionLabel: done ? 'Play again' : 'Play',
@@ -989,6 +990,7 @@ export function initGlobeView(mountEl, { onPlayLevel } = {}) {
             showNotification(result.reason || 'Could not open the box right now.', 'error');
             return;
         }
+        window.game?.audio?.sfx?.('chestOpen');
         const loot = (result && (result.gives || result.granted)) || chest.gives;
         setChestVisual(marker, 'opened');
         marker.openedAt = performance.now();
