@@ -459,6 +459,8 @@ export function layoutForPersonScale(P, scale = 1) {
         restLength: P.restLength * (1 + 0.25 * (s - 1)),
         repelDist: P.repelDist * (1 + 0.25 * (s - 1)),
         maxRadius: P.maxRadius * s,
+        // Round 54: bigger faces need a wider gap to the lines they do not join.
+        ...(P.edgeClear ? { edgeClear: P.edgeClear + 0.575 * (s - 1) } : {}),
     };
 }
 

@@ -50,7 +50,7 @@ import {
 } from './network-gestures.js';
 import { fitCamera } from './game-screen-model.js';
 import { pickTapTarget } from './tap-target.js';
-import { layoutStep as forceStep, settleLayout, nextAlpha, layoutForAspect, LAYOUT } from './force-layout.js';
+import { layoutStep as forceStep, settleLayout, nextAlpha, layoutForAspect, LAYOUT, untangleLines } from './force-layout.js';
 import { isBoxed } from './care-box-model.js';
 import { citizenFaceUrl, DEFAULT_CIV } from './citizen-faces.js';
 import { lookFor, lookFaceUrl } from './people.js';
@@ -730,6 +730,13 @@ export class NetworkView {
                 this.updatePersonScale();
                 if (Math.abs(this.personScale - before) < 0.04) break;
             }
+            // Round 54: lift people off lines that are not theirs before the
+            // first frame, so every line clearly runs between its own two
+            // people (2D only; in 3D depth and the slow spin separate them).
+            if (!this.is3d) {
+                untangleLines(this.layoutObjs(), this.layoutPairs(), this.layoutParams());
+                this.untanglePending = false;
+            }
             // Last nudges without moving anyone: the fit padding grows with
             // people, so check the size once more at the final framing.
             for (let k = 0; k < 4; k++) {
@@ -738,6 +745,9 @@ export class NetworkView {
                 this.updatePersonScale();
                 if (this.personScale - before < 0.01) break;
             }
+            // People may have grown in the nudges: clear lines once more at
+            // their final size (2D only).
+            if (!this.is3d) untangleLines(this.layoutObjs(), this.layoutPairs(), this.layoutParams());
             this.alpha = 0;
             for (const o of this.nodeObjs.values()) o.vel.set(0, 0, 0);
             this.frameNetwork();
@@ -883,6 +893,38 @@ export class NetworkView {
             this.riskMesh.visible = overlay;
             this.riskMesh.geometry.attributes.position.needsUpdate = true;
             this.riskMesh.geometry.attributes.color.needsUpdate = true;
+        }
+    }
+
+    // Round 54: after switching back to 2D, work out spots that keep people
+    // off lines that are not theirs, then glide everyone there over about a
+    // quarter of a second (no jump). Not run after a cut or a trip to the
+    // care box, so the next line you aim at stays under your thumb (round 32).
+    startUntangleGlide() {
+        this.untanglePending = false;
+        const objs = this.layoutObjs();
+        const ghosts = objs.map((o) => ({ pos: { x: o.pos.x, y: o.pos.y, z: 0 }, vel: { x: 0, y: 0, z: 0 }, pinned: o.pinned }));
+        const byObj = new Map(objs.map((o, i) => [o, ghosts[i]]));
+        const pairs = this.layoutPairs().map(([a, b]) => [byObj.get(a), byObj.get(b)]);
+        if (!untangleLines(ghosts, pairs, this.layoutParams())) return;
+        objs.forEach((o, i) => {
+            if (Math.hypot(ghosts[i].pos.x - o.pos.x, ghosts[i].pos.y - o.pos.y) > 1e-3) o.glideTo = { x: ghosts[i].pos.x, y: ghosts[i].pos.y };
+        });
+    }
+
+    stepUntangleGlide() {
+        for (const o of this.nodeObjs.values()) {
+            if (!o.glideTo) continue;
+            const dx = o.glideTo.x - o.pos.x;
+            const dy = o.glideTo.y - o.pos.y;
+            if (this.is3d || o.pinned || Math.hypot(dx, dy) < 0.01) {
+                if (!this.is3d && !o.pinned) o.pos.set(o.glideTo.x, o.glideTo.y, 0);
+                o.glideTo = null;
+                continue;
+            }
+            const k = this.reduceMotion ? 1 : 0.25;
+            o.pos.x += dx * k;
+            o.pos.y += dy * k;
         }
     }
 
@@ -1033,6 +1075,8 @@ export class NetworkView {
         this.physicsSettled = false;
         this.autoFit = true;
         this.lastTouch = 0;
+        // Round 54: once the flat web cools, glide people off foreign lines.
+        this.untanglePending = !this.is3d;
         this.applyModeLook();
         this.updateModeButton();
         if (this.is3d) this.faceTheSick();
@@ -1170,8 +1214,12 @@ export class NetworkView {
         if (!this.paused && !this.physicsSettled) {
             const maxSpeed = this.layoutStep();
             // Cooled (alpha 0) and still: stop stepping until the next reheat.
-            if (this.alpha === 0 && maxSpeed < 0.002) this.physicsSettled = true;
+            if (this.alpha === 0 && maxSpeed < 0.002) {
+                this.physicsSettled = true;
+                if (this.untanglePending && !this.is3d) this.startUntangleGlide();
+            }
         }
+        this.stepUntangleGlide();
 
         // How far each face sprite floats off the sphere surface toward the
         // camera, so faces stay readable and occlude correctly.
