@@ -161,8 +161,8 @@ export function renderShop(el, { onPurchase } = {}) {
     }).join('');
     el.innerHTML = `
         <h3>⚡ Power-Up Shop</h3>
-        <p class="shop-sub">Spend grant funding on extra charges. Unused charges carry over to the next level.</p>
-        <div class="shop-balance-row"><span class="shop-balance">💰 ${funding} funding</span></div>
+        <p class="shop-sub">Spend gold on extra charges. Every 10 points you score is 1 gold. Power-ups open on day 3 of a level. Unused charges carry over to the next level.</p>
+        <div class="shop-balance-row"><span class="shop-balance">💰 ${funding} gold</span></div>
         ${cards}
         <div class="shop-msg" id="shop-msg" role="status"></div>
     `;

@@ -91,7 +91,7 @@ describe('hint: one good move from the smart bot', () => {
         expect(HINT_RULES.cost).toBeLessThanOrEqual(25); // well under one win (75 to 125)
         expect(hintOffer({ used: 0, funding: 0 })).toEqual({ ok: true, price: 0 });
         expect(hintOffer({ used: 1, funding: 0 }).ok).toBe(false);
-        expect(hintOffer({ used: 1, funding: 0 }).reason).toMatch(/costs 15 funding/);
+        expect(hintOffer({ used: 1, funding: 0 }).reason).toMatch(/costs 15 gold/);
         expect(hintOffer({ used: 1, funding: 15 })).toEqual({ ok: true, price: 15 });
         expect(hintOffer({ used: 1, funding: 0, free: 2 }).ok).toBe(true); // Mentor on call
         expect(hintLabel(0)).toBe('Hint');

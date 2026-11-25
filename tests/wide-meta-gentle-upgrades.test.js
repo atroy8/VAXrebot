@@ -165,7 +165,7 @@ describe('permanent upgrades', () => {
         expect(bought.save.upgrades).toEqual(['fieldTraining']);
         expect(save.upgrades).toEqual([]); // pure
         expect(buyUpgrade(bought.save, 'fieldTraining').ok).toBe(false);
-        expect(buyUpgrade(bought.save, 'extraWard').reason).toMatch(/Not enough funding/);
+        expect(buyUpgrade(bought.save, 'extraWard').reason).toMatch(/Not enough gold/);
         expect(buyUpgrade(save, 'nope').ok).toBe(false);
     });
 
@@ -257,8 +257,8 @@ describe('permanent upgrades', () => {
     it('the shop lists them under the power-ups, with a price or Owned', () => {
         const html = upgradesMarkup({ funding: 150, owned: ['fieldTraining'] });
         expect(html).toContain('Owned');
-        expect(html).toMatch(/data-upgrade="mentor" >150 funding/);
-        expect(html).toMatch(/data-upgrade="extraWard" disabled>400 funding/);
+        expect(html).toMatch(/data-upgrade="mentor" >150 gold/);
+        expect(html).toMatch(/data-upgrade="extraWard" disabled>400 gold/);
         expect(html).not.toContain('data-upgrade="fieldTraining"');
         expect(read('src/game.js')).toContain('this.refreshMetaShop();');
         expect(read('src/game.js')).toContain('this.metaRunReady();');

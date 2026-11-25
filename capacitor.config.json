@@ -1,0 +1,13 @@
+{
+  "appId": "com.adamtroy.galacticoutbreak",
+  "appName": "Galactic Outbreak",
+  "webDir": "dist",
+  "backgroundColor": "#0b1838",
+  "ios": {
+    "contentInset": "never",
+    "backgroundColor": "#0b1838",
+    "scrollEnabled": false,
+    "allowsLinkPreview": false,
+    "preferredContentMode": "mobile"
+  }
+}
