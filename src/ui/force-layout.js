@@ -35,6 +35,10 @@ export const LAYOUT = Object.freeze({
     // two people overlap and every one stays tappable.
     collideDist: 1.6,
     collideStrength: 0.7,
+    // Round 54: the gap kept between a person's centre and any line that is
+    // not theirs (see untangleLines). A face reaches 0.575 from its centre at
+    // person scale 1 and a line is about 0.1 wide.
+    edgeClear: 0.8,
 });
 
 // One integration step. `pairs` is an array of [a, b] objects (the two ends
@@ -120,6 +124,118 @@ export function layoutStep(objs, pairs, alpha = 1, P = LAYOUT) {
         if (sp > maxSpeed) maxSpeed = sp;
     }
     return maxSpeed;
+}
+
+// Distance from point p to segment ab, and where the closest point sits
+// along it (u: 0 at a, 1 at b). Real (unstretched) distance: what the
+// player sees.
+export function pointSegment(p, a, b) {
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const len2 = dx * dx + dy * dy;
+    const u = len2 > 1e-9 ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2)) : 0;
+    return { d: Math.hypot(p.x - (a.x + u * dx), p.y - (a.y + u * dy)), u };
+}
+
+// A line [a, b] runs under person o when it passes closer than `clear` to
+// o's centre somewhere between its ends.
+function under(o, a, b, clear) {
+    if (o === a || o === b) return false;
+    const { d, u } = pointSegment(o.pos, a.pos, b.pos);
+    return d < clear && u > 0 && u < 1;
+}
+
+// How many times a line runs under someone it does not join. Round 54
+// playtest: every level 1 web had 2 to 8 of these, so a red line looked as
+// if it reached the wrong person and a Sever tap beside that face was a guess.
+export function linesUnderPeople(objs, pairs, clear = LAYOUT.edgeClear) {
+    let n = 0;
+    for (const [a, b] of pairs) for (const o of objs) if (under(o, a, b, clear)) n++;
+    return n;
+}
+
+// Round 54: after the web settles, move people off lines that are not
+// theirs. The springs alone leave the web in a tangle (a person resting on a
+// line between two others), so this is a small, deterministic search: each
+// person caught up in a clash tries nearby spots on rings around where they
+// stand and takes the one with the fewest clashes, as long as it keeps them
+// clear of everyone else, inside the screen-shaped ellipse, and their lines
+// not too stretched. Only strict improvements are taken, so it always ends,
+// and it never makes the web worse. Pinned people stay put.
+export function untangleLines(objs, pairs, P = LAYOUT, { rounds = 12 } = {}) {
+    const clear = P.edgeClear;
+    if (!clear || objs.length < 3) return 0;
+    const sx = P.scaleX ?? 1;
+    const sy = P.scaleY ?? 1;
+    const rx = P.maxRadius / sx;
+    const ry = P.maxRadius / sy;
+    const mine = new Map(objs.map((o) => [o, []]));
+    for (const pr of pairs) {
+        if (mine.has(pr[0])) mine.get(pr[0]).push(pr);
+        if (mine.has(pr[1])) mine.get(pr[1]).push(pr);
+    }
+    // Clashes that involve o: o under someone's line, or o's lines under someone.
+    const clashes = (o) => {
+        let n = 0;
+        for (const [a, b] of pairs) if (under(o, a, b, clear)) n++;
+        for (const [a, b] of mine.get(o)) for (const q of objs) if (under(q, a, b, clear)) n++;
+        return n;
+    };
+    const stretch = (o) => {
+        let s = 0;
+        for (const [a, b] of mine.get(o)) {
+            const len = Math.hypot((b.pos.x - a.pos.x) * sx, (b.pos.y - a.pos.y) * sy);
+            s += Math.max(0, len - P.restLength * 1.6);
+        }
+        return s;
+    };
+    const roomy = (o, x, y) => {
+        if (Math.hypot(x / rx, y / ry) > 0.98) return false;
+        for (const q of objs) if (q !== o && Math.hypot(q.pos.x - x, q.pos.y - y) < P.collideDist) return false;
+        return true;
+    };
+    const STEPS = 16;
+    const RINGS = [0.5, 1, 1.5, 2, 2.75, 3.5, 4.5];
+    let moved = 0;
+    for (let round = 0; round < rounds; round++) {
+        let movedThisRound = 0;
+        for (const o of objs) {
+            if (o.pinned) continue;
+            const now = clashes(o);
+            if (now === 0) continue;
+            const home = { x: o.pos.x, y: o.pos.y };
+            const baseStretch = stretch(o);
+            let best = null;
+            for (const ring of RINGS) {
+                const r = ring * clear;
+                for (let k = 0; k < STEPS; k++) {
+                    const t = (k / STEPS) * Math.PI * 2 + ring;
+                    const x = home.x + Math.cos(t) * r;
+                    const y = home.y + Math.sin(t) * r;
+                    if (!roomy(o, x, y)) continue;
+                    o.pos.x = x;
+                    o.pos.y = y;
+                    const c = clashes(o);
+                    const extra = stretch(o) - baseStretch;
+                    o.pos.x = home.x;
+                    o.pos.y = home.y;
+                    if (c >= now || extra > 3) continue;
+                    const cost = c * 10 + ring + Math.max(0, extra) * 2;
+                    if (!best || cost < best.cost) best = { x, y, cost };
+                }
+            }
+            if (best) {
+                o.pos.x = best.x;
+                o.pos.y = best.y;
+                o.vel.x = 0;
+                o.vel.y = 0;
+                movedThisRound++;
+            }
+        }
+        moved += movedThisRound;
+        if (!movedThisRound) break;
+    }
+    return moved;
 }
 
 // Shape the layout to the screen. Left alone the network settles into a
