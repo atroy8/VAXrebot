@@ -163,6 +163,7 @@ export function recordCompletion(save, levelId, outcome, stats) {
     const stars = calculateStars(outcome, stats, level);
     const prev = levelRecord(save, levelId);
     const next = {
+        ...save, // newer save fields (settings, upgrades, goals, daily) pass through
         version: save.version,
         funding: save.funding + fundingAward(stars),
         livesSaved: save.livesSaved + livesSavedForRun(outcome, stats),
@@ -173,6 +174,7 @@ export function recordCompletion(save, levelId, outcome, stats) {
     if (outcome === 'contained') {
         const deaths = stats.totalDead;
         next.levels[levelId] = {
+            ...(save.levels[levelId] || {}), // keeps clear badges set elsewhere
             stars: Math.max(prev.stars, stars),
             completed: true,
             bestDeaths: prev.bestDeaths === null ? deaths : Math.min(prev.bestDeaths, deaths),

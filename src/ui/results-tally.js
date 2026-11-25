@@ -70,32 +70,55 @@ export function prizeCardHtml(c) {
 // baseFunding: the level's normal award. chests: newly unlocked boxes.
 // sound(kind, i): optional ('tick' | 'line' | 'star' | 'coin' | 'prize').
 // meter: starProgress() result (star-meter.js), shown under the stars.
-export function playResultsTally(el, { bins, bonus, stars, baseFunding, chests = [], meter = null, sound = () => {} }) {
+// lead: { stars, reward } elements (results-lead.js). When given, the stars,
+// the funding total and the prize boxes play there, at the top of the
+// results, and `el` (inside Details) keeps the bins, the bonus lines and the
+// score meter. The bins then count up the first time Details is opened.
+export function playResultsTally(el, { bins, bonus, stars, baseFunding, chests = [], meter = null, sound = () => {}, lead = null }) {
     if (!el) return { skip() {} };
     const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    const extras = bonus.lines.filter((l) => !BIN_LOOKS[l.id]);
     const totalFunding = baseFunding + bonus.total;
+    const starsHtml = `<div class="tally-stars" data-stars aria-label="${stars} of 3 stars">${'<span class="tally-star">★</span>'.repeat(3)}</div>`;
+    const rewardHtml = `
+        <div class="tally-total" data-total-row hidden><span class="tally-coin" aria-hidden="true"></span><span data-total>+0</span> funding</div>
+        <div class="tally-prizes" data-prizes></div>`;
 
     el.hidden = false;
     el.classList.remove('done');
     el.innerHTML = `
         ${tallyBinsHtml(bins, bonus)}
         <ul class="tally-lines" data-lines></ul>
-        <div class="tally-stars" data-stars aria-label="${stars} of 3 stars">${'<span class="tally-star">★</span>'.repeat(3)}</div>
+        ${lead ? '' : starsHtml}
         <div class="tally-meter" data-meter></div>
         <ul class="tally-lines tally-lines--award" data-award></ul>
-        <div class="tally-total" data-total-row hidden><span class="tally-coin" aria-hidden="true"></span><span data-total>+0</span> funding</div>
-        <div class="tally-prizes" data-prizes></div>
+        ${lead ? '' : rewardHtml}
         <div class="tally-skip" data-skip>Tap to skip</div>`;
+    if (lead) {
+        lead.stars.innerHTML = starsHtml;
+        lead.reward.innerHTML = rewardHtml;
+        lead.reward.classList.remove('done');
+    }
 
-    const q = (s) => el.querySelector(s);
+    const roots = lead ? [el, lead.stars, lead.reward] : [el];
+    const q = (s) => {
+        for (const r of roots) {
+            const hit = r.querySelector(s);
+            if (hit) return hit;
+        }
+        return null;
+    };
+    // Each play owns the tally until the next one starts (a replayed level).
+    const token = {};
+    el._tallyToken = token;
+    const stale = () => el._tallyToken !== token;
     let skipped = false;
     const skip = () => {
         if (skipped) return;
         skipped = true;
         finish();
     };
-    el.addEventListener('click', skip, { once: true });
+    const skipTargets = lead ? [lead.stars, lead.reward] : [el];
+    for (const t of skipTargets) t.addEventListener('click', skip, { once: true });
 
     function fillBin(id, n, animate) {
         const bin = q(`[data-bin="${id}"]`);
@@ -115,21 +138,28 @@ export function playResultsTally(el, { bins, bonus, stars, baseFunding, chests =
 
     const awardLine = { id: 'award', label: `${stars}-star mission reward`, amount: baseFunding };
 
-    function finish() {
+    // The part that lives in Details when the results are lean.
+    function finishDetails() {
         for (const id of shownBins(bins)) fillBin(id, bins[id] || 0, false);
+        for (const bin of el.querySelectorAll('[data-bin]')) bin.classList.remove('active');
         q('[data-lines]').innerHTML = bonus.lines.map(lineHtml).join('');
-        q('[data-stars]').querySelectorAll('.tally-star').forEach((s, i) => s.classList.toggle('on', i < stars));
         q('[data-meter]').innerHTML = starMeterHtml(meter);
         q('[data-award]').innerHTML = baseFunding > 0 ? lineHtml(awardLine) : '';
-        q('[data-total]').textContent = `+${totalFunding}`;
-        q('[data-total-row]').hidden = false;
-        q('[data-prizes]').innerHTML = chests.map(prizeCardHtml).join('');
         el.classList.add('done');
     }
 
-    async function run() {
-        await sleep(350);
-        // 1. The bins fill face by face and count up.
+    function finish() {
+        finishDetails();
+        q('[data-stars]').querySelectorAll('.tally-star').forEach((s, i) => s.classList.toggle('on', i < stars));
+        q('[data-total]').textContent = `+${totalFunding}`;
+        q('[data-total-row]').hidden = false;
+        q('[data-prizes]').innerHTML = chests.map(prizeCardHtml).join('');
+        if (lead) lead.reward.classList.add('done');
+    }
+
+    // The steps of the animation. Each stops early once off() is true.
+    // 1. The bins fill face by face and count up.
+    async function binsStep(off) {
         for (const id of shownBins(bins)) {
             const n = bins[id] || 0;
             const bin = q(`[data-bin="${id}"]`);
@@ -138,7 +168,7 @@ export function playResultsTally(el, { bins, bonus, stars, baseFunding, chests =
             const countEl = bin.querySelector('[data-count]');
             const step = binTicks(id) ? Math.max(45, Math.min(140, 900 / Math.max(1, n))) : 320;
             for (let i = 0; i < n; i++) {
-                if (skipped) return;
+                if (off()) return;
                 if (i < MAX_FACES - (n > MAX_FACES ? 1 : 0)) {
                     faces.insertAdjacentHTML('beforeend', faceTokenHtml(BIN_LOOKS[id].face, { i, cls: 'face-pop' }));
                 } else {
@@ -155,69 +185,118 @@ export function playResultsTally(el, { bins, bonus, stars, baseFunding, chests =
             }
             if (n === 0) bin.classList.add('empty');
             bin.classList.remove('active');
-            if (skipped) return;
+            if (off()) return;
             await sleep(160);
         }
-        // 2. Bonus lines slide in.
+    }
+    // 2. Bonus lines slide in.
+    async function linesStep(off) {
         const list = q('[data-lines]');
         for (const l of bonus.lines) {
-            if (skipped) return;
+            if (off()) return;
             list.insertAdjacentHTML('beforeend', lineHtml(l));
             sound('line');
             await sleep(330);
         }
-        // 3. Stars pop one at a time.
+    }
+    // 3. Stars pop one at a time.
+    async function starsStep(off) {
         const starEls = q('[data-stars]').querySelectorAll('.tally-star');
         for (let i = 0; i < stars; i++) {
-            if (skipped) return;
+            if (off()) return;
             starEls[i].classList.add('on', 'pop');
             sound('star', i);
             await sleep(380);
         }
-        if (meter) {
-            if (skipped) return;
-            q('[data-meter]').innerHTML = starMeterHtml(meter);
-            q('[data-meter]').classList.add('enter');
-            await sleep(450);
-        }
-        if (baseFunding > 0) {
-            if (skipped) return;
-            q('[data-award]').innerHTML = lineHtml(awardLine);
-            sound('line');
-            await sleep(330);
-        }
-        // 4. Funding counts up. Round 41: the row only appears now, so it
-        // never sits at +0 funding while the bins are still filling.
+    }
+    async function meterStep(off) {
+        if (!meter || off()) return;
+        q('[data-meter]').innerHTML = starMeterHtml(meter);
+        q('[data-meter]').classList.add('enter');
+        await sleep(450);
+    }
+    async function awardStep(off) {
+        if (!(baseFunding > 0) || off()) return;
+        q('[data-award]').innerHTML = lineHtml(awardLine);
+        sound('line');
+        await sleep(330);
+    }
+    // 4. Funding counts up. Round 41: the row only appears now, so it
+    // never sits at +0 funding while the bins are still filling.
+    async function totalStep(off) {
+        if (off()) return;
         const totalEl = q('[data-total]');
         q('[data-total-row]').hidden = false;
         q('[data-total-row]').classList.add('enter');
         const frames = 24;
         for (let f = 1; f <= frames; f++) {
-            if (skipped) return;
+            if (off()) return;
             totalEl.textContent = `+${Math.round((totalFunding * f) / frames)}`;
             if (f % 4 === 0) sound('coin');
             await sleep(30);
         }
-        // 5. Prize boxes drop in.
+    }
+    // 5. Prize boxes drop in.
+    async function prizesStep(off) {
         for (const c of chests) {
-            if (skipped) return;
+            if (off()) return;
             q('[data-prizes]').insertAdjacentHTML('beforeend', prizeCardHtml(c));
             sound('prize');
             await sleep(500);
         }
-        if (!skipped) {
+    }
+
+    async function run() {
+        await sleep(350);
+        const off = () => skipped || stale();
+        // Lean results: only the stars and the reward play up top.
+        const steps = lead ? [starsStep, totalStep, prizesStep] : [binsStep, linesStep, starsStep, meterStep, awardStep, totalStep, prizesStep];
+        for (const step of steps) {
+            if (off()) return;
+            await step(off);
+        }
+        if (!off()) {
             skipped = true;
-            el.removeEventListener('click', skip);
+            for (const t of skipTargets) t.removeEventListener('click', skip);
             finish();
         }
+    }
+
+    // Lean results: the bins are out of sight at first, so they are set to
+    // their end state, and count up the first time Details is opened.
+    function armDetailsReplay() {
+        const wrap = el.closest ? el.closest('details') : null;
+        if (!wrap) return;
+        const onToggle = async () => {
+            if (stale()) return wrap.removeEventListener('toggle', onToggle);
+            if (!wrap.open) return;
+            wrap.removeEventListener('toggle', onToggle);
+            let stop = false;
+            const off = () => stop || stale();
+            el.addEventListener('click', () => { stop = true; }, { once: true });
+            el.classList.remove('done');
+            for (const bin of el.querySelectorAll('[data-bin]')) {
+                bin.querySelector('[data-faces]').innerHTML = '';
+                bin.querySelector('[data-count]').textContent = '0';
+                bin.classList.remove('empty');
+            }
+            q('[data-lines]').innerHTML = '';
+            await binsStep(off);
+            if (!off()) await linesStep(off);
+            if (!stale()) finishDetails();
+        };
+        wrap.addEventListener('toggle', onToggle);
     }
 
     if (reduce) {
         skipped = true;
         finish();
     } else {
+        if (lead) {
+            finishDetails();
+            armDetailsReplay();
+        }
         run();
     }
     return { skip };
 }
-

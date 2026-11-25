@@ -1,0 +1,110 @@
+/* Guided first level (src/ui/coach.js): one small bubble next to the thing
+   to tap. The layer never takes a tap; only Skip tips is a real target. */
+.coach {
+    position: fixed;
+    inset: 0;
+    z-index: 45; /* over the game screen, under the shop sheet and toasts */
+    pointer-events: none;
+}
+.coach[hidden] { display: none; }
+
+.coach-ring {
+    position: absolute;
+    left: 0;
+    top: 0;
+    box-sizing: border-box;
+    border: 3px solid var(--kin-400, #ddb94a);
+    box-shadow: 0 0 0 3px rgba(11, 24, 56, 0.55), 0 0 18px rgba(236, 210, 126, 0.9);
+    animation: coachPulse 1.3s ease-in-out infinite;
+}
+@keyframes coachPulse {
+    0%, 100% { opacity: 1; scale: 1; }
+    50% { opacity: 0.55; scale: 1.08; }
+}
+
+.coach-bubble {
+    position: absolute;
+    left: 0;
+    top: 0;
+    box-sizing: border-box;
+    width: max-content;
+    max-width: min(280px, calc(100vw - 16px));
+    padding: 12px 14px 4px;
+    border-radius: 16px;
+    background: #fffdf7;
+    border: 2px solid var(--kin-400, #ddb94a);
+    box-shadow: 0 4px 0 var(--kin-600, #a8842a), 0 10px 24px rgba(0, 0, 0, 0.4);
+    color: var(--ai-800, #13265a);
+    text-align: left;
+}
+.coach-bubble.coach-in { animation: coachIn 0.25s cubic-bezier(0.3, 1.4, 0.5, 1) both; }
+@keyframes coachIn {
+    from { opacity: 0; scale: 0.9; }
+    to { opacity: 1; scale: 1; }
+}
+.coach-text {
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 700;
+    line-height: 1.3;
+}
+.coach-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 2px -8px 0;
+}
+.coach-skip,
+.coach-ok {
+    pointer-events: auto;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0 8px;
+    border: 0;
+    background: none;
+    font-family: inherit;
+    font-size: 0.9rem;
+    font-weight: 700;
+    white-space: nowrap;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+.coach-skip { color: #5a6585; text-decoration: underline; text-underline-offset: 3px; }
+.coach-ok { color: var(--ai-700, #1b3a7a); }
+.coach-ok[hidden] { display: none; }
+
+/* A step that names one tap is a single short row (text, then Skip tips),
+   so it covers as little of the web and the tray as it can. */
+.coach-bubble[data-kind='do'] {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    max-width: min(330px, calc(100vw - 16px));
+    padding: 4px 6px 4px 14px;
+}
+.coach-bubble[data-kind='do'] .coach-row { margin: 0; flex: none; }
+
+/* The little pointer on the bubble's edge, aimed at the anchor. */
+.coach-arrow {
+    position: absolute;
+    left: var(--arrow-x, 50%);
+    width: 14px;
+    height: 14px;
+    margin-left: -7px;
+    background: #fffdf7;
+    border: 2px solid var(--kin-400, #ddb94a);
+    border-right: 0;
+    border-bottom: 0;
+    rotate: 45deg;
+}
+.coach-bubble[data-side='below'] .coach-arrow { top: -9px; }
+.coach-bubble[data-side='above'] .coach-arrow { bottom: -9px; rotate: 225deg; }
+
+/* While the coach is talking, the generic tool hint stays quiet: two lines
+   of advice over one small web is one too many. */
+body.coach-on #tool-hint { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+    .coach-ring, .coach-bubble.coach-in { animation: none; }
+}

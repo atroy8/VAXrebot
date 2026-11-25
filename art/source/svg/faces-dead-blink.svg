@@ -12,6 +12,7 @@
   <g transform="translate(512 600) scale(1.1) translate(-512 -600)">
   <g clip-path="url(#inner)">
     <path d="M232 960 Q236 742 512 716 Q788 742 792 960 Z" fill="none" stroke="#3b2a12" stroke-opacity="0.55" stroke-width="16" stroke-linejoin="round" stroke-linecap="round" transform="translate(0 3)"/><path d="M232 960 Q236 742 512 716 Q788 742 792 960 Z" fill="#2f3f6e" stroke="#d6b25e" stroke-width="9" stroke-linejoin="round" stroke-linecap="round"/>
+    
     <rect x="470" y="650" width="84" height="90" rx="20" fill="none" stroke="#3b2a12" stroke-opacity="0.55" stroke-width="14" stroke-linejoin="round" stroke-linecap="round" transform="translate(0 3)"/><rect x="470" y="650" width="84" height="90" rx="20" fill="#f6e3c4" stroke="#d6b25e" stroke-width="7" stroke-linejoin="round" stroke-linecap="round"/>
     <path d="M418 728 L512 860 L606 728 L566 722 L512 800 L458 722 Z" fill="none" stroke="#3b2a12" stroke-opacity="0.55" stroke-width="14" stroke-linejoin="round" stroke-linecap="round" transform="translate(0 3)"/><path d="M418 728 L512 860 L606 728 L566 722 L512 800 L458 722 Z" fill="#e8e2d6" stroke="#d6b25e" stroke-width="7" stroke-linejoin="round" stroke-linecap="round"/>
     <path d="M300 900 q60 -30 110 0 M614 900 q60 -30 110 0" fill="none" stroke="#d6b25e" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"/>
@@ -28,8 +29,7 @@
   </g></g><g clip-path="url(#inner)">
   
   <circle cx="512" cy="512" r="408" fill="#ffffff" opacity="0.16"/></g>
-  <circle cx="512" cy="512" r="426" fill="none" stroke="url(#goldRing)" stroke-width="38"/>
-  <circle cx="512" cy="512" r="445" fill="none" stroke="#a8823a" stroke-width="3"/>
-  <circle cx="512" cy="512" r="407" fill="none" stroke="#3b2a12" stroke-opacity="0.6" stroke-width="5"/>
-  <path d="M190 300 A370 370 0 0 1 420 150" fill="none" stroke="#fff6d6" stroke-opacity="0.7" stroke-width="8" stroke-linecap="round"/>
+  <g data-ring="pewter"><circle cx="512" cy="512" r="426" fill="none" stroke="#8d9693" stroke-width="38"/>
+  <circle cx="512" cy="512" r="445" fill="none" stroke="#5f6765" stroke-width="5"/>
+  <circle cx="512" cy="512" r="407" fill="none" stroke="#5f6765" stroke-width="5"/></g>
 </svg>

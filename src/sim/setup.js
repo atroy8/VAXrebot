@@ -3,9 +3,10 @@
 // from the network generators reading Math.random, which is swapped for
 // the injected rng while they run.
 import { generateNetwork } from './network.js';
-import { placeSuperSpreader, placeEnvoy } from './variants.js';
+import { placeSuperSpreader, placeEnvoy, placeHub } from './variants.js';
 import { toolDailyLimit, toolAvailableDay } from './engine.js';
 import { caseCapFor } from './actions.js';
+import { markTravellers } from './mechanics.js';
 
 // Round 47, a fair opening: on the learning planets a level must never be
 // lost at the end of day 1 when the player makes the best day 1 moves. With patient zero a hub (5 contacts on a web of
@@ -104,7 +105,7 @@ export function buildOutbreak({ scenario, population, variant = null, rng = Math
     Math.random = rng;
     let links;
     try {
-        ({ links } = generateNetwork(scenario.networkType, population, rng));
+        ({ links } = generateNetwork(scenario.networkType, population, rng, scenario.webDegree));
     } finally {
         Math.random = saved;
     }
@@ -148,5 +149,13 @@ export function buildOutbreak({ scenario, population, variant = null, rng = Math
         const envoy = placeEnvoy(nodes, links, variant, rng);
         envoyId = envoy ? envoy.id : null;
     }
-    return { nodes, links, initialCases, superSpreaderId, envoyId };
+    // Keep it open (later planets): the scenario's goal marks one hub.
+    let hubId = null;
+    if (scenario.goal && scenario.goal.type === 'keepOpen') {
+        const hub = placeHub(nodes, links, scenario.goal, rng);
+        hubId = hub ? hub.id : null;
+    }
+    // Travellers (later planets): a few people who swap a contact each night.
+    const travellerIds = scenario.travellers ? markTravellers(nodes, scenario.travellers, rng).map((n) => n.id) : [];
+    return { nodes, links, initialCases, superSpreaderId, envoyId, hubId, travellerIds };
 }

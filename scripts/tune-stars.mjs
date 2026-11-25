@@ -13,6 +13,7 @@ import { writeFileSync } from 'node:fs';
 import { LEVELS } from '../src/config/levels.js';
 import { playRun } from '../src/sim/balance.js';
 import { SCORING } from '../src/progress.js';
+import { STAR_TARGETS } from '../src/config/star-targets.js';
 
 const RUNS = Number(process.argv[2]) || 300;
 export const DEFAULT_TARGET = 800;
@@ -36,8 +37,21 @@ export function pickTarget(wins, share) {
     return Math.floor(line / SCORING.threeStarRatio);
 }
 
+// Wide audience round: STARS_ONLY=mechanics rewrites only the levels that
+// play with a new idea (level.mechanics or a new goal), and
+// STARS_ONLY=later every level from the third planet on, and
+// STARS_ONLY=tsukimi-2,sango-4 only those ids; every other level keeps the
+// target it has, so the learning planets are never touched by a retune.
+const ONLY = process.env.STARS_ONLY || '';
+const GOALS = ['holdLine', 'keepOpen'];
+const wanted = (level) => !ONLY || (ONLY === 'later' ? level.planetIndex >= 2 : ONLY === 'mechanics' ? !!level.mechanics || GOALS.includes(level.variant?.type) : ONLY.split(',').includes(level.id));
+
 const out = {};
 LEVELS.forEach((level, i) => {
+    if (!wanted(level)) {
+        out[level.id] = STAR_TARGETS[level.id] ?? DEFAULT_TARGET;
+        return;
+    }
     const wins = [];
     for (let k = 0; k < RUNS; k++) {
         const r = playRun(level, 'smart', 424243 + k * 7);

@@ -11,7 +11,10 @@ function cloud(n = 45, seed = 1) {
         const t = (i + seed) / n;
         objs.push({ pos: { x: Math.cos(i * seed) * 3 * t, y: Math.sin(i * 1.3) * 3 * t, z: Math.cos(i * 0.7 + seed) * 3 * t }, vel: { x: 0, y: 0, z: 0 } });
     }
-    const { links } = generateNetwork('small-world', n);
+    // Seeded dice: with Math.random this test failed about once in forty runs.
+    let r = (seed * 2654435761) >>> 0;
+    const rng = () => ((r = (r * 1664525 + 1013904223) >>> 0) / 4294967296);
+    const { links } = generateNetwork('small-world', n, rng);
     settleLayout3d(objs, links.map((l) => [objs[l.source], objs[l.target]]), { maxSteps: 400 });
     return objs.map((o) => o.pos);
 }

@@ -6,41 +6,54 @@
 // chance liveR (src/sim/actions.js) uses, so on day 1 the R in the HUD
 // starts near the R₀ the briefing promised. Pure and seedable.
 import { generateNetwork } from './network.js';
+import { incubationOf, maskFactorOf, linkFactor, meanIncubation } from './mechanics.js';
 
 const idOf = (ref) => (ref && typeof ref === 'object' ? ref.id : ref);
 
 // Chance that one healthy contact catches it from a case over its whole
 // sick spell.
-export function linkChance(transmissionRate, recoveryTime) {
-    const rate = Math.min(1, Math.max(0, transmissionRate || 0));
+// Later planets (optional `rules`, the level's difficulty): a case with an
+// incubation period also spreads on its presymptomatic days, at the reduced
+// rate, and `factor` scales the rate on a masked line (src/sim/mechanics.js).
+export function linkChance(transmissionRate, recoveryTime, rules = null, factor = 1) {
+    const rate = Math.min(1, Math.max(0, (transmissionRate || 0) * factor));
     const days = Math.max(1, recoveryTime || 1);
-    return 1 - Math.pow(1 - rate, days);
+    const inc = incubationOf(rules);
+    const before = inc ? Math.pow(1 - Math.min(1, rate * inc.factor), meanIncubation(inc)) : 1;
+    return 1 - Math.pow(1 - rate, days) * before;
 }
 
 // R₀ of one web: average contacts per person times the per-link chance.
 // Averaging over everyone is the expected R₀ for a patient zero picked at
 // random. Removed people do not count.
-export function webR0(network, transmissionRate, recoveryTime) {
-    const live = new Set(network.nodes.filter((n) => !n.removed).map((n) => n.id));
-    if (!live.size) return 0;
-    let ends = 0;
+// Masked lines count for less: each line adds its own chance (linkFactor).
+export function webR0(network, transmissionRate, recoveryTime, rules = null) {
+    const byId = new Map(network.nodes.filter((n) => !n.removed).map((n) => [n.id, n]));
+    if (!byId.size) return 0;
+    const plain = linkChance(transmissionRate, recoveryTime, rules);
+    const maskFactor = maskFactorOf(rules);
+    let sum = 0;
     for (const l of network.links) {
-        if (live.has(idOf(l.source)) && live.has(idOf(l.target))) ends += 2;
+        const a = byId.get(idOf(l.source));
+        const b = byId.get(idOf(l.target));
+        if (!a || !b) continue;
+        const f = linkFactor(a, b, maskFactor);
+        sum += 2 * (f === 1 ? plain : linkChance(transmissionRate, recoveryTime, rules, f));
     }
-    return (ends / live.size) * linkChance(transmissionRate, recoveryTime);
+    return sum / byId.size;
 }
 
 // R₀ over many webs the level can build, low to high. The briefing runs
 // before this play's web exists, so it samples webs of the level's shape and
 // sizes. Returns { lo, hi } at the 10th and 90th percentile.
-export function levelR0Range({ networkType, populationRange, transmissionRate, recoveryTime, samples = 40, rng = Math.random }) {
+export function levelR0Range({ networkType, populationRange, transmissionRate, recoveryTime, samples = 40, rng = Math.random, rules = null, degree = undefined }) {
     const [minPop, maxPop] = populationRange && populationRange.length ? populationRange : [12, 12];
     const values = [];
     for (let i = 0; i < samples; i++) {
         const n = Math.round(minPop + (maxPop - minPop) * (samples > 1 ? i / (samples - 1) : 0));
-        const { links } = generateNetwork(networkType, n, rng);
+        const { links } = generateNetwork(networkType, n, rng, degree);
         const nodes = Array.from({ length: n }, (_, id) => ({ id }));
-        values.push(webR0({ nodes, links }, transmissionRate, recoveryTime));
+        values.push(webR0({ nodes, links }, transmissionRate, recoveryTime, rules));
     }
     values.sort((a, b) => a - b);
     const at = (q) => values[Math.min(values.length - 1, Math.max(0, Math.round(q * (values.length - 1))))];
