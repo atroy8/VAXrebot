@@ -266,7 +266,9 @@ function applyPay(gameApi) {
     }
     const sick = nodes
         .filter((n) => !n.removed && n.state === 'infected')
-        .sort((a, b) => (degree.get(b.id) || 0) - (degree.get(a.id) || 0))
+        // Round 57: a stable tie-break (lowest id), so the same web always
+        // sends the same people home.
+        .sort((a, b) => (degree.get(b.id) || 0) - (degree.get(a.id) || 0) || a.id - b.id)
         .slice(0, STAY_HOME.maxPeople);
     const until = (gameApi.gameState.day || 1) + STAY_HOME.days;
     for (const node of sick) {
@@ -292,7 +294,7 @@ function applyBlitz(gameApi) {
     }
     const pool = nodes
         .filter((n) => !n.removed && n.state === 'healthy')
-        .sort((a, b) => (degree.get(b.id) || 0) - (degree.get(a.id) || 0));
+        .sort((a, b) => (degree.get(b.id) || 0) - (degree.get(a.id) || 0) || a.id - b.id);
     const targets = pool.slice(0, 5);
     for (const node of targets) node.state = 'vaccinated';
     gameApi.gameState.stats.totalProtected += targets.length;

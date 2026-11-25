@@ -11,7 +11,7 @@
 export const HOW_TO_PLAY = Object.freeze([
     {
         title: 'Stop the spread',
-        body: 'Each face is a person and each line is a contact. Red faces are sick, and red lines show where it can jump next.',
+        body: 'Each face is a person and each line is a contact. Red faces are sick, and red lines are tonight\'s new cases unless you act.',
     },
     {
         title: 'Pick a tool, then tap',
@@ -19,7 +19,7 @@ export const HOW_TO_PLAY = Object.freeze([
     },
     {
         title: 'Win or lose',
-        body: 'You win when nobody is sick. You lose if cases reach the cap. Sick people can die, so act early. R below 1 means the outbreak is shrinking.',
+        body: 'You win when nobody is sick and lose at the case cap. Frail people (heart mark) die on their third night sick unless isolated. 3 stars: the best play.',
     },
 ]);
 

@@ -13,8 +13,11 @@ import { careNudgeLine, spentToolLine, usedUpNudge } from '../src/ui/game-screen
 
 const read = (p) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
 
+// Round 57: only a frail person needs the ward (anyone else recovers by
+// themselves), and a ward saves them for certain if it comes before their
+// third night. So everyone in these webs is frail unless a test says not.
 const web = (people) => ({
-    nodes: people.map(([state, daysInfected = 0], id) => ({ id, state, daysInfected })),
+    nodes: people.map(([state, daysInfected = 0], id) => ({ id, state, daysInfected, frail: true })),
     links: [],
 });
 const diff = (over = {}) => ({ toolLimitMultiplier: 1, recoveryTime: 5, dailyLimits: { quarantine: 2, vaccinate: 2, severLink: 2 }, ...over });
@@ -37,9 +40,15 @@ describe('careStillHelps', () => {
 
     it('skips people who will have recovered before Quarantine can reach them', () => {
         const s = state({ day: 1 });
-        // Opens on day 3, two days away: sick for 3 of 5 days now means done by then.
+        // Opens on day 3, two nights away: only someone who fell sick today
+        // is still alive then (round 57: lost on the third night).
         expect(careStillHelps(s, web([['infected', 3]]), tools, diff(), 5)).toBeNull();
-        expect(careStillHelps(s, web([['infected', 2]]), tools, diff(), 5)).toEqual({ day: 3, sick: 1 });
+        expect(careStillHelps(s, web([['infected', 1]]), tools, diff(), 5)).toBeNull();
+        expect(careStillHelps(s, web([['infected', 0]]), tools, diff(), 5)).toEqual({ day: 3, sick: 1 });
+        // Someone who is not frail never needs it.
+        const sturdy = web([['infected', 0]]);
+        sturdy.nodes[0].frail = false;
+        expect(careStillHelps(s, sturdy, tools, diff(), 5)).toBeNull();
     });
 
     it('rolls to tomorrow when today\'s Quarantine uses are spent', () => {
@@ -108,19 +117,21 @@ describe('waiting for care saves lives (the reason for the change)', () => {
     it('isolating on day 3 loses fewer people than fast-forwarding untreated', () => {
         const untreated = deathsOver(400, null);
         const treated = deathsOver(400, 3);
-        expect(untreated).toBeGreaterThan(0);
-        expect(treated).toBeLessThan(untreated * 0.75);
+        // Round 57: no dice. Untreated, both frail people are lost every
+        // time; in a ward from day 3, neither is.
+        expect(untreated).toBe(800);
+        expect(treated).toBe(0);
     });
 });
 
 describe('the nudge line', () => {
     it('says how many still need care when Quarantine is ready now', () => {
-        expect(careNudgeLine({ day: 3, sick: 2 }, 3)).toBe('Spread stopped! 2 sick people still need care. Quarantine them: care halves their risk.');
-        expect(careNudgeLine({ day: 3, sick: 1 }, 3)).toContain('1 sick person still needs care.');
+        expect(careNudgeLine({ day: 3, sick: 2 }, 3)).toBe('Spread stopped! 2 frail people still need care. Quarantine them: in a ward they recover.');
+        expect(careNudgeLine({ day: 3, sick: 1 }, 3)).toContain('1 frail person still needs care.');
     });
 
     it('names the day Quarantine opens when it is not open yet', () => {
-        expect(careNudgeLine({ day: 3, sick: 2 }, 2)).toBe('Spread stopped! Quarantine opens on day 3. Isolate the sick then: care halves their risk.');
+        expect(careNudgeLine({ day: 3, sick: 2 }, 2)).toBe('Spread stopped! Quarantine opens on day 3. Isolate the frail then: in a ward they recover.');
     });
 
     it('is empty with no plan, and never uses a dash', () => {

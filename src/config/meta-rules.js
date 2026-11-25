@@ -18,7 +18,11 @@ export function applyMetaState(state, rules, { upgrades = [] } = {}) {
     return applyUpgradeState(state, rules, upgrades);
 }
 
-// For buildRun(level, rng, modify) in src/sim/balance.js.
+// A rules modifier for the given options. Round 57: the dealer deals with
+// the options themselves (it has to solve the level under them), so the
+// function also carries them as `.meta` for src/sim/meta-run.js.
 export function metaModifier(options) {
-    return (rules) => applyMetaRules(rules, options);
+    const modify = (rules) => applyMetaRules(rules, options);
+    modify.meta = { gentle: !!(options && options.gentle), upgrades: [...((options && options.upgrades) || [])] };
+    return modify;
 }

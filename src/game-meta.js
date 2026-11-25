@@ -5,27 +5,31 @@
 // only: every rule is a pure function in src/sim/* or src/config/*.
 import { levelR0Range, formatR0 } from './sim/r0.js';
 import { writeSave, loadSave } from './save.js';
-import { parDaysFor } from './progress.js';
 import { rollLevelRules, threatLine } from './config/difficulty-roll.js';
-import { rollPopulation } from './config/campaign.js';
-import { applyMetaRules, applyMetaState } from './config/meta-rules.js';
+import { applyMetaRules } from './config/meta-rules.js';
 import { shouldOfferGentle } from './config/gentle.js';
-import { buyUpgrade, freeHints, likelyNextCase, upgradeById } from './config/upgrades.js';
+import { buyUpgrade, freeHints, upgradeById } from './config/upgrades.js';
 import { lessonFor } from './config/lessons.js';
 import { variantCallout } from './sim/variants.js';
 import { caseCapFor } from './sim/actions.js';
-import { chooseMove, hintLine, hintOffer, hintLabel, hintPrice, NO_HINT_LINE } from './sim/hint.js';
+import { chooseMove, hintLine, hintOffer, hintLabel, hintPrice, NO_HINT_LINE, HINT_NODE_BUDGET, GLOW_NODE_BUDGET } from './sim/hint.js';
 import { takeSnapshot, restoreSnapshot, canRestore } from './sim/undo.js';
 import { goalsFor, checkGoals } from './sim/goals.js';
-import { utcDateString, dailyLevel, dailyDice, dailyStatus, recordDaily, dailyShareText } from './sim/daily.js';
+import { utcDateString, dailyLevel, dailyStatus, recordDaily, dailyShareText } from './sim/daily.js';
 import { gentleOn, setGentle, markClear, saveGoals, noteResult, spendFunding } from './meta.js';
 import { showNotification } from './ui/panels.js';
-import { fillBriefing, showThreat, fillLessonCard, showVariantCallout, showStarGoal, showToolkit } from './ui/briefing.js';
+import { fillBriefing, showThreat, fillLessonCard, showVariantCallout, showToolkit } from './ui/briefing.js';
 import { showMark, clearMarks, syncMetaButtons } from './ui/hint.js';
 import { renderBriefingGoals, renderResultsGoals, gentleOfferMarkup, renderUpgrades, showUpgradeMessage } from './ui/meta-panels.js';
 import { mountDailyButton, refreshDailyButton, dailyResultMarkup, shareText, shortDate, SHARE_STATUS } from './ui/daily.js';
 
-const EARLY_WARNING_DELAY_MS = 1100;
+// What a hint depends on: the day, today's uses, every person and every line.
+function hintKey(state, network) {
+    const id = (ref) => (ref && typeof ref === 'object' ? ref.id : ref);
+    const people = network.nodes.map((n) => `${n.id}${n.state[0]}${n.daysInfected || 0}${n.masked ? 'm' : ''}${n.testedClear ? 't' : ''}`).join('');
+    const lines = network.links.map((l) => `${id(l.source)}-${id(l.target)}${l.charged ? '!' : ''}`).join(',');
+    return `${state.day}|${JSON.stringify(state.dailyUsage)}|${people}|${lines}`;
+}
 
 export const metaMethods = {
     // ---- Setup ----------------------------------------------------------------
@@ -78,42 +82,26 @@ export const metaMethods = {
         return { gentle: gentleOn(this.save), upgrades: [...(this.save.upgrades || [])] };
     },
 
-    // The rules for this play: the level's roll with the meta modifiers on
-    // top. The Daily rolls with the day's own dice.
+    // The rules for this play: the level's rules with the meta modifiers on
+    // top. (The deal itself is made by src/game-deal.js with the same meta.)
     rollMetaRules() {
-        const rng = this.daily ? dailyDice(this.daily.date).rules() : undefined;
         this.syncSave();
         this.metaInForce = this.metaOptions();
-        return applyMetaRules(rollLevelRules(this.currentLevel, rng), this.metaInForce);
+        return applyMetaRules(rollLevelRules(this.currentLevel), this.metaInForce);
     },
 
     // ---- Run lifecycle ----------------------------------------------------------
     beginMetaRun() {
-        // Seeded dice for the Daily (web, first cases and every night), the
-        // usual Math.random otherwise.
-        this.runRng = this.daily ? dailyDice(this.daily.date).run() : null;
         this.hintsUsed = 0;
         this.undoSnap = null;
-        clearTimeout(this.warnTimer);
+        this.hintCache = null;
         clearMarks();
-    },
-
-    // The Daily's web size comes from the day's dice, and never avoids the
-    // last size the way a campaign replay does: every play is the same web.
-    dailyPopulation() {
-        return rollPopulation(this.currentScenario.populationRange, this.runRng, null);
-    },
-
-    metaRunReady() {
-        applyMetaState(this.gameState, { difficulty: this.difficulty }, this.metaInForce || {});
-        this.queueEarlyWarning();
     },
 
     afterMetaDay() {
-        // The dice have been rolled: yesterday's move can no longer be undone.
+        // The night has happened: yesterday's move can no longer be undone.
         this.undoSnap = null;
         clearMarks();
-        this.queueEarlyWarning();
         this.refreshMetaHud();
     },
 
@@ -168,9 +156,19 @@ export const metaMethods = {
     },
 
     // The move a hint would show right now (nothing is spent or changed).
-    peekHint() {
-        if (!this.gameState || this.gameState.gameOver) return null;
-        return chooseMove(this.gameState, this.network, this.tools, this.difficulty);
+    // Round 57: the move comes from the solver (src/sim/hint.js). It is
+    // asked for on every screen update (the next-step glow), so the answer
+    // is kept until the web or the day's uses change.
+    // full: the Hint button (the whole budget). The glow asks on every tap,
+    // so it searches a third as far; a full answer is reused for it.
+    peekHint(full = false) {
+        if (!this.gameState || this.gameState.gameOver || this.demo) return null;
+        const key = hintKey(this.gameState, this.network);
+        if (!this.hintCache || this.hintCache.key !== key || (full && !this.hintCache.full)) {
+            const nodeBudget = full ? HINT_NODE_BUDGET : GLOW_NODE_BUDGET;
+            this.hintCache = { key, full, move: chooseMove(this.gameState, this.network, this.tools, this.difficulty, this.currentScenario, { nodeBudget }) };
+        }
+        return this.hintCache.move;
     },
 
     useHint() {
@@ -181,7 +179,7 @@ export const metaMethods = {
             showNotification(`${offer.reason} You have ${this.save.funding}.`, 'info');
             return;
         }
-        const move = this.peekHint();
+        const move = this.peekHint(true);
         if (!move) {
             showNotification(NO_HINT_LINE, 'info'); // nothing to point at: not charged
             return;
@@ -203,18 +201,6 @@ export const metaMethods = {
         this.updateUI();
     },
 
-    // Early warning upgrade: each morning, mark who is most likely to fall ill.
-    queueEarlyWarning() {
-        clearTimeout(this.warnTimer);
-        if (!(this.metaInForce && this.metaInForce.upgrades.includes('earlyWarning'))) return;
-        this.warnTimer = setTimeout(() => {
-            if (!this.gameState || this.gameState.gameOver || this.wrapUp || this.currentScreen !== 'game') return;
-            const rate = this.currentScenario.baseTransmissionRate * this.difficulty.transmissionMultiplier;
-            const hit = likelyNextCase(this.network, rate);
-            if (hit) showMark(this.view, { node: hit.node }, { kind: 'warn', label: 'Most at risk tonight', ms: 3500 });
-        }, EARLY_WARNING_DELAY_MS);
-    },
-
     // ---- Briefing ---------------------------------------------------------------
     refreshMetaBriefing() {
         const level = this.currentLevel;
@@ -222,10 +208,8 @@ export const metaMethods = {
         this.levelGoals = goalsFor(level);
         const done = (this.save.goals && this.save.goals[level.id]) || [];
         renderBriefingGoals(this.levelGoals, done, { gentle: !!(this.metaInForce && this.metaInForce.gentle) });
-        // Cold chain moves Vaccinate a day earlier: show the real days.
-        if (this.metaInForce && this.metaInForce.upgrades.includes('coldChain') && this.difficulty.toolDays) {
-            showToolkit(level.toolkit, this.difficulty.toolDays);
-        }
+        // Cold chain and Rapid response move a tool a day earlier: show the real days.
+        if (this.difficulty.toolDays) showToolkit(level.toolkit, this.difficulty.toolDays);
     },
 
     // ---- Daily puzzle -------------------------------------------------------------
@@ -252,22 +236,22 @@ export const metaMethods = {
             ...this.currentScenario,
             name: `${level.name}, ${shortDate(date)}`,
             description: this.daily.practice
-                ? 'Practice run. Same web, same first cases and same dice as your first attempt today.'
-                : 'One puzzle a day, the same for everyone: same web, same first cases, same dice. Your first attempt counts for your streak.',
+                ? 'Practice run. The same web and first cases as your first attempt today.'
+                : 'One puzzle a day, the same for everyone: same web, same first cases, same best play. Your first attempt counts for your streak.',
         });
         const r0 = levelR0Range({
             networkType: this.currentScenario.networkType,
             populationRange: this.currentScenario.populationRange,
-            transmissionRate: this.currentScenario.baseTransmissionRate * this.difficulty.transmissionMultiplier,
-            recoveryTime: this.difficulty.recoveryTime,
+            degree: this.currentScenario.webDegree,
         });
         this.currentR0 = formatR0(r0.lo, r0.hi);
         showThreat({ pips: this.threat.pips, line: threatLine(this.threat.value), r0: this.currentR0 });
-        showStarGoal({ parDays: parDaysFor(level), best: 0 });
+        // The day's seed deals the day's web: the same one for everyone.
+        this.beginDeal();
         const lesson = lessonFor(level.lessonId);
         fillLessonCard('briefing-lesson', lesson?.title, lesson?.brief);
         showVariantCallout(variantCallout(level.variant));
-        showToolkit(level.toolkit, level.variant?.toolDays);
+        showToolkit(level.toolkit, this.difficulty.toolDays || level.variant?.toolDays);
         this.refreshMetaBriefing();
         this.viewLoader.prefetch();
         this.showScreen('briefing');
@@ -288,7 +272,6 @@ export const metaMethods = {
         const box = document.getElementById('results-meta');
         if (box) box.innerHTML = '';
         this.dailyShare = null;
-        clearTimeout(this.warnTimer);
         clearMarks();
         if (this.daily) {
             const date = this.daily.date;
@@ -298,7 +281,7 @@ export const metaMethods = {
                 writeSave(this.storage, this.save);
             }
             this.daily.practice = true; // any further run today is practice
-            this.dailyShare = dailyShareText({ date, outcome, days: this.gameState.day, lost: stats.totalDead || 0, stars, activeByDay: stats.activeByDay || [], streak: counted ? daily.streak : 0 });
+            this.dailyShare = dailyShareText({ date, outcome, days: this.gameState.day, lost: stats.totalDead || 0, stars, activeByDay: stats.activeByDay || [], streak: counted ? daily.streak : 0, cases: stats.totalInfected, par: stats.par || null });
             if (box) box.innerHTML = dailyResultMarkup({ text: this.dailyShare, counted, streak: daily.streak });
             renderResultsGoals([]);
             this.refreshDailyEntry();

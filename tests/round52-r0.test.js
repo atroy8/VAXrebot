@@ -19,15 +19,17 @@ const rulesAt = (level, t = 0.5) => rollLevelRules(level, () => t);
 const rateOf = ({ scenario, difficulty }) => scenario.baseTransmissionRate * difficulty.transmissionMultiplier;
 
 describe('R0 here is worked out from the level (round 52)', () => {
-    it('uses the per-link chance over a whole sick spell, like live R', () => {
+    // Round 57: a contact is a certainty, so the per-link chance is 1 and
+    // R0 on a web is simply the average number of contacts.
+    it('counts every contact as a certain case, like live R', () => {
         expect(linkChance(1, 5)).toBe(1);
-        expect(linkChance(0, 5)).toBe(0);
-        expect(linkChance(0.5, 2)).toBeCloseTo(0.75, 5);
+        expect(linkChance(0, 5)).toBe(1);
+        expect(linkChance(0.5, 2)).toBe(1);
         // A ring of 4: everyone has 2 contacts.
         const ring = { nodes: [0, 1, 2, 3].map((id) => ({ id })), links: [[0, 1], [1, 2], [2, 3], [3, 0]].map(([source, target]) => ({ source, target })) };
-        expect(webR0(ring, 0.5, 2)).toBeCloseTo(1.5, 5);
+        expect(webR0(ring, 0.5, 2)).toBe(2);
         // On a fully healthy web with one case, live R for that case is its
-        // own contacts times the same chance.
+        // own contacts.
         const one = { nodes: ring.nodes.map((n) => ({ ...n, state: n.id === 0 ? 'infected' : 'healthy', daysInfected: 0 })), links: ring.links };
         expect(liveR(one, 0.5, 2)).toBeCloseTo(webR0(ring, 0.5, 2), 5);
         // Removed people do not count.
@@ -87,7 +89,8 @@ describe('R0 here is worked out from the level (round 52)', () => {
         const src = readFileSync(new URL('../src/game.js', import.meta.url), 'utf8');
         expect(src).not.toContain('this.difficulties[level.difficultyId]?.R0');
         expect(src).toContain('this.currentR0 = formatR0(r0.lo, r0.hi);');
-        expect(src).toContain('this.currentR0 = formatR0(webR);');
+        // Round 57: the dealt web's own R0 is read where the deal is opened.
+        expect(readFileSync(new URL('../src/game-deal.js', import.meta.url), 'utf8')).toContain('this.currentR0 = formatR0(webR);');
     });
 });
 

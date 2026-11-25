@@ -55,8 +55,11 @@ describe('wider ranges per planet', () => {
             }
         }
         const game = readFileSync(new URL('../src/game.js', import.meta.url), 'utf8');
-        expect(game).toContain('rollPopulation(this.currentScenario.populationRange, Math.random, this.lastPopulation.get(levelKey))');
-        expect(game).toContain('this.lastPopulation.set(levelKey, population)');
+        // Round 57: the dealer rolls the size with the deal's seed (a replay
+        // is a new seed, so a new web), and the game opens what was dealt.
+        expect(readFileSync(new URL('../src/sim/dealer.js', import.meta.url), 'utf8')).toContain('const population = lo + Math.floor(rng() * (hi - lo + 1));');
+        expect(game).toContain('this.openDeal()');
+        expect(game).not.toContain('rollPopulation(');
     });
 });
 

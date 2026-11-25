@@ -33,6 +33,11 @@
 // reset to a fresh save rather than crashing. resetSave() is exposed for a
 // future settings-screen button.
 
+// Upgrade ids replaced over time, old to new. Mirrors UPGRADE_RENAMES in
+// src/config/upgrades.js (kept here so the save has no imports; a test
+// checks they agree).
+const UPGRADE_RENAMES = { earlyWarning: 'rapidResponse' };
+
 export const SAVE_KEY = 'vaxrebot-save-v1';
 export const SAVE_VERSION = 2;
 
@@ -56,7 +61,9 @@ export function withMetaDefaults(data) {
     const d = metaDefaults();
     return {
         settings: { ...d.settings, ...(isObject(data.settings) ? data.settings : {}) },
-        upgrades: Array.isArray(data.upgrades) ? data.upgrades.filter((x) => typeof x === 'string') : d.upgrades,
+        // Round 57: Early warning became Rapid response; a save that owns the
+        // old upgrade owns the new one (never twice).
+        upgrades: Array.isArray(data.upgrades) ? [...new Set(data.upgrades.filter((x) => typeof x === 'string').map((x) => UPGRADE_RENAMES[x] || x))] : d.upgrades,
         goals: isObject(data.goals) ? data.goals : d.goals,
         daily: { ...d.daily, ...(isObject(data.daily) ? data.daily : {}) },
         lossStreak: { ...d.lossStreak, ...(isObject(data.lossStreak) ? data.lossStreak : {}) },

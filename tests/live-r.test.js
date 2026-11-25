@@ -27,13 +27,13 @@ describe('liveR', () => {
         expect(liveR(star(), 1, 5)).toBe(3);
     });
 
-    it('weights each contact by the chance of passing it on before recovery', () => {
-        const r = liveR(star(), 0.2, 3);
-        expect(r).toBeCloseTo(3 * (1 - 0.8 ** 3), 6);
-        // Fewer days left means less chance.
+    // Round 57: a contact is a certainty, so R no longer weights a line by a
+    // chance or by the days a case has left. It is healthy contacts per spreader.
+    it('counts each contact whole, whatever rate or days are handed in', () => {
+        expect(liveR(star(), 0.2, 3)).toBe(3);
         const late = star();
         late.nodes[0].daysInfected = 2;
-        expect(liveR(late, 0.2, 3)).toBeCloseTo(3 * 0.2, 6);
+        expect(liveR(late, 0.2, 3)).toBe(3);
     });
 
     it('drops the moment a red link is cut', () => {
@@ -80,16 +80,16 @@ describe('liveR', () => {
         expect(liveR(net, 1, 5)).toBe(3);
     });
 
-    it('clamps odd rates', () => {
+    it('ignores odd rates', () => {
         expect(liveR(star(), 4.5, 5)).toBe(3);
-        expect(liveR(star(), -1, 5)).toBe(0);
+        expect(liveR(star(), -1, 5)).toBe(3);
     });
 });
 
 describe('R card says R moves with your moves', () => {
     it('growing text points at red links and says it drops at once', () => {
         const all = (e) => [e.headline, ...e.lines].join(' ');
-        expect(all(rExplainer({ r: 2 }))).toMatch(/can still reach about 2 others through red links/);
+        expect(all(rExplainer({ r: 2 }))).toMatch(/will reach about 2 others tonight through red links/);
         expect(all(rExplainer({ r: 2 }))).toMatch(/drops the moment you act/);
         expect(all(rExplainer({ r: 0 }))).toMatch(/No sick person can reach a healthy one/);
         for (const r of [0, 0.5, 2, 7]) expect(all(rExplainer({ r }))).not.toContain('—');
@@ -100,7 +100,7 @@ describe('game.js wiring', () => {
     const src = readFileSync(new URL('../src/game.js', import.meta.url), 'utf8');
     it('recomputes R on every UI refresh, so taps move it', () => {
         expect(src).toMatch(/updateUI\(\) \{\s*this\.refreshR\(\);/);
-        expect(src).toContain('this.lastR = liveR(this.network,');
+        expect(src).toContain('this.lastR = liveR(this.network)');
     });
     it('no longer blends yesterday into R', () => {
         expect(src).not.toContain('effectiveR(');

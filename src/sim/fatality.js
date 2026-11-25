@@ -1,59 +1,73 @@
-// Item 20 (round 24): people can die, at odds that follow each disease's
-// real case fatality rate (CFR), scaled so deaths show up on small webs.
-// Pure: no DOM, shared by the game, the balance bots and the tests.
+// Who can die, and when. Round 57: no dice. Pure: no DOM, shared by the
+// game, the solver, the balance bots and the tests.
 //
-// Real CFRs span four orders of magnitude (pandemic flu about 1 in 5,000,
-// MERS about 1 in 3), and a web of 10 to 25 people would never see a flu
-// death at the real rate. So the game maps the real CFR on a log scale onto
-// a playable band: the order between diseases is kept (MERS is always
-// deadlier than flu), but every disease can take someone.
+// THE RULE THE PLAYER READS OFF THE SCREEN
+// A few people on every web are FRAIL (a small heart mark, node.frail, fixed
+// when the level is dealt). Nobody else can die. A frail person who is sick
+// and not in a ward on the third night of their illness is lost that night.
+// A frail person in a ward (Quarantine on a sick person) always recovers.
+// So a death is never bad luck: the mark says who is in danger, the count is
+// always the same (two full days after they fall sick), and ward care is
+// the way to save them.
 //
-// Timing: a sick person may die on any day of their illness after the first
-// DEATH_LAG_DAYS (see below), at a daily chance that adds up to the
-// disease's game CFR over those days. Sick people in an isolation ward get care, which
-// halves that chance (TREATED_FACTOR), as supportive care does for real.
+// How many people are frail follows each disease's real case fatality rate
+// (CFR), mapped on a log scale onto a playable band exactly as before
+// (gameFatality): the order between diseases is kept (the MERS strain marks
+// more people than the flu strain), but every web has at least one.
+//
+// Before round 57 every sick person rolled a daily chance of dying, which
+// made a perfect plan fail at random and made 3 stars a matter of luck.
 
 export const GAME_CFR_MIN = 0.12; // the mildest disease in the game
 export const GAME_CFR_MAX = 0.3; // the deadliest
 const LOG_LO = Math.log10(1e-4); // real CFR of 0.01% maps to GAME_CFR_MIN
 const LOG_HI = Math.log10(0.4); // real CFR of 40% maps to GAME_CFR_MAX
-export const TREATED_FACTOR = 0.5;
 
-// Round 36: deaths lag cases. For real, people die days to weeks after they
-// fall ill (COVID-19 onset to death was about two to three weeks), so a
-// town's death count trails its case count. Here nobody dies in their first
-// DEATH_LAG_DAYS days sick; the whole-illness chance is spread over the days
-// after that, so each disease is exactly as deadly as before. This also
-// means the first sick person on level 1 cannot die before Quarantine opens
-// on day 3. Always leaves at least one day at risk.
-export const DEATH_LAG_DAYS = 2;
+// A frail person not in a ward is lost on this night of their illness.
+// daysInfected counts nights sick: 1 the morning after they caught it (or on
+// day 2 for a first case), so they can be isolated on two mornings first.
+export const FRAIL_DEATH_NIGHT = 3;
+// Never more than this many frail people, so the death line
+// (OVERWHELMED_DEATH_FLOOR in engine.js) stays out of reach: a level is lost
+// to cases, never to an unlucky count.
+export const MAX_FRAIL = 4;
+// Share of the game CFR that becomes the share of frail people.
+export const FRAIL_SHARE = 0.6;
 
-export function deathLag(recoveryTime) {
-    return Math.max(0, Math.min(DEATH_LAG_DAYS, (recoveryTime || 1) - 1));
+// The night of illness on which an untreated frail person is lost, for a
+// disease that lasts recoveryTime days (never later than the last night).
+export function frailDeathNight(recoveryTime) {
+    return Math.max(1, Math.min(FRAIL_DEATH_NIGHT, recoveryTime || FRAIL_DEATH_NIGHT));
 }
 
-// Days of an illness on which death is possible.
-export function riskDays(recoveryTime) {
-    return Math.max(1, (recoveryTime || 1) - deathLag(recoveryTime));
+// How many people are frail on a web of `population` people.
+export function frailCount(population, fatalityRate) {
+    const rate = fatalityRate > 0 ? fatalityRate : GAME_CFR_MIN;
+    return Math.max(1, Math.min(MAX_FRAIL, Math.round(population * rate * FRAIL_SHARE)));
 }
 
-// True when someone sick for daysInfected days can die today.
-export function canDieOnDay(daysInfected, recoveryTime) {
-    return daysInfected >= 1 && daysInfected > deathLag(recoveryTime);
+// In care: isolated while sick. A Stay Home Pay break counts while it
+// lasts (the person is looked after at home); once they are back out the
+// count of nights goes on from where it stood.
+export function inWard(node) {
+    return !!node && node.state === 'quarantined' && !!node.sickWhileQuarantined;
 }
 
-// Death chance on each day at risk for this person and disease.
-export function dailyRisk(node, fatalityRate, recoveryTime) {
-    return dailyDeathChance(personFatality(node, fatalityRate), riskDays(recoveryTime));
+// True when this sick person is lost tonight. daysInfected is the count
+// after tonight's tick, as updateOutcomes in engine.js sees it.
+export function diesTonight(node, recoveryTime) {
+    if (!node || !node.frail || inWard(node)) return false;
+    return (node.daysInfected || 0) >= frailDeathNight(recoveryTime);
 }
 
-// Risk days still ahead for someone sick for daysInfected days.
-export function riskDaysLeft(daysInfected, recoveryTime) {
-    const from = Math.max(Math.max(0, daysInfected || 0), deathLag(recoveryTime));
-    return Math.max(1, (recoveryTime || 1) - from);
+// Mornings left on which a ward can still save this sick frail person,
+// today included (0 when it is too late, or they are safe already).
+export function careDaysLeft(node, recoveryTime) {
+    if (!node || !node.frail || node.state !== 'infected') return 0;
+    return Math.max(0, frailDeathNight(recoveryTime) - (node.daysInfected || 0));
 }
 
-// Real CFR (0..1) to the chance a sick person dies over their whole illness.
+// Real CFR (0..1) to the game's scale, which sets how many people are frail.
 export function gameFatality(realCfr) {
     if (!(realCfr > 0)) return GAME_CFR_MIN;
     const t = (Math.log10(realCfr) - LOG_LO) / (LOG_HI - LOG_LO);
@@ -61,22 +75,7 @@ export function gameFatality(realCfr) {
     return Math.round((GAME_CFR_MIN + (GAME_CFR_MAX - GAME_CFR_MIN) * k) * 1000) / 1000;
 }
 
-// Chance of dying on one sick day, so that `days` such rolls add up to
-// `illnessChance`: 1 - (1 - h)^days = illnessChance.
-export function dailyDeathChance(illnessChance, days) {
-    if (illnessChance >= 1) return 1;
-    if (illnessChance <= 0) return 0;
-    const d = Math.max(1, days);
-    return 1 - Math.pow(1 - illnessChance, 1 / d);
-}
-
-// Whole-illness chance for one person: halved while they are in a ward.
-export function personFatality(node, fatalityRate) {
-    const treated = node.state === 'quarantined' && node.sickWhileQuarantined;
-    return treated ? fatalityRate * TREATED_FACTOR : fatalityRate;
-}
-
-// "about 1 in 3" style line for the briefing and results.
+// "about 1 in 3" style line for the Based on card.
 export function oneIn(p) {
     if (!(p > 0)) return 'almost nobody';
     const n = 1 / p;

@@ -18,7 +18,7 @@ import { levelById } from './levels.js';
 export const LESSONS = {
     'act-early': {
         title: 'Act early',
-        brief: 'Outbreaks grow by multiplying, so the moves you make on day 1 stop the most cases.',
+        brief: 'Every red line is a new case tonight. Outbreaks grow by multiplying, so the moves you make on day 1 stop the most cases.',
         win: 'Each case you stop early would have seeded more. That is why health teams move on the very first reports.',
         retry: 'Cases multiply, so a slow start snowballs. Use your actions on day 1 next time.',
         retryBusy: 'You used every action and it still got ahead. Cut the red links around the sick first: each one is a case that never starts.',
@@ -73,9 +73,9 @@ export const LESSONS = {
     },
     'super-spreaders': {
         title: 'Stop the super-spreader',
-        brief: 'One carrier has far more contacts than anyone else. Cut their links on day 1, then isolate them the moment you can.',
+        brief: 'One carrier has far more contacts than anyone else, and every one of them will catch it tonight. You cannot cut every line: choose who to save.',
         win: 'A few people often cause most of the spread. Typhoid Mary infected dozens of people in New York in the early 1900s without ever feeling sick.',
-        retry: 'The carrier kept spreading it. Cut the carrier\'s busiest links first, then quarantine them on day 2.',
+        retry: 'The carrier reached too many people. On day 1, cut the carrier\'s lines to the people who have the most contacts of their own.',
         retryBusy: 'Every action went in, but the carrier got through. Aim at the carrier first: their links matter more than anyone else\'s.',
     },
     'protect-vulnerable': {
@@ -88,22 +88,22 @@ export const LESSONS = {
         title: 'Contact tracing',
         brief: 'No vaccines here. Follow the links from each sick person and break them before the next person catches it.',
         // On worlds with hidden carriers the same lesson says how to trace.
-        briefHidden: 'No vaccines here, and people pass it on before they feel sick. Test the contacts of each sick person and isolate the carriers you find.',
+        briefHidden: 'No vaccines here, and two people pass it on before they feel sick. Test the contacts of the sick person and isolate a carrier you find.',
         win: 'Contact tracing means finding everyone a sick person met and keeping them apart. It ended outbreaks of Ebola and SARS before vaccines existed.',
         retry: 'Chains slipped through. Follow each red link from a sick person and cut it, then isolate the sick.',
     },
     // Later planets (src/config/planet-mechanics.js).
     'hidden-carriers': {
         title: 'Hidden carriers',
-        brief: 'People here pass it on a day or two before they feel sick. You fight what you cannot see: test the contacts of the sick.',
+        brief: 'Two people here already carry it and feel fine, and they pass it on from tonight. You fight what you cannot see: test the contacts of the sick person.',
         win: 'With COVID-19, close to half of all spread came from people who did not feel sick yet. Testing contacts finds them in time.',
-        retry: 'It spread through people who still looked healthy. Each morning, test the contacts of anyone who fell ill and isolate carriers.',
+        retry: 'It spread through people who looked healthy. On day 1, test the contacts of the sick person, isolate a carrier and cut around the other.',
     },
     'masks': {
-        title: 'Masks lower the odds',
-        brief: 'A cut is certain but stops one line. A mask halves every line of its wearer. Mask the busiest people near the sick.',
+        title: 'Masks buy time',
+        brief: 'A cut is final, for one line. A mask slows every line of its wearer: two nights to cross instead of one. Mask to buy a day, then cut or vaccinate.',
         win: 'A mask works both ways: the wearer spreads less and catches less. No layer is perfect, so health teams stack them.',
-        retry: 'Masks only halve the odds, so use them where they cover the most lines: on the sick and on busy people next to them.',
+        retry: 'A mask only buys one night, so follow it up: mask the sick today, then cut or isolate tomorrow, before the lines cross.',
     },
     'keep-it-open': {
         title: 'Keep it open',
@@ -113,9 +113,9 @@ export const LESSONS = {
     },
     'borders-leak': {
         title: 'Borders leak',
-        brief: 'Travellers swap one contact for a new one each night, so a group that is safe today may not be tomorrow. Watch where they go.',
+        brief: 'Travellers swap one contact for a new one each night, so a safe group may not stay safe. The dotted line shows where each one goes tonight.',
         win: 'Travel carries an outbreak between places faster than borders can close. Checking and vaccinating travellers works better than walls.',
-        retry: 'A traveller carried it into a new group. Vaccinate or isolate the travellers early, and check their new line each morning.',
+        retry: 'A traveller carried it into a new group. The dotted line shows where each traveller goes tonight: vaccinate or isolate them before they get there.',
     },
 };
 

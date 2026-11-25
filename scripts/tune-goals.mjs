@@ -6,10 +6,16 @@ import { writeFileSync } from 'node:fs';
 import { LEVELS } from '../src/config/levels.js';
 import { tuneLevelGoals } from '../src/sim/goal-lab.js';
 
-const runs = Number(process.argv[2]) || 200;
+// node scripts/tune-goals.mjs [runs] [level ids...]: with level ids only
+// those are tuned again and the rest of the table is kept.
+import { GOAL_TARGETS } from '../src/config/goal-targets.js';
+
+const args = process.argv.slice(2);
+const runs = Number(args.find((x) => /^\d+$/.test(x))) || 200;
+const only = args.filter((x) => !/^\d+$/.test(x));
 const lines = [];
 for (const level of LEVELS) {
-    const offered = tuneLevelGoals(level, { runs });
+    const offered = only.length && !only.includes(level.id) ? (GOAL_TARGETS[level.id] || {}).offered || [] : tuneLevelGoals(level, { runs });
     const text = offered.map((g) => (g.n == null ? `{ id: '${g.id}' }` : `{ id: '${g.id}', n: ${g.n} }`)).join(', ');
     lines.push(`    '${level.id}': { offered: [${text}] },`);
     console.log(level.id.padEnd(12), offered.map((g) => (g.n == null ? g.id : `${g.id}(${g.n})`)).join(' '));

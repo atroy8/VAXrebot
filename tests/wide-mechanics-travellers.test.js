@@ -225,7 +225,9 @@ describe('traveller levels', () => {
         expect(travelLine({ travel: [] })).toBe('');
         expect(onsetToast({ onsets: [], travel: [{}] })).toMatch(/traveller moved on/);
         expect(onsetToast({ onsets: [] })).toBe('');
-        expect(read('src/sim/actions.js')).toContain('spread.travel = scenario.travellers ? travelNight(state, network, rng) : [];');
+        // Round 57: the night applies the plan that was on screen all day.
+        expect(read('src/sim/actions.js')).toContain('const plan = scenario.travellers ? travelPlan(network) : null;');
+        expect(read('src/sim/actions.js')).toContain('spread.travel = plan ? travelNight(state, network, plan) : [];');
         expect(read('src/game.js')).toContain('onsetToast(spread)');
     });
 });

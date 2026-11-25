@@ -6,8 +6,9 @@ import { tools } from '../src/config/tools.js';
 import { buildRun, mulberry32, playRun, BOTS } from '../src/sim/balance.js';
 import { canUseTool } from '../src/sim/engine.js';
 import { applyNodeTool, severLink, advanceDay } from '../src/sim/actions.js';
-import { chooseMove, planDay, cloneRun, hintLine, hintPrice, hintOffer, hintLabel, HINT_RULES, NO_HINT_LINE } from '../src/sim/hint.js';
+import { chooseMove, planDay, cloneRun, hintLine, hintPrice, hintOffer, hintLabel, HINT_RULES, NO_HINT_LINE, HINT_NODE_BUDGET } from '../src/sim/hint.js';
 import { takeSnapshot, restoreSnapshot, canRestore } from '../src/sim/undo.js';
+import { solveRun } from '../src/sim/solver.js';
 import { playMetaRun } from '../src/sim/meta-run.js';
 import { barGeometry, markPoints } from '../src/ui/hint.js';
 
@@ -17,7 +18,7 @@ const last = LEVELS.at(-1);
 const fresh = (level, seed) => buildRun(level, mulberry32(seed));
 const freeze = (run) => JSON.stringify({ nodes: run.network.nodes, links: run.network.links.map((l) => [l.source, l.target]), stats: run.state.stats, usage: run.state.dailyUsage, used: [...run.state.usedOnPeople] });
 
-describe('hint: one good move from the smart bot', () => {
+describe('hint: one good move', () => {
     it('suggests a legal move on day 1 of every level and changes nothing', () => {
         for (const level of LEVELS) {
             const run = fresh(level, 7);
@@ -31,19 +32,19 @@ describe('hint: one good move from the smart bot', () => {
         }
     });
 
-    it('is exactly what the smart bot does first', () => {
+    // Round 57: the hint no longer copies the smart bot. It is the first
+    // move of today on the solver's best line (tests/round57-hint.test.js).
+    it('is a move on the solver\'s best line from here', () => {
         for (const level of [first, LEVELS[12], LEVELS[36], last]) {
             for (const seed of [1, 2, 3]) {
                 const a = fresh(level, seed);
-                const b = fresh(level, seed);
-                const move = chooseMove(a.state, a.network, tools, a.difficulty);
-                b.trace = [];
-                BOTS.smart(b);
-                const botFirst = b.trace[0];
-                expect(move.toolId).toBe(botFirst.toolId);
-                if (botFirst.link) {
-                    expect([move.link.source, move.link.target]).toEqual([botFirst.link.source, botFirst.link.target]);
-                } else expect(move.node.id).toBe(botFirst.node.id);
+                const move = chooseMove(a.state, a.network, tools, a.difficulty, a.scenario);
+                let line = solveRun(a, { nodeBudget: HINT_NODE_BUDGET });
+                // No winning line within a hint's budget: the hint is the move that keeps most people well.
+                if (!line.found) line = solveRun(a, { nodeBudget: HINT_NODE_BUDGET, cap: Infinity });
+                const today = line.moves.filter((m) => m.day === a.state.day);
+                const same = (m) => m.toolId === move.toolId && (move.link ? [m.a, m.b].join() === [move.link.source, move.link.target].sort((x, y) => x - y).join() : m.node === move.node.id);
+                expect(today.some(same), `${level.id} seed ${seed}`).toBe(true);
             }
         }
     });
@@ -66,7 +67,7 @@ describe('hint: one good move from the smart bot', () => {
         const byId = new Map(run.network.nodes.map((n) => [n.id, n]));
         const states = [byId.get(move.link.source).state, byId.get(move.link.target).state].sort();
         expect(states).toEqual(['healthy', 'infected']);
-        expect(hintLine(move)).toBe('Try cutting this red line.');
+        expect(hintLine(move)).toBe('Try cutting this red line. It is part of the best play.');
     });
 
     it('says so when there is nothing left to do today', () => {
@@ -247,8 +248,9 @@ describe('hint and undo are wired into the play screen', () => {
     });
 
     it('the hint uses the shared chooser, charges only when it shows a move, and picks the tool', () => {
-        expect(meta).toContain('chooseMove(this.gameState, this.network, this.tools, this.difficulty)');
-        const use = meta.slice(meta.indexOf('    useHint() {'), meta.indexOf('queueEarlyWarning() {'));
+        // Round 57: the chooser is the solver, and it is told the scenario (goal, cap).
+        expect(meta).toContain('chooseMove(this.gameState, this.network, this.tools, this.difficulty, this.currentScenario, { nodeBudget })');
+        const use = meta.slice(meta.indexOf('    useHint() {'), meta.indexOf('    // ---- Briefing'));
         expect(use.indexOf('if (!move) {')).toBeLessThan(use.indexOf('spendFunding('));
         expect(use).toContain('this.selectTool(move.toolId, { hint: false })');
         expect(use).toContain('showMark(this.view, move)');

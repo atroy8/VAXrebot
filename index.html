@@ -67,6 +67,8 @@
                     <strong>Threat</strong>
                     <div class="threat-meter" id="threat-meter" role="img" aria-label="Threat"></div>
                     <p class="threat-line" id="threat-line"></p>
+                    <!-- Round 57: what 3 stars means on this deal (the solver's par). Out of More, so it is seen. -->
+                    <p class="star-goal" id="star-goal" aria-live="polite"></p>
                 </div>
                 <!-- Everything a player can start without lives behind More. -->
                 <details class="briefing-more" id="briefing-more">
@@ -86,7 +88,6 @@
                         <div><strong>R₀ here:</strong> <span id="briefing-r0"></span></div>
                     </div>
                 </div>
-                <p class="star-goal" id="star-goal"></p>
                 </details>
                 <div class="briefing-goals" id="briefing-goals" hidden></div>
                 <div class="briefing-actions">
@@ -163,6 +164,8 @@
                 </div>
 
                 <div class="panel tools-panel" id="tool-tray">
+                    <!-- Round 57: shown over the tray while the solver's best play is replayed. -->
+                    <div class="demo-banner" id="demo-banner" role="status" hidden><span id="demo-text">Best play</span><button type="button" class="btn btn--secondary demo-skip" id="demo-skip">Back to results</button></div>
                     <h4 class="tools-title">Tools</h4>
                     <div class="tools-list" id="tools-list" role="toolbar" aria-label="Tools">
                         <!-- Tools will be generated here -->
@@ -211,6 +214,11 @@
                         <div class="results-goals" id="results-goals" hidden></div>
                         <div class="results-reward" id="results-reward"></div>
                         <div class="results-meta" id="results-meta"></div>
+                        <!-- Round 57: watch the solver's best line, or try the same web again. -->
+                        <div class="results-more" id="results-more">
+                            <button type="button" class="btn btn--secondary results-more-btn" id="show-best" hidden>Show best play</button>
+                            <button type="button" class="btn btn--secondary results-more-btn" id="retry-web" hidden>Retry this web</button>
+                        </div>
                     </div>
                     <details class="results-details" id="results-details">
                     <summary class="results-details-summary">Details</summary>

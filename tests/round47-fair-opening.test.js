@@ -127,8 +127,13 @@ describe('the opening on the learning planets', () => {
 });
 
 describe('the game and the bots share the rule', () => {
-    it('both pass the opening limits to buildOutbreak', () => {
-        expect(read('src/game.js')).toMatch(/opening: openingLimits\(\{ level: this\.currentLevel/);
-        expect(read('src/sim/balance.js')).toMatch(/openingLimits\(\{ level, scenario, difficulty, tools, population \}\)/);
+    // Round 57: the re-roll of the first cases is superseded by the dealer,
+    // which solves every candidate web and never deals one that cannot be
+    // won (tests/round57-dealer.test.js). The game and the bots both deal
+    // through it; buildOutbreak keeps its `opening` option for other callers.
+    it('both deal through the dealer, which never deals a web that is lost on day 1', () => {
+        expect(read('src/game-deal.js')).toContain('createDealer(level, dealSeed');
+        expect(read('src/sim/balance.js')).toContain('dealLevelCached(level, dealSeed >>> 0');
+        expect(read('src/sim/dealer.js')).toContain("verdict: 'unwinnable'");
     });
 });

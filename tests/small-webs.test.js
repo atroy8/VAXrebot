@@ -104,12 +104,16 @@ describe('clean small webs (item 14)', () => {
         }
     });
 
-    it('the super-spreader knows at least about half the web (more if the web already had a big hub)', () => {
+    // Round 57: with certain spread a carrier who knows half the web cannot
+    // be stopped at all. The carrier now has a few more contacts than there
+    // are cuts on day 1, and always more than anyone else.
+    it('the super-spreader has more contacts than anyone, and more than day 1 can cut', () => {
         for (const level of LEVELS.filter((l) => l.variant?.type === 'superSpreader')) {
-            const { network, state } = buildRun(level, mulberry32(5));
+            const { network, state, difficulty } = buildRun(level, mulberry32(5));
             const adj = adjacency(network.nodes, network.links);
-            const share = adj.get(state.superSpreaderId).size / network.nodes.length;
-            expect(share, level.id).toBeGreaterThanOrEqual(0.45);
+            const mine = adj.get(state.superSpreaderId).size;
+            for (const n of network.nodes) if (n.id !== state.superSpreaderId) expect(adj.get(n.id).size, level.id).toBeLessThan(mine);
+            expect(mine, level.id).toBeGreaterThan(difficulty.dailyLimits.severLink);
         }
     });
 });

@@ -18,7 +18,7 @@
 export const COACH_FLAG = 'vaxrebot-onboarded';
 
 export const COACH_TEXT = Object.freeze({
-    sick: 'This person is sick. Red lines are where it can jump next.',
+    sick: 'This person is sick. Red lines are where it will jump tonight.',
     pickSever: 'Tap Sever Link.',
     cutFirst: 'Now tap a red line to cut it.',
     cutMore: (left) => `Cut another red line. ${left} left.`,

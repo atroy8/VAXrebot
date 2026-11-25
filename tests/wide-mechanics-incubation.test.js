@@ -1,6 +1,9 @@
 // Wide audience round, mechanic 1: hidden carriers (incubation) and the
-// Test tool. Pure sim rules with seeded dice, the no-leak guarantee, the
-// bots, and the wiring.
+// Test tool. Pure sim rules, the no-leak guarantee, the bots, and the wiring.
+// Round 57 rewrote the rule and the tests of it: hidden carriers are now
+// dealt with the level (two contacts of the first case, sick after two
+// nights) instead of every new infection rolling a hidden spell at half
+// rate. The no-leak tests are unchanged.
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { simulateSpread, showSymptoms, checkGameOver, spreadIsOver, canUseTool } from '../src/sim/engine.js';
@@ -10,7 +13,7 @@ import { tools } from '../src/config/tools.js';
 import { LEVELS } from '../src/config/levels.js';
 import { levelRules } from '../src/config/level-rules.js';
 import { lessonFor, LESSONS } from '../src/config/lessons.js';
-import { viewNode, visibleState, trueState, isCarrier, isHiddenCarrier, isInfectious, isSusceptible, hiddenCarrierCount, rollIncubation, HIDDEN_NODE_FIELDS, INCUBATION_DEFAULT } from '../src/sim/mechanics.js';
+import { viewNode, visibleState, trueState, isCarrier, isHiddenCarrier, isInfectious, isSusceptible, hiddenCarrierCount, placeCarriers, HIDDEN_NODE_FIELDS, INCUBATION_DEFAULT } from '../src/sim/mechanics.js';
 import { BOTS, buildRun, mulberry32, tracingTargets, summarize } from '../src/sim/balance.js';
 import { binFor, careCounts } from '../src/ui/care-box-model.js';
 import { nodeMarks } from '../src/ui/node-marks.js';
@@ -29,7 +32,7 @@ function seeded(seed) {
     };
 }
 
-const INC = { incubation: { minDays: 1, maxDays: 2, factor: 0.5 } };
+const INC = { incubation: { count: 2, days: 2 } };
 const person = (id, state = 'healthy', extra = {}) => ({ id, state, daysInfected: 0, removed: false, ...extra });
 // A line of people: 0 - 1 - 2 - 3 ...
 function line(states) {
@@ -40,33 +43,36 @@ function line(states) {
 const always = () => 0; // every roll succeeds, incubation rolls its minimum
 const never = () => 0.999;
 
-describe('a new infection starts hidden', () => {
-    it('the newly infected person keeps looking healthy and is not a known case', () => {
+describe('hidden carriers are dealt with the level', () => {
+    it('a new infection is never hidden: it shows the next morning', () => {
         const net = line(['infected', 'healthy', 'healthy']);
         const state = initGameState(tools, 3);
         state.stats.totalInfected = 1;
         const out = simulateSpread(state, net, 1, always, INC);
-        expect(net.nodes[1].state).toBe('healthy');
-        expect(net.nodes[1].incubating).toBe(1);
-        expect(isHiddenCarrier(net.nodes[1])).toBe(true);
-        // Nothing the player may watch happened: no virus to animate, no new case.
-        expect(out.events).toEqual([]);
-        expect(out.count).toBe(0);
-        expect(out.hidden).toHaveLength(1);
-        expect(state.stats.totalInfected).toBe(1);
-        expect(state.stats.hiddenInfections).toBe(1);
-        expect(hiddenCarrierCount(net)).toBe(1);
+        expect(net.nodes[1].state).toBe('infected');
+        expect(net.nodes[1].incubating).toBeUndefined();
+        expect(out.events).toHaveLength(1);
+        expect(out.count).toBe(1);
+        expect(out.hidden).toEqual([]);
+        expect(state.stats.totalInfected).toBe(2);
+        expect(hiddenCarrierCount(net)).toBe(0);
     });
 
-    it('incubation lasts minDays to maxDays', () => {
-        const rng = seeded(4);
-        const seen = new Set();
-        for (let i = 0; i < 200; i++) seen.add(rollIncubation(INCUBATION_DEFAULT, rng));
-        expect([...seen].sort()).toEqual([1, 2]);
+    it('the dealt carriers incubate for the stated days, the same for all', () => {
+        expect(INCUBATION_DEFAULT).toEqual({ days: 2, count: 2 });
+        const nodes = [person(0, 'infected'), person(1), person(2), person(3), person(4)];
+        const links = [[0, 1], [0, 2], [0, 3], [3, 4]].map(([source, target]) => ({ source, target }));
+        const picked = placeCarriers(nodes, links, INC.incubation, seeded(4));
+        expect(picked).toHaveLength(2);
+        for (const n of picked) {
+            expect(n.incubating).toBe(2);
+            expect(n.state).toBe('healthy');
+            expect([1, 2, 3]).toContain(n.id); // always a contact of the first case
+        }
     });
 
     it('a carrier shows symptoms after their incubation and becomes a counted case', () => {
-        const net = line(['healthy', 'healthy']);
+        const net = { nodes: [person(0), person(1, 'vaccinated')], links: [{ source: 0, target: 1 }] };
         net.nodes[0].incubating = 2;
         const state = initGameState(tools, 2);
         let out = simulateSpread(state, net, 0, never, INC);
@@ -83,36 +89,31 @@ describe('a new infection starts hidden', () => {
         expect(state.stats.totalInfected).toBe(1);
     });
 
-    it('someone infected tonight does not tick down or spread the same night', () => {
+    it('someone infected tonight does not spread the same night', () => {
         const net = line(['infected', 'healthy', 'healthy']);
         const state = initGameState(tools, 3);
         simulateSpread(state, net, 1, always, INC);
-        expect(net.nodes[1].incubating).toBe(1); // still a full day hidden
-        expect(net.nodes[2].incubating).toBeUndefined(); // not reached through the new carrier yet
+        expect(net.nodes[1].state).toBe('infected');
+        expect(net.nodes[2].state).toBe('healthy'); // not reached through the new case yet
     });
 
-    it('carriers spread before symptoms, at the reduced rate', () => {
-        let hits = 0;
-        const rng = seeded(11);
-        const N = 4000;
-        for (let i = 0; i < N; i++) {
-            const net = line(['healthy', 'healthy']);
-            net.nodes[0].incubating = 5;
-            const state = initGameState(tools, 2);
-            simulateSpread(state, net, 0.6, rng, INC);
-            if (isCarrier(net.nodes[1])) hits++;
-        }
-        // 0.6 times the factor 0.5 = 0.3
-        expect(hits / N).toBeGreaterThan(0.27);
-        expect(hits / N).toBeLessThan(0.33);
+    it('carriers spread before symptoms, exactly as the sick do', () => {
+        const net = line(['healthy', 'healthy', 'healthy']);
+        net.nodes[0].incubating = 5;
+        const state = initGameState(tools, 3);
+        const out = simulateSpread(state, net, 0, never, INC);
+        expect(net.nodes[1].state).toBe('infected');
+        expect(out.events).toHaveLength(1);
+        expect(net.nodes[0].state).toBe('healthy'); // and still looks healthy
     });
 
     it('silent spread is counted for the results', () => {
         const net = line(['healthy', 'healthy']);
         net.nodes[0].incubating = 3;
         const state = initGameState(tools, 2);
-        simulateSpread(state, net, 1, always, { incubation: { minDays: 1, maxDays: 1, factor: 1 } });
+        simulateSpread(state, net, 1, always, INC);
         expect(state.stats.silentSpread).toBe(1);
+        state.stats.hiddenInfections = 2;
         expect(hiddenChainsLine(state.stats)).toMatch(/1 infection was passed on by people with no symptoms yet/);
         expect(hiddenChainsLine({})).toBe('');
     });
@@ -123,7 +124,8 @@ describe('a new infection starts hidden', () => {
         expect(isSusceptible(net.nodes[1])).toBe(false);
         const state = initGameState(tools, 2);
         simulateSpread(state, net, 1, always, INC);
-        expect(state.stats.hiddenInfections || 0).toBe(0);
+        expect(net.nodes[1].state).toBe('healthy');
+        expect(net.nodes[1].incubating).toBe(1);
         const q = person(7, 'quarantined', { incubating: 2 });
         expect(isInfectious(q)).toBe(false);
         expect(isInfectious(person(8, 'healthy', { incubating: 1 }))).toBe(true);
@@ -160,7 +162,9 @@ describe('the view never learns who is a hidden carrier', () => {
         for (let seed = 1; seed <= 30; seed++) {
             const rng = mulberry32(seed);
             const run = buildRun(level, rng);
-            for (let d = 0; d < 2; d++) advanceDay(run.state, run.network, { scenario: run.scenario, difficulty: run.difficulty, rng });
+            // Round 57: the carriers are there from the deal, and still
+            // hidden after a real night of spread.
+            advanceDay(run.state, run.network, { scenario: run.scenario, difficulty: run.difficulty, rng });
             for (const n of run.network.nodes) {
                 if (!isHiddenCarrier(n) || n.state !== 'healthy') continue;
                 carriers++;
@@ -225,10 +229,10 @@ describe('the Test tool', () => {
         return state;
     };
 
-    it('opens on day 2, when there can first be someone to find', () => {
+    // Round 57: the carriers are dealt, so there is someone to find from the
+    // first morning and Test opens on day 1 (it used to open on day 2).
+    it('opens on day 1, when the dealt carriers can be found', () => {
         const state = initGameState(tools, 6);
-        expect(canUseTool(state, tools, 'test', difficulty, person(1)).allowed).toBe(false);
-        state.day = 2;
         expect(canUseTool(state, tools, 'test', difficulty, person(1)).allowed).toBe(true);
     });
 
@@ -251,6 +255,7 @@ describe('the Test tool', () => {
         const state = fresh();
         const net = line(['healthy', 'healthy']);
         net.nodes[0].incubating = 1;
+        net.nodes[1].state = 'vaccinated'; // nobody to pass it on to
         applyNodeTool(state, tools, 'test', net.nodes[0]);
         const out = simulateSpread(state, net, 0, never, INC);
         expect(net.nodes[0].state).toBe('infected');
@@ -321,6 +326,7 @@ describe('the Test tool', () => {
 describe('cases, R and winning with hidden carriers', () => {
     it('the case cap counts known cases only', () => {
         const net = line(['infected', 'healthy', 'healthy', 'healthy']);
+        net.links = []; // nobody passes it on in this test
         net.nodes[1].incubating = 2;
         net.nodes[2].incubating = 2;
         const state = initGameState(tools, 4);
@@ -354,26 +360,30 @@ describe('cases, R and winning with hidden carriers', () => {
 
     it('live R is read from known cases and is blind to hidden chains', () => {
         const net = line(['infected', 'healthy', 'healthy']);
-        const before = liveR(net, 0.5, 4, INC);
+        const before = liveR(net);
         net.nodes[2].incubating = 2; // a hidden carrier changes nothing the HUD shows
-        expect(liveR(net, 0.5, 4, INC)).toBe(before);
+        expect(liveR(net)).toBe(before);
         // Once a test finds them, R counts them as a spreader.
         net.nodes[2].state = 'exposed';
-        expect(liveR(net, 0.5, 4, INC)).not.toBe(before);
+        expect(liveR(net)).not.toBe(before);
         // No known case, no R, even with a carrier on the web.
         const quiet = line(['healthy', 'healthy']);
         quiet.nodes[0].incubating = 1;
-        expect(liveR(quiet, 0.5, 4, INC)).toBe(0);
-        expect(read('src/game.js')).toContain('difficulty.recoveryTime, difficulty);');
+        expect(liveR(quiet)).toBe(0);
     });
 
-    it('doing nothing never wins a hidden carrier level, and tests are worth using', () => {
+    // Round 57: "tests are worth using" used to compare bot win rates with
+    // and without tests on two differently tuned levels. It is now exact: a
+    // player who tests knows who to isolate; the solver, which may only act
+    // on a carrier that a test has found, opens every hidden level with tests.
+    it('doing nothing never wins a hidden carrier level, and the best play starts with tests', () => {
         for (const level of LEVELS.filter((l) => l.mechanics?.incubation)) {
-            expect(summarize(level, 'passive', 25, 3).counts.contained || 0, level.id).toBe(0);
-            const smart = summarize(level, 'smart', 150, 21).winRate;
-            const noTests = { ...level, tuning: { ...level.tuning, dailyLimits: { ...level.tuning.dailyLimits, test: 0 } } };
-            const blind = summarize(noTests, 'smart', 150, 21).winRate;
-            expect(smart - blind, `${level.id}: ${smart} with tests, ${blind} without`).toBeGreaterThan(0.05);
+            expect(summarize(level, 'passive', 15, 3).counts.contained || 0, level.id).toBe(0);
+            for (let seed = 1; seed <= 3; seed++) {
+                const run = buildRun(level, seed);
+                const first = run.deal.par.moves[0];
+                expect(first, `${level.id} seed ${seed}`).toMatchObject({ day: 1, toolId: 'test' });
+            }
         }
     });
 });
@@ -421,7 +431,7 @@ describe('levels, briefing and tray', () => {
             expect(l.toolkit.tools).toContain('quarantine');
             expect(l.toolkit.tools.length).toBeLessThanOrEqual(3);
             const { difficulty } = levelRules(l);
-            expect(difficulty.incubation).toEqual({ minDays: 1, maxDays: 2, factor: 0.5 });
+            expect(difficulty.incubation).toEqual({ count: 2, days: 2 });
             expect(difficulty.dailyLimits.test).toBeGreaterThan(0);
             for (const t of l.toolkit.tools) expect(difficulty.dailyLimits[t], `${l.id} ${t}`).toBeGreaterThan(0);
         }
@@ -430,14 +440,14 @@ describe('levels, briefing and tray', () => {
     it('teaches the lesson by name, briefing and tool card', () => {
         const l = inc.find((x) => !x.variant);
         expect(l.lessonId).toBe('hidden-carriers');
-        expect(lessonFor(l.id).brief).toMatch(/You fight what you cannot see: test the contacts of the sick\./);
+        expect(lessonFor(l.id).brief).toMatch(/You fight what you cannot see: test the contacts of the sick person\./);
         expect(LESSONS['hidden-carriers'].title.split(' ').length).toBeLessThanOrEqual(4);
         const call = variantCallout(l.variant, l.mechanics);
-        expect(call.title).toBe('New: hidden carriers');
+        expect(call.title).toBe('New: 2 hidden carriers');
         expect(call.text).toMatch(/Test/);
         const card = toolkitCard(l.toolkit, l.variant?.toolDays);
         expect(card.tools).toContain('Test');
-        expect(card.why).toMatch(/Test the contacts of the sick/);
+        expect(card.why).toMatch(/Test the contacts of the sick person/);
         // A no-vaccines level with hidden carriers keeps contact tracing, with the testing brief.
         const nv = inc.find((x) => x.variant?.type === 'noVaccines');
         expect(nv.lessonId).toBe('contact-tracing');
@@ -447,17 +457,16 @@ describe('levels, briefing and tray', () => {
         expect(variantCallout({ type: 'envoy' })).toEqual(variantCallout({ type: 'envoy' }, null));
     });
 
-    it('shows a Test chip that opens on day 2 and picks itself for a tap on a healthy person', () => {
+    it('shows a Test chip that is ready on day 1 and picks itself for a tap on a healthy person', () => {
         const { difficulty } = levelRules(inc[0]);
         const usage = initGameState(tools, 10).dailyUsage;
         const day1 = toolChips(tools, difficulty, 1, usage, {});
-        expect(day1.find((c) => c.id === 'test').state).toBe('locked');
-        const day2 = toolChips(tools, difficulty, 2, usage, {});
-        const chip = day2.find((c) => c.id === 'test');
+        const chip = day1.find((c) => c.id === 'test');
         expect(chip.state).toBe('ready');
         expect(chip.label).toBe('Test');
-        expect(autoToolForTap('node', 'healthy', day2)).toBe('test');
-        expect(autoToolForTap('node', 'exposed', toolChips(tools, difficulty, 3, usage, {}))).toBe('quarantine');
+        expect(autoToolForTap('node', 'healthy', day1)).toBe('test');
+        // Quarantine is open at once too: isolating a carrier is the point.
+        expect(autoToolForTap('node', 'exposed', day1)).toBe('quarantine');
         expect(toolHint('test').length).toBeLessThanOrEqual(HINT_MAX_CHARS);
     });
 

@@ -32,6 +32,6 @@ export const tools = {
     // means "not on this world" unless the level pins a daily limit, so the
     // learning planets never see these tools.
     test: { name: "🧪 Test", description: "Find out who is carrying it", availableDay: 2, oncePerPerson: false, baseDailyLimit: 0, validTargets: ["healthy"] },
-    mask: { name: "😷 Mask", description: "Halve the spread on all of a person's lines", availableDay: 1, oncePerPerson: true, baseDailyLimit: 0, validTargets: ["healthy", "infected", "exposed"] },
+    mask: { name: "😷 Mask", description: "A person's lines take two nights to cross", availableDay: 1, oncePerPerson: true, baseDailyLimit: 0, validTargets: ["healthy", "infected", "exposed"] },
     ...powerUpTools,
 };

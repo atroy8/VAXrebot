@@ -118,14 +118,17 @@ describe('quarantined sick nodes stay sick (exploit regression)', () => {
         expect(network.nodes[0].daysInfected).toBe(1);
     });
 
-    it('a quarantined sick node resolves (dies with fatality 1)', () => {
+    // Round 57: a ward always saves its patient, so the node resolves by
+    // recovering (it used to die at fatality 1).
+    it('a quarantined sick node resolves (recovers in the ward, even when frail)', () => {
         const state = initGameState(tools);
         const network = sickQuarantineNetwork();
         network.nodes[0].daysInfected = 7;
+        network.nodes[0].frail = true;
         const outcomes = updateOutcomes(state, network, 7, 1.0, always);
         expect(outcomes).toHaveLength(1);
-        expect(outcomes[0].outcome).toBe('died');
-        expect(state.stats.totalDead).toBe(1);
+        expect(outcomes[0].outcome).toBe('recovered');
+        expect(state.stats.totalDead).toBe(0);
     });
 
     it('a quarantined sick node resolves (recovers with fatality 0)', () => {

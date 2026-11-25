@@ -195,10 +195,12 @@ describe('keep it open', () => {
                     }
                 }
             }
-            expect(summarize(level, 'passive', 25, 3).counts.contained || 0, level.id).toBe(0);
-            expect(summarize(level, 'smart', 100, 21).winRate, level.id).toBeGreaterThan(summarize(level, 'random', 100, 21).winRate);
+            // Round 57: every run deals and solves a web first, so fewer runs
+            // (40, was 100) and a longer time limit.
+            expect(summarize(level, 'passive', 15, 3).counts.contained || 0, level.id).toBe(0);
+            expect(summarize(level, 'smart', 40, 21).winRate, level.id).toBeGreaterThan(summarize(level, 'random', 40, 21).winRate);
         }
-    });
+    }, 60000);
 
     it('levels: the goal, the callout and the lesson', () => {
         expect(openLevels.some((l) => l.regionId === 'sango')).toBe(true);
