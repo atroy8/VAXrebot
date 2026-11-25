@@ -33,6 +33,9 @@ export function winTarget(i, n = LEVELS.length) {
     const saw = k === 9 ? -0.06 : 0.03 - (0.06 * k) / 8;
     return Math.min(0.93, base + saw);
 }
+// How far below the smart target the beginner bot may win before the tuner
+// starts to prefer another setting.
+export const BEGINNER_GAP = 0.2;
 export const randomCap = (i, n = LEVELS.length) => Math.max(0.06, 0.2 - 0.9 * (i / (n - 1)));
 
 // Daily uses per tool for a level with all three tools.
@@ -52,6 +55,8 @@ export function withoutPinned(indexes, levels = LEVELS, pinned = ONBOARDING_TUNI
 }
 export const CAPS = [0.25, 0.35, 0.45, 0.55];
 const CLASSIC = ['vaccinate', 'quarantine', 'severLink'];
+// Level goals added in the wide audience round (src/sim/variants.js).
+const MECHANIC_GOALS = ['holdLine', 'keepOpen'];
 
 // Item 16 (round 21): candidate daily limits for a level's toolkit. Tools
 // outside the kit are 0. A smaller kit may use each of its tools more often
@@ -68,6 +73,11 @@ export function presetsFor(kit = CLASSIC) {
     return [1, 2, 3, 4].map((n) => ({ ...zero, [kit[0]]: n }));
 }
 export const maxActions = (kit = CLASSIC) => (kit.length === 1 ? 4 : 6);
+// The classic tools of a level's kit, in kit order.
+export function classicKit(level) {
+    const kit = level.toolkit ? level.toolkit.tools : CLASSIC;
+    return kit.filter((t) => CLASSIC.includes(t));
+}
 
 // Kept for older callers: a preset with a variant's missing tool set to 0.
 export function limitsFor(preset, variant, kit = CLASSIC) {
@@ -96,9 +106,14 @@ export function tuneLevel(li, runs) {
     const t = li / (LEVELS.length - 1);
     const cands = [];
     const quick = Math.max(24, Math.round(runs / 2));
-    const kit = base.toolkit ? base.toolkit.tools : CLASSIC;
+    // Wide audience round: tools a planet's mechanic adds (Test, Mask) keep
+    // the daily limit the mechanic sets; only the classic tools are searched.
+    const kit = classicKit(base);
+    const extra = base.mechanics?.toolLimits || {};
     for (const preset of presetsFor(kit)) {
-        const dailyLimits = limitsFor(preset, base.variant, kit);
+        // Masks are the plentiful tool: never fewer masks a day than cuts.
+        if (extra.mask != null && preset.severLink > extra.mask) continue;
+        const dailyLimits = { ...limitsFor(preset, base.variant, kit), ...extra };
         for (const cap of CAPS) {
             for (let inf = 1; inf <= 3; inf++) {
                 const make = (tm) => ({ ...base, tuning: { ...base.tuning, initialInfected: inf, transmissionMultiplier: +tm.toFixed(2), caseCapFraction: cap, dailyLimits } });
@@ -127,8 +142,12 @@ export function tuneLevel(li, runs) {
     let best = null;
     for (const c of cands.slice(0, 60)) {
         const rnd = rate(c.level, 'random', Math.round(runs * 1.5), 104729).win;
-        const score = c.err + 30 * Math.max(0, rnd - randomCap(li)) ** 2;
-        if (!best || score < best.score) best = { ...c, rnd, score };
+        // Wide audience round: a player who does the obvious things in no
+        // special order (the beginner bot) should not fall far behind the
+        // smart one, or later planets only suit experts.
+        const beg = rate(c.level, 'beginner', runs, 3571).win;
+        const score = c.err + 30 * Math.max(0, rnd - randomCap(li)) ** 2 + 6 * Math.max(0, target - BEGINNER_GAP - beg) ** 2;
+        if (!best || score < best.score) best = { ...c, rnd, beg, score };
     }
     const days = best.res.filter((r) => r.outcome === 'contained').map((r) => r.day);
     const tu = best.level.tuning;
@@ -139,7 +158,7 @@ export function tuneLevel(li, runs) {
         parDays: median(days) ?? 8,
         dailyLimits: tu.dailyLimits,
     };
-    return { id: base.id, entry, log: `${base.id.padEnd(12)} target ${target.toFixed(2)} smart ${best.win.toFixed(2)} random ${best.rnd.toFixed(2)} ${JSON.stringify(entry)}` };
+    return { id: base.id, entry, log: `${base.id.padEnd(12)} target ${target.toFixed(2)} smart ${best.win.toFixed(2)} beginner ${best.beg.toFixed(2)} random ${best.rnd.toFixed(2)} ${JSON.stringify(entry)}` };
 }
 
 if (!isMainThread) {
@@ -159,7 +178,10 @@ if (!isMainThread) {
         table = {};
     }
     // TUNE_ONLY=3,17,20 retunes just those level indexes (round 47).
-    const all = process.env.TUNE_ONLY ? process.env.TUNE_ONLY.split(',').map(Number) : [];
+    // TUNE_ONLY=mechanics retunes every level that plays with a new idea
+    // from src/config/planet-mechanics.js (wide audience round).
+    const only = process.env.TUNE_ONLY || '';
+    const all = only === 'mechanics' ? LEVELS.map((l, i) => (l.mechanics || MECHANIC_GOALS.includes(l.variant?.type) ? i : -1)).filter((i) => i >= 0) : only ? only.split(',').map(Number) : [];
     if (!all.length) for (let li = FROM; li <= TO; li++) all.push(li);
     // Round 51: hand-set onboarding levels (src/config/campaign.js) are never retuned.
     all.splice(0, all.length, ...withoutPinned(all));

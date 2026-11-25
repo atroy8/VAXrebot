@@ -58,7 +58,7 @@ describe('R0 here is worked out from the level (round 52)', () => {
             const rules = rulesAt(level);
             const rate = rateOf(rules);
             const rt = rules.difficulty.recoveryTime;
-            const { lo, hi } = levelR0Range({ networkType: rules.scenario.networkType, populationRange: rules.scenario.populationRange, transmissionRate: rate, recoveryTime: rt, rng: seeded(100 + i) });
+            const { lo, hi } = levelR0Range({ networkType: rules.scenario.networkType, populationRange: rules.scenario.populationRange, transmissionRate: rate, recoveryTime: rt, rng: seeded(100 + i), degree: rules.scenario.webDegree, rules: rules.difficulty }); // wide audience round: later planets have denser webs
             const text = formatR0(lo, hi);
             expect(text, level.id).toMatch(/^(about \d+(\.5)?|\d+(\.5)? to \d+(\.5)?)$/);
             expect(r0High(text), level.id).toBeGreaterThan(0);
@@ -68,7 +68,7 @@ describe('R0 here is worked out from the level (round 52)', () => {
             for (let k = 0; k < 10; k++) {
                 const population = a + Math.floor(rng() * (b - a + 1));
                 const out = buildOutbreak({ scenario: rules.scenario, population, variant: level.variant || null, rng });
-                const r = webR0({ nodes: out.nodes, links: out.links }, rate, rt);
+                const r = webR0({ nodes: out.nodes, links: out.links }, rate, rt, rules.difficulty);
                 total++;
                 if (r >= lo - 0.5 && r <= hi + 0.5) inside++;
             }

@@ -57,9 +57,16 @@ export const PROLOGUE_CARDS = [
 
 // First launch only. Storage can be missing or throw (private mode,
 // previews): then show it, and never crash.
+// Wide audience pass: a returning player never sees it again. Someone who
+// has already been through the first level (RETURNING_KEY, the flag the
+// first level coach and the old How to play cards set) is not on their
+// first launch, even if this build is the first to carry the story.
+export const RETURNING_KEY = 'vaxrebot-onboarded';
 export function shouldShowPrologue(storage) {
     try {
-        return !storage || storage.getItem(PROLOGUE_SEEN_KEY) !== '1';
+        if (!storage) return true;
+        if (storage.getItem(RETURNING_KEY) === 'true') return false;
+        return storage.getItem(PROLOGUE_SEEN_KEY) !== '1';
     } catch {
         return true;
     }
@@ -175,7 +182,7 @@ export function prologueMarkup(cards = PROLOGUE_CARDS, paintings = PROLOGUE_PAIN
         <div class="pro-stars pro-stars--far"></div>
         <div class="pro-stars pro-stars--mid"></div>
         <div class="pro-stars pro-stars--near"></div>
-        <button type="button" class="pro-skip" data-act="skip">Skip</button>
+        <button type="button" class="pro-skip" data-act="skip">Skip story</button>
         <div class="pro-cards">${slides}</div>
         <div class="pro-dots" aria-hidden="true">${dots}</div>
         <p class="pro-hint" aria-hidden="true">Tap to continue</p>
@@ -198,6 +205,10 @@ export function mountPrologue({ doc = typeof document !== 'undefined' ? document
         holder.innerHTML = prologueMarkup();
         const root = holder.firstElementChild;
         doc.body.appendChild(root);
+        // Seen from the moment it shows: closing the app half way through
+        // must not bring the story back on the next launch (Settings can
+        // still replay it).
+        markPrologueSeen(storage);
         const cards = root.querySelectorAll('.pro-card');
         const dots = root.querySelectorAll('.pro-dot');
         let timer = null;

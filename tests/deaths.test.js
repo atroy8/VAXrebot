@@ -9,7 +9,7 @@ import { gameFatality, dailyDeathChance, personFatality, oneIn, GAME_CFR_MIN, GA
 import { updateOutcomes, resolveAftermath } from '../src/sim/engine.js';
 import { advanceDay } from '../src/sim/actions.js';
 import { playRun } from '../src/sim/balance.js';
-import { deathToast, resultsDeathLines, briefingCfr } from '../src/ui/deaths.js';
+import { deathToast, resultsDeathLines, briefingCfr, basedOnCard } from '../src/ui/deaths.js';
 
 const read = (p) => readFileSync(new URL(p, import.meta.url), 'utf8');
 const stateWith = () => ({ day: 1, stats: { totalDead: 0, totalRecovered: 0, totalInfected: 0, initialPopulation: 10, totalProtected: 0, linksSevered: 0 }, dailyUsage: {} });
@@ -169,7 +169,11 @@ describe('death words and screens', () => {
     it('results explain aftermath deaths and the real rate', () => {
         const lines = resultsDeathLines({ outcome: 'overwhelmed', stats: { totalDead: 3, aftermathDead: 2 }, scenario: scenarios.global, fatalityRate: 0.3 });
         expect(lines[0]).toMatch(/^2 more people/);
-        expect(lines.at(-1)).toMatch(/^For real: WHO counts/);
+        // Wide audience pass: the real rate moved to the Based on card.
+        expect(lines.join(' ')).not.toMatch(/For real/);
+        const card = basedOnCard({ scenario: scenarios.global, fatalityRate: 0.3 });
+        expect(card.lines.some((l) => /^For real: WHO counts/.test(l))).toBe(true);
+        expect(card.lines.at(-1)).toMatch(/odds are raised to about 1 in 3/);
         const clean = resultsDeathLines({ outcome: 'contained', stats: { totalDead: 0 }, scenario: scenarios.school, fatalityRate: 0.135 });
         expect(clean[0]).toMatch(/Nobody died/);
         for (const l of [...lines, ...clean]) expect(l).not.toContain('—');
@@ -181,7 +185,11 @@ describe('death words and screens', () => {
         expect(html).toContain('id="lost-stat" hidden');
         expect(html).toContain('id="final-total-dead"');
         expect(html).toContain('id="final-death-notes"');
-        expect(html).toContain('id="briefing-cfr"');
+        // Wide audience pass: the briefing shows the strain's traits; the real
+        // death rate is on the results' Based on card instead.
+        expect(html).not.toContain('id="briefing-cfr"');
+        expect(html).toContain('id="briefing-traits"');
+        expect(html).toContain('id="results-based-on"');
         expect(read('../src/ui/panels.js')).toContain("getElementById('deaths-count')");
         expect(read('../src/ui/network-view-3d.js')).toContain('animateDeath(node)');
         expect(read('../src/game.js')).toContain('this.view.animateDeath?.(node)');

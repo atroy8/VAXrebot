@@ -9,7 +9,7 @@ import { readFileSync } from 'node:fs';
 import { scenarios } from '../src/config/scenarios.js';
 import { LEVELS } from '../src/config/levels.js';
 import { toolsOf } from '../src/config/toolkits.js';
-import { briefingRealR0, resultsDeathLines } from '../src/ui/deaths.js';
+import { briefingRealR0, basedOnCard } from '../src/ui/deaths.js';
 import { rExplainer } from '../src/ui/game-screen-model.js';
 
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
@@ -60,10 +60,13 @@ describe('round 49: real R0 in the briefing and the R card', () => {
         expect(briefingRealR0(null)).toBe('');
     });
 
-    it('the briefing labels the game number R0 here and adds a Real R0 row', () => {
+    // Wide audience pass: the briefing names an invented strain, so the real
+    // R0 left the briefing. It is on the R card and the Based on card.
+    it('the briefing labels the game number R0 here; the real R0 is shown after the level', () => {
         expect(html).not.toMatch(/Est\. R₀/);
         expect(html).toMatch(/R₀ here:/);
-        expect(html).toMatch(/id="briefing-real-r0-row"[^>]*>\s*<strong>Real R₀:<\/strong>\s*<span id="briefing-real-r0">/);
+        expect(html).not.toMatch(/Real R₀:/);
+        expect(basedOnCard({ scenario: scenarios.urban }).lines).toContain(scenarios.urban.r0Note);
     });
 
     it('the R card names the web R0 and then the real one', () => {
@@ -74,7 +77,8 @@ describe('round 49: real R0 in the briefing and the R card', () => {
     });
 
     it('the results note for measles reads true', () => {
-        const lines = resultsDeathLines({ outcome: 'contained', stats: { totalDead: 0 }, scenario: scenarios.urban, fatalityRate: 0.1 });
-        expect(lines.join(' ')).toMatch(/For real: WHO estimates measles/);
+        const card = basedOnCard({ scenario: scenarios.urban, fatalityRate: 0.1 });
+        expect(card.title).toBe('Based on: measles');
+        expect(card.lines.join(' ')).toMatch(/For real: WHO estimates measles/);
     });
 });

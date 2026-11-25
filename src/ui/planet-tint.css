@@ -1,0 +1,32 @@
+/* Wide audience: each planet tints the play screen (src/ui/planet-tint.js
+   sets the --pt-* colours on #game-screen when a level starts). A tint, not
+   a repaint: gold wire, cream tools and white numbers stay as they are, and
+   the colours are chosen in planet-tint.js so text keeps WCAG AA contrast.
+   Without the class the screen keeps its plain indigo look. */
+html #game-screen.planet-tinted {
+    background:
+        radial-gradient(circle at 20% 15%, rgba(236, 210, 126, 0.55) 0 1.5px, transparent 2.5px) 0 0 / 46px 46px,
+        radial-gradient(circle at 70% 60%, rgba(255, 255, 255, 0.28) 0 1px, transparent 2px) 0 0 / 31px 31px,
+        radial-gradient(ellipse 90% 40% at 50% 0%, var(--pt-glow), transparent 70%),
+        linear-gradient(180deg, var(--pt-sky-1) 0%, var(--pt-sky-2) 45%, var(--pt-sky-3) 100%);
+}
+html #game-screen.planet-tinted .game-header {
+    background: linear-gradient(180deg, var(--pt-lacquer-1) 0%, var(--pt-lacquer-2) 60%, var(--pt-lacquer-3) 100%);
+    border-color: var(--pt-edge);
+    box-shadow: 0 4px 0 var(--kin-700), 0 10px 24px rgba(0, 0, 0, 0.35), 0 0 22px var(--pt-glow);
+}
+html #game-screen.planet-tinted .tools-panel,
+html #game-screen.planet-tinted .game-footer {
+    background: var(--pt-tray);
+    border-color: var(--pt-edge);
+}
+html #game-screen.planet-tinted .network-container { border-color: var(--pt-web-edge); }
+html #game-screen.planet-tinted .next-day-btn {
+    border-color: var(--pt-edge);
+    box-shadow: 0 4px 0 var(--kin-700), 0 8px 16px rgba(11, 24, 56, 0.3), 0 0 18px var(--pt-glow);
+}
+html #game-screen.planet-tinted .tool-item.selected {
+    box-shadow: 0 3px 0 var(--kin-600), 0 0 0 3px rgba(201, 162, 39, 0.35), 0 0 16px var(--pt-glow);
+}
+/* The pause sheet keeps its plain paper look. */
+html #game-screen.planet-tinted.is-paused .game-footer { background: #fffdf7; border-color: var(--kin-300); }

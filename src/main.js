@@ -10,7 +10,7 @@ import { maybeShowPrologue, bindPrologueReplay } from './ui/prologue.js';
             window.game = new EpidemicSimulator();
             // The 3D globe replaces the video intro as the home/start screen.
             // Level taps route through the existing briefing flow.
-            mountGlobeHome({ onPlayLevel: (levelId) => window.game.selectLevel(levelId) });
+            mountGlobeHome({ onPlayLevel: (levelId) => window.game.selectLevel(levelId) })?.then?.(() => window.game.mountDailyEntry());
             // Story prologue on first launch, over the start page; Settings can replay it.
             maybeShowPrologue();
             bindPrologueReplay();

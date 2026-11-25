@@ -98,16 +98,54 @@ export function placeEnvoy(nodes, links, { minDistance = 3 } = {}, rng = Math.ra
     return envoy;
 }
 
+// Keep it open (later planets, src/sim/mechanics.js): mark the place that
+// must stay open. It is the best connected healthy person who is not next
+// to a first case, given extra contacts (never to a sick person) until they
+// know about `degreeShare` of the web. Returns the hub node, or null.
+export function placeHub(nodes, links, { degreeShare = 0.35, minDegree = 5 } = {}, rng = Math.random) {
+    const adj = adjacency(nodes, links);
+    const dist = distancesFromSick(nodes, links);
+    const healthy = nodes.filter((n) => n.state === 'healthy');
+    if (!healthy.length) return null;
+    let pool = healthy.filter((n) => dist.get(n.id) >= 2);
+    if (!pool.length) pool = healthy;
+    pool.sort((a, b) => adj.get(b.id).size - adj.get(a.id).size || a.id - b.id);
+    const hub = pool[0];
+    const mine = adj.get(hub.id);
+    // At least as many contacts as the busiest person on the web.
+    const busiest = Math.max(...nodes.map((n) => adj.get(n.id).size));
+    const want = Math.min(healthy.length - 1, Math.max(minDegree, busiest, Math.round(degreeShare * nodes.length)));
+    const others = healthy.filter((n) => n.id !== hub.id && !mine.has(n.id));
+    while (mine.size < want && others.length) {
+        const other = others.splice(Math.floor(rng() * others.length), 1)[0];
+        links.push({ source: hub.id, target: other.id });
+        mine.add(other.id);
+    }
+    hub.hub = true;
+    return hub;
+}
+
 // True when the Envoy is sick, sick in isolation, or has died.
 export function envoyLost(network, envoyId) {
     if (envoyId == null) return false;
     const envoy = network.nodes.find((n) => n.id === envoyId);
     if (!envoy || envoy.removed || envoy.state === 'dead') return true;
-    return envoy.state === 'infected' || (envoy.state === 'quarantined' && !!envoy.sickWhileQuarantined);
+    // A known carrier (tested positive, later planets) has caught it too.
+    return envoy.state === 'infected' || envoy.state === 'exposed' || (envoy.state === 'quarantined' && !!envoy.sickWhileQuarantined);
 }
 
-// Briefing callout for a variant.
-export function variantCallout(variant) {
+// Briefing callout for a variant. Later planets can add a new idea to a
+// level (level.mechanics, src/config/planet-mechanics.js): its callout
+// shows alone, or after the puzzle's own line when the level has both.
+export function variantCallout(variant, mechanics = null) {
+    const own = puzzleCallout(variant);
+    const extra = mechanics && mechanics.callout ? mechanics.callout : null;
+    if (!extra) return own;
+    if (!own) return { title: extra.title, text: extra.text };
+    return { title: own.title, text: `${own.text} ${extra.title}. ${extra.text}` };
+}
+
+function puzzleCallout(variant) {
     if (!variant) return null;
     switch (variant.type) {
         case 'superSpreader':

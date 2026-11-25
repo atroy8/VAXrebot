@@ -21,6 +21,9 @@ const HINTS = {
     vaccinate: 'Vaccinate busy, healthy people.',
     quarantine: 'Isolate the sick to stop spread.',
     severLink: 'Red links spread it. Tap to cut.',
+    // Later planets (src/sim/mechanics.js).
+    test: 'Test contacts of the sick.',
+    mask: 'Mask busy people near the sick.',
 };
 
 export function toolHint(toolId, tools = {}) {
@@ -40,10 +43,13 @@ export function autoToolForTap(kind, nodeState, chips = []) {
     if (kind !== 'node') return null;
     if (nodeState === 'healthy') {
         if (ready('vaccinate')) return 'vaccinate';
+        // Later planets: finding out comes before locking a healthy person away.
+        if (ready('test')) return 'test';
+        if (ready('mask')) return 'mask';
         if (ready('quarantine')) return 'quarantine';
         return null;
     }
-    if (nodeState === 'infected' || nodeState === 'exposed') return ready('quarantine') ? 'quarantine' : null;
+    if (nodeState === 'infected' || nodeState === 'exposed') return ready('quarantine') ? 'quarantine' : ready('mask') ? 'mask' : null;
     return null;
 }
 
@@ -52,7 +58,8 @@ export function autoToolForTap(kind, nodeState, chips = []) {
 // line, as if Sever were picked. Otherwise null: people first, then lines.
 export function idleTapMode(chips = []) {
     const ready = (id) => chips.some((c) => c.id === id && !c.powerUp && c.state === 'ready');
-    return ready('severLink') && !ready('vaccinate') && !ready('quarantine') ? 'link' : null;
+    // Later planets: Test and Mask are person tools too.
+    return ready('severLink') && !ready('vaccinate') && !ready('quarantine') && !ready('test') && !ready('mask') ? 'link' : null;
 }
 
 // What to say when a tap with no tool chosen has nothing ready that fits.
@@ -85,6 +92,8 @@ const NEXT_STEP = {
     vaccinate: 'Tap a healthy person to vaccinate them.',
     quarantine: 'Tap a sick person to isolate them.',
     severLink: 'Tap a red line to cut it.',
+    test: 'Tap a contact of a sick person to test them.',
+    mask: 'Tap a person to give them a mask.',
 };
 
 // Round 38: when someone sick is still free to spread and Quarantine is

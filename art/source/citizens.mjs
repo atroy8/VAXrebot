@@ -54,9 +54,45 @@ export function mix(hex, other, t) {
 const CX = 512, CY = 512;
 const HEAD = { x: 512, y: 500, r: 182 };
 
+// Wide audience: every state has a SHAPE cue as well as a colour, so the
+// states still read in greyscale and for people who cannot tell red from
+// green. One table names them all (tests/wide-visual-faces.test.js):
+//   ring   how the gold ring is drawn (changes the outline of the token)
+//   mark   the small picture that goes with the state
+//   ground the pattern in the enamel behind the face
+// Healthy is the plain one: smooth gold ring, calm waves, no mark. Sick is
+// the loud one: a dark enamel band with teeth all round (a sawtooth outline),
+// rays instead of waves, and a dark germ badge at the lower right.
+export const STATE_CUES = Object.freeze({
+    healthy: { ring: 'plain', mark: 'none', ground: 'waves' },
+    exposed: { ring: 'beaded', mark: 'drop', ground: 'waves' },
+    infected: { ring: 'spiked', mark: 'germ', ground: 'rays' },
+    quarantined: { ring: 'dashed', mark: 'mask', ground: 'waves' },
+    vaccinated: { ring: 'double', mark: 'shield', ground: 'waves' },
+    recovered: { ring: 'leafed', mark: 'leaf', ground: 'waves' },
+    dead: { ring: 'pewter', mark: 'flower', ground: 'waves' },
+});
+const SICK_ENAMEL = '#7a1f2c';
+
 function ground(state) {
     const g = STATES[state].ground;
     const deep = mix(g, '#000000', 0.12);
+    let pattern = '';
+    if (STATE_CUES[state].ground === 'rays') {
+        // Sick: bold rays from the centre, so the ground is striped where a
+        // healthy one is calm. Reads without colour.
+        const dark = mix(g, '#000000', 0.34);
+        const n = 12;
+        for (let i = 0; i < n; i++) {
+            const a0 = ((i * 2) / (n * 2)) * Math.PI * 2;
+            const a1 = ((i * 2 + 1) / (n * 2)) * Math.PI * 2;
+            const pt = (a) => `${Math.round(CX + Math.cos(a) * 430)} ${Math.round(CY + Math.sin(a) * 430)}`;
+            pattern += `<path d="M${CX} ${CY} L${pt(a0)} L${pt(a1)} Z" fill="${dark}"/>`;
+        }
+        return `<circle cx="${CX}" cy="${CY}" r="408" fill="${g}"/>
+  <g clip-path="url(#inner)" opacity="0.6" data-ground="rays">${pattern}</g>
+  ${hl(355, 255, 120, 46, -38, 0.33)}`;
+    }
     // Seigaiha waves in the enamel ground, low contrast so the state colour reads.
     let waves = '';
     for (let row = 0; row < 9; row++) {
@@ -73,11 +109,86 @@ function ground(state) {
   ${hl(355, 255, 120, 46, -38, 0.33)}`;
 }
 
-function ring() {
-    return `<circle cx="${CX}" cy="${CY}" r="426" fill="none" stroke="url(#goldRing)" stroke-width="38"/>
+const polar = (r, deg) => [Math.round(CX + Math.cos((deg * Math.PI) / 180) * r), Math.round(CY + Math.sin((deg * Math.PI) / 180) * r)];
+const SHINE = `<path d="M190 300 A370 370 0 0 1 420 150" fill="none" stroke="#fff6d6" stroke-opacity="0.7" stroke-width="8" stroke-linecap="round"/>`;
+const goldBand = `<circle cx="${CX}" cy="${CY}" r="426" fill="none" stroke="url(#goldRing)" stroke-width="38"/>
   <circle cx="${CX}" cy="${CY}" r="445" fill="none" stroke="${GOLD_DARK}" stroke-width="3"/>
-  <circle cx="${CX}" cy="${CY}" r="407" fill="none" stroke="${WIRE}" stroke-opacity="0.6" stroke-width="5"/>
-  <path d="M190 300 A370 370 0 0 1 420 150" fill="none" stroke="#fff6d6" stroke-opacity="0.7" stroke-width="8" stroke-linecap="round"/>`;
+  <circle cx="${CX}" cy="${CY}" r="407" fill="none" stroke="${WIRE}" stroke-opacity="0.6" stroke-width="5"/>`;
+
+// The germ badge: a dark enamel disc at the lower right with a pale germ (a
+// round body with knobs). The one mark a healthy person never carries.
+function germBadge() {
+    const bx = 806, by = 806;
+    let knobs = '';
+    for (let i = 0; i < 8; i++) {
+        const a = (i * Math.PI) / 4;
+        const x1 = Math.round(bx + Math.cos(a) * 40), y1 = Math.round(by + Math.sin(a) * 40);
+        const x2 = Math.round(bx + Math.cos(a) * 78), y2 = Math.round(by + Math.sin(a) * 78);
+        knobs += `<path d="M${x1} ${y1} L${x2} ${y2}" stroke="#fff4cf" stroke-width="17" stroke-linecap="round"/>`;
+    }
+    return `<g data-mark="germ">${wire('circle', { cx: bx, cy: by, r: 124 }, { fill: '#4a0f1a', sw: 12, gold: GOLD_LIGHT })}${knobs}<circle cx="${bx}" cy="${by}" r="46" fill="#fff4cf"/><circle cx="${bx}" cy="${by}" r="17" fill="#4a0f1a"/></g>`;
+}
+
+function ring(state = 'healthy') {
+    const kind = (STATE_CUES[state] || STATE_CUES.healthy).ring;
+    switch (kind) {
+        case 'spiked': {
+            // A dark enamel band between two gold wires, with teeth all round.
+            let teeth = '';
+            const n = 16;
+            for (let i = 0; i < n; i++) {
+                const a = (i * 360) / n + 11.25;
+                const [x0, y0] = polar(440, a - 7.5);
+                const [x1, y1] = polar(504, a);
+                const [x2, y2] = polar(440, a + 7.5);
+                teeth += `<path d="M${x0} ${y0} L${x1} ${y1} L${x2} ${y2} Z" fill="${SICK_ENAMEL}" stroke="${GOLD}" stroke-width="6" stroke-linejoin="round"/>`;
+            }
+            return `<g data-ring="spiked">${teeth}<circle cx="${CX}" cy="${CY}" r="426" fill="none" stroke="${SICK_ENAMEL}" stroke-width="38"/>
+  <circle cx="${CX}" cy="${CY}" r="445" fill="none" stroke="${GOLD}" stroke-width="8"/>
+  <circle cx="${CX}" cy="${CY}" r="407" fill="none" stroke="${GOLD}" stroke-width="8"/>
+  ${SHINE}</g>${germBadge()}`;
+        }
+        case 'dashed':
+            // Set apart: the ring is broken into twelve dashes.
+            return `<g data-ring="dashed"><circle cx="${CX}" cy="${CY}" r="407" fill="none" stroke="${WIRE}" stroke-opacity="0.6" stroke-width="5"/>
+  <circle cx="${CX}" cy="${CY}" r="426" fill="none" stroke="${WIRE}" stroke-opacity="0.55" stroke-width="48" stroke-dasharray="139 84" stroke-dashoffset="2"/>
+  <circle cx="${CX}" cy="${CY}" r="426" fill="none" stroke="url(#goldRing)" stroke-width="38" stroke-dasharray="135 88"/>
+  ${SHINE}</g>`;
+        case 'beaded': {
+            // Might be sick: dark beads strung round the gold ring.
+            let beads = '';
+            for (let i = 0; i < 16; i++) {
+                const [x, y] = polar(426, i * 22.5);
+                beads += `<circle cx="${x}" cy="${y}" r="21" fill="${WIRE}"/>`;
+            }
+            return `<g data-ring="beaded">${goldBand}${beads}${SHINE}</g>`;
+        }
+        case 'double':
+            // Protected: a second gold wire outside the ring, like armour.
+            return `<g data-ring="double">${goldBand}
+  <circle cx="${CX}" cy="${CY}" r="480" fill="none" stroke="${WIRE}" stroke-opacity="0.55" stroke-width="22"/>
+  <circle cx="${CX}" cy="${CY}" r="480" fill="none" stroke="${GOLD}" stroke-width="14"/>
+  ${SHINE}</g>`;
+        case 'leafed': {
+            // Well again: a laurel of leaves grows up the left of the ring.
+            let leaves = '';
+            for (let i = 0; i < 6; i++) {
+                const deg = 122 + i * 22;
+                const [lx, ly] = polar(438, deg);
+                const lean = i % 2 ? 26 : -26;
+                leaves += `<g transform="translate(${lx} ${ly}) rotate(${deg + 180 + lean})">${wire('ellipse', { cx: 0, cy: 0, rx: 27, ry: 60 }, { fill: i % 2 ? '#79c063' : '#5fa84a', sw: 7 })}</g>`;
+            }
+            return `<g data-ring="leafed">${goldBand}${SHINE}${leaves}</g>`;
+        }
+        case 'pewter':
+            // Gone: the gold is dulled to pewter.
+            return `<g data-ring="pewter"><circle cx="${CX}" cy="${CY}" r="426" fill="none" stroke="#8d9693" stroke-width="38"/>
+  <circle cx="${CX}" cy="${CY}" r="445" fill="none" stroke="#5f6765" stroke-width="5"/>
+  <circle cx="${CX}" cy="${CY}" r="407" fill="none" stroke="#5f6765" stroke-width="5"/></g>`;
+        default:
+            return `${goldBand}
+  ${SHINE}`;
+    }
 }
 
 function body(state, o = OUTFITS.japan) {
@@ -260,7 +371,7 @@ export function citizenSvg(state, frame, { size = 1024, background = '#ffffff', 
   </g></g><g clip-path="url(#inner)">
   ${frame === 'sleepy' ? dozeBubbles() : ''}
   ${fade}</g>
-  ${ring()}
+  ${ring(state)}
 </svg>`;
 }
 

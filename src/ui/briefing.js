@@ -1,5 +1,6 @@
 import { toolkitCard } from '../config/toolkits.js';
-import { briefingCfr, briefingRealR0 } from './deaths.js';
+import { briefingStrain } from './deaths.js';
+import './briefing-lean.css';
 
 // Briefing screen. There is no difficulty picker any more: each play rolls
 // its own threat (src/config/difficulty-roll.js) and the briefing shows it
@@ -8,19 +9,36 @@ import { briefingCfr, briefingRealR0 } from './deaths.js';
 export function fillBriefing(scenario) {
     document.getElementById('briefing-title').textContent = scenario.name;
     document.getElementById('briefing-description-text').textContent = scenario.description;
-    document.getElementById('briefing-disease').textContent = scenario.diseaseName;
+    // Story framing: the profile names the invented Blightborne strain and
+    // how it behaves. The real disease it is based on, with its real death
+    // rate and R0, is shown after the level (basedOnCard in ./deaths.js).
+    const strain = briefingStrain(scenario);
+    document.getElementById('briefing-disease').textContent = strain.name;
     document.getElementById('briefing-agent').textContent = scenario.agent;
     document.getElementById('briefing-vector').textContent = scenario.vector;
-    const cfr = briefingCfr(scenario);
-    const cfrEl = document.getElementById('briefing-cfr');
-    if (cfrEl) cfrEl.textContent = cfr;
-    const row = document.getElementById('briefing-cfr-row');
-    if (row) row.hidden = !cfr;
-    const realR0 = briefingRealR0(scenario);
-    const r0El = document.getElementById('briefing-real-r0');
-    if (r0El) r0El.textContent = realR0;
-    const r0Row = document.getElementById('briefing-real-r0-row');
-    if (r0Row) r0Row.hidden = !realR0;
+    const traitsEl = document.getElementById('briefing-traits');
+    if (traitsEl) traitsEl.textContent = strain.traits;
+    const row = document.getElementById('briefing-traits-row');
+    if (row) row.hidden = !strain.traits;
+    resetBriefingMore();
+}
+
+// One screen briefing: the lesson, the disease profile and the star goal sit
+// behind the More disclosure (index.html #briefing-more). Every briefing
+// opens with it closed. The more-open class on the card lets the longer
+// lines that live outside the <details> (why this toolkit, what the twist
+// means) open along with it.
+export function resetBriefingMore(doc = document) {
+    const more = doc.getElementById('briefing-more');
+    if (!more) return;
+    const card = more.closest('.briefing-content');
+    const sync = () => card?.classList.toggle('more-open', more.open);
+    if (!more.dataset.bound) {
+        more.dataset.bound = '1';
+        more.addEventListener('toggle', sync);
+    }
+    more.open = false;
+    sync();
 }
 
 export function threatPipsHtml(pips) {
@@ -51,8 +69,10 @@ export function fillLessonCard(id, title, text) {
     document.getElementById(`${id}-text`).textContent = text;
 }
 
-// Puzzle callout (round 14): a short card under the lesson on puzzle levels,
-// built on demand so the briefing markup stays unchanged. null hides it.
+// Puzzle callout (round 14): a short card on puzzle levels. null hides it.
+// The card is in the briefing markup now (it has to stay visible above the
+// More disclosure, where the lesson went); building it on demand remains as
+// a fallback for a page without it.
 export function showVariantCallout(callout) {
     let card = document.getElementById('briefing-variant');
     if (!callout) {
