@@ -19,6 +19,7 @@ import {
     newCoachMemory,
     bubblePlacement,
     pickRiskLine,
+    samplePoints,
 } from './coach-model.js';
 
 // New-tool hints fade on their own after this long.
@@ -153,6 +154,24 @@ export function startCoach(game, { storage = safeStorage(), doc = document, win 
         return { x: r.left + r.width / 2, y: r.top + r.height / 2, r: r.height / 2, w: r.width, h: r.height, round: 16 };
     };
 
+    // Every red line on screen, as screen segments.
+    function riskLines() {
+        const view = game.view;
+        const lines = [];
+        if (!view || !view.nodeObjs || !view.screenPoint || !view.linkKind) return lines;
+        for (const l of game.network?.links || []) {
+            if (view.linkKind(l) !== 'risk') continue;
+            const s1 = view.nodeObjs.get(l.source.id);
+            const s2 = view.nodeObjs.get(l.target.id);
+            if (!s1 || !s2) continue;
+            const p1 = view.screenPoint(s1.pos);
+            const p2 = view.screenPoint(s2.pos);
+            if (!p1 || !p2) continue;
+            lines.push({ id: `${l.source.id}-${l.target.id}`, ax: p1.x, ay: p1.y, bx: p2.x, by: p2.y });
+        }
+        return lines;
+    }
+
     // Where the step points, in CSS pixels, or null when it is not on screen.
     function anchorFor(s) {
         const a = s.anchor;
@@ -169,17 +188,7 @@ export function startCoach(game, { storage = safeStorage(), doc = document, win 
             return null;
         }
         if (a.type === 'risk') {
-            const lines = [];
-            for (const l of game.network.links) {
-                if (view.linkKind(l) !== 'risk') continue;
-                const s1 = view.nodeObjs.get(l.source.id);
-                const s2 = view.nodeObjs.get(l.target.id);
-                if (!s1 || !s2) continue;
-                const p1 = view.screenPoint(s1.pos);
-                const p2 = view.screenPoint(s2.pos);
-                if (!p1 || !p2) continue;
-                lines.push({ id: `${l.source.id}-${l.target.id}`, ax: p1.x, ay: p1.y, bx: p2.x, by: p2.y });
-            }
+            const lines = riskLines();
             const pick = pickRiskLine(lines, lineId);
             if (!pick) return null;
             lineId = pick.id;
@@ -217,7 +226,7 @@ export function startCoach(game, { storage = safeStorage(), doc = document, win 
         ring.style.top = `${Math.round(anchor.y - anchor.h / 2 - 6)}px`;
         const size = { width: bubble.offsetWidth, height: bubble.offsetHeight };
         const view = { width: win.innerWidth, height: win.innerHeight };
-        const place = bubblePlacement(anchor, size, view);
+        const place = bubblePlacement(anchor, size, view, { avoid: samplePoints(riskLines()) });
         bubble.style.left = `${Math.round(place.left)}px`;
         bubble.style.top = `${Math.round(place.top)}px`;
         bubble.style.setProperty('--arrow-x', `${Math.round(place.arrow)}px`);
