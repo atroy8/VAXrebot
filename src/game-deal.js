@@ -22,6 +22,9 @@ import { levelRecord } from './progress.js';
 import { starGoalLine } from './ui/briefing.js';
 import { showTravelPlan, clearTravelPlan } from './ui/travel-marks.js';
 import { showNotification } from './ui/panels.js';
+import { showMark, clearMarks } from './ui/hint.js';
+import { personFor } from './ui/people.js';
+import { demoMoveText, demoHeadText, demoNightText } from './ui/demo-narration.js';
 import './ui/round57.css';
 
 // Dealing while the briefing is on screen: work for at most SLICE_MS, then
@@ -34,6 +37,16 @@ export const DEAL_HARD_MS = 400;
 // Show best play: the pause between two moves, and before a night.
 export const DEMO_STEP_MS = 800;
 export const DEMO_NIGHT_MS = 1100;
+// Round 58: each move is named and marked on the web this long before it
+// happens, so the player can follow (and remember) the best play.
+export const DEMO_LOOK_MS = 1300;
+
+function setDemoLines(head, main) {
+    const h = typeof document !== 'undefined' && document.getElementById('demo-head');
+    const t = typeof document !== 'undefined' && document.getElementById('demo-text');
+    if (h) h.textContent = head;
+    if (t) t.textContent = main;
+}
 
 const clock = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
 
@@ -140,14 +153,17 @@ export const dealMethods = {
     async showBestPlay() {
         const deal = this.deal;
         if (!deal || !deal.par || this.demo) return;
-        this.demo = { moves: [...deal.par.moves], timer: null, kept: { state: this.gameState, network: this.network } };
+        const total = deal.par.moves.length;
+        this.demo = { moves: [...deal.par.moves], done: 0, timer: null, kept: { state: this.gameState, network: this.network } };
         await this.startGame();
         if (!this.demo) return;
         document.getElementById('game-screen')?.classList.add('is-demo');
         const banner = document.getElementById('demo-banner');
         if (banner) banner.hidden = false;
-        const text = document.getElementById('demo-text');
-        if (text) text.textContent = `Best play: ${deal.par.cases} ${deal.par.cases === 1 ? 'case' : 'cases'}`;
+        const cases = deal.par.cases;
+        const head = () => demoHeadText({ cases, done: this.demo ? this.demo.done : total, total });
+        const nameOf = (id) => personFor(id)?.name;
+        setDemoLines(head(), total ? 'Watch: the first move is coming up.' : 'Watch: no moves needed here.');
         const step = () => {
             if (!this.demo) return;
             const state = this.gameState;
@@ -160,11 +176,20 @@ export const dealMethods = {
             if (k >= 0) {
                 const [move] = this.demo.moves.splice(k, 1);
                 const found = findMove(this.network, move);
-                if (found && found.link) this.applyToolToLink(found.link);
-                else if (found) this.applyToolToNode(move.toolId, found.node);
-                this.demo.timer = setTimeout(step, DEMO_STEP_MS);
+                this.demo.done += 1;
+                // Name the move and point at it first, then make it.
+                setDemoLines(head(), demoMoveText(move, nameOf));
+                if (found) showMark(this.view, found.link ? { link: found.link } : { node: found.node }, { ms: DEMO_LOOK_MS + 400 });
+                this.demo.timer = setTimeout(() => {
+                    if (!this.demo) return;
+                    clearMarks();
+                    if (found && found.link) this.applyToolToLink(found.link);
+                    else if (found) this.applyToolToNode(move.toolId, found.node);
+                    this.demo.timer = setTimeout(step, DEMO_STEP_MS);
+                }, DEMO_LOOK_MS);
                 return;
             }
+            setDemoLines(head(), demoNightText(state.day, this.demo.moves.length));
             this.nextDay();
             if (this.demo && !this.gameState.gameOver) this.demo.timer = setTimeout(step, this.demo.moves.some((m) => m.day === this.gameState.day) ? DEMO_NIGHT_MS : DEMO_STEP_MS);
         };
@@ -177,6 +202,7 @@ export const dealMethods = {
         clearTimeout(this.demo.timer);
         const kept = this.demo.kept;
         this.demo = null;
+        clearMarks();
         this.autoAdvance.cancel();
         this.endWrapUp();
         clearTravelPlan();
