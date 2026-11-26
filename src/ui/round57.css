@@ -28,6 +28,10 @@
     pointer-events: auto;
 }
 .demo-banner[hidden] { display: none; }
+/* Round 58: a small progress line over the move being made. */
+.demo-copy { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.demo-head { font-size: 0.74rem; font-weight: 600; opacity: 0.78; letter-spacing: 0.01em; }
+.demo-text { font-size: 0.98rem; line-height: 1.2; }
 .demo-banner .demo-skip { min-height: 44px; padding: 6px 14px; font-size: 0.9rem; white-space: nowrap; flex: none; }
 #game-screen.is-demo .network-container,
 #game-screen.is-demo #tool-tray { pointer-events: none; }

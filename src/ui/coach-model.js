@@ -133,13 +133,46 @@ export function coachFinished(facts, memory = newCoachMemory()) {
 // half of the screen, above it otherwise, and never off the sides.
 // anchor: { x, y, r } centre and half size in CSS px. Returns the bubble's
 // left/top and where its arrow sits along its edge.
-export function bubblePlacement(anchor, bubble, viewport, { gap = 14, margin = 8 } = {}) {
-    const below = anchor.y < viewport.height / 2;
-    const left = Math.max(margin, Math.min(viewport.width - bubble.width - margin, anchor.x - bubble.width / 2));
-    const rawTop = below ? anchor.y + anchor.r + gap : anchor.y - anchor.r - gap - bubble.height;
-    const top = Math.max(margin, Math.min(viewport.height - bubble.height - margin, rawTop));
-    const arrow = Math.max(18, Math.min(bubble.width - 18, anchor.x - left));
-    return { left, top, arrow, side: below ? 'below' : 'above' };
+export function bubblePlacement(anchor, bubble, viewport, { gap = 14, margin = 8, avoid = [] } = {}) {
+    const place = (below) => {
+        const left = Math.max(margin, Math.min(viewport.width - bubble.width - margin, anchor.x - bubble.width / 2));
+        const rawTop = below ? anchor.y + anchor.r + gap : anchor.y - anchor.r - gap - bubble.height;
+        const top = Math.max(margin, Math.min(viewport.height - bubble.height - margin, rawTop));
+        const arrow = Math.max(18, Math.min(bubble.width - 18, anchor.x - left));
+        return { left, top, arrow, side: below ? 'below' : 'above' };
+    };
+    const natural = anchor.y < viewport.height / 2;
+    const first = place(natural);
+    // Round 58: the bubble should not sit on the very lines it talks about.
+    // When the other side hides fewer of the points to keep clear (samples
+    // along the red lines), use that side instead.
+    if (!avoid || !avoid.length) return first;
+    const other = place(!natural);
+    const a = coveredCount(first, bubble, avoid);
+    if (a === 0) return first;
+    return coveredCount(other, bubble, avoid) < a ? other : first;
+}
+
+// How many of `points` a bubble at `place` would hide (with a small pad,
+// since a face or a line has width).
+export function coveredCount(place, bubble, points, pad = 10) {
+    let n = 0;
+    for (const p of points) {
+        if (p.x >= place.left - pad && p.x <= place.left + bubble.width + pad && p.y >= place.top - pad && p.y <= place.top + bubble.height + pad) n++;
+    }
+    return n;
+}
+
+// Points along each line, ends included, for bubblePlacement's avoid list.
+export function samplePoints(lines = [], steps = 4) {
+    const out = [];
+    for (const l of lines) {
+        for (let i = 0; i <= steps; i++) {
+            const t = i / steps;
+            out.push({ x: l.ax + (l.bx - l.ax) * t, y: l.ay + (l.by - l.ay) * t });
+        }
+    }
+    return out;
 }
 
 // The red line to point at: the longest one on screen is the easiest to
