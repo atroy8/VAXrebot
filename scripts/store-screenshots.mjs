@@ -41,6 +41,9 @@ export const SIZES = {
     '6.5-inch': { width: 428, height: 926, scale: 3, insets: { top: 47, bottom: 34, left: 0, right: 0 } },
 };
 
+// Levels tried, in order, for the mid-outbreak shot.
+export const OUTBREAK_LEVELS = ['hanabi-8', 'mizuho-8', 'hanabi-6', 'tsukimi-8', 'mizuho-6', 'hanabi-3', 'mizuho-5'];
+
 export const SHOTS = [
     { file: '01-title', what: 'The title planet' },
     { file: '02-star-map', what: 'The star map' },
@@ -184,18 +187,35 @@ async function capture(chromium, name, size, url, outDir) {
     await wait(2500);
     await shot(1);
 
-    // 3. Mid-outbreak: a market left alone for a day, so it has spread and
-    // the red lines show where it goes next. If a level ends or stays too
-    // quiet, try the next one.
-    for (const levelId of ['hanabi-8', 'mizuho-8', 'hanabi-6', 'tsukimi-8', 'mizuho-6']) {
-        await home();
-        await startLevel(levelId);
-        await nextDay();
-        const busy = await page.evaluate(() => {
+    // 3. Mid-outbreak on day 2: it has spread and the red lines show where
+    // it goes next. Round 59: since round 57 spread is certain, so a level
+    // left alone for a day is often already lost, and the old loop then shot
+    // the Outbreak Overwhelmed screen. Each level is tried left alone first,
+    // then with a day of sensible play, and a lost or quiet level is never
+    // kept. If nothing works, the shot falls back to day 1 of the first level.
+    const busyNow = () =>
+        page.evaluate(() => {
             const g = window.game;
-            return !g.gameState.gameOver && g.network.nodes.filter((n) => !n.removed && n.state === 'infected').length >= 3;
+            const sick = (n) => !n.removed && n.state === 'infected';
+            const red = g.network.links.filter((l) => (sick(l.source) && l.target.state === 'healthy') || (sick(l.target) && l.source.state === 'healthy'));
+            return !g.gameState.gameOver && g.gameState.day >= 2 && g.network.nodes.filter(sick).length >= 3 && red.length >= 2;
         });
+    let busy = false;
+    for (const levelId of OUTBREAK_LEVELS) {
+        for (const mode of ['idle', 'play']) {
+            await home();
+            await startLevel(levelId);
+            if (mode === 'play') await playDay();
+            await nextDay();
+            busy = await busyNow();
+            if (busy) break;
+        }
         if (busy) break;
+    }
+    if (!busy) {
+        console.log('  (no busy day 2 found; the outbreak shot shows day 1)');
+        await home();
+        await startLevel(OUTBREAK_LEVELS[0]);
     }
     await page.evaluate(() => {
         const g = window.game;
