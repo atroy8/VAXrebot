@@ -25,6 +25,7 @@ import { showNotification } from './ui/panels.js';
 import { showMark, clearMarks } from './ui/hint.js';
 import { personFor } from './ui/people.js';
 import { demoMoveText, demoHeadText, demoNightText } from './ui/demo-narration.js';
+import { dealActionsShown } from './ui/deal-actions.js';
 import './ui/round57.css';
 
 // Dealing while the briefing is on screen: work for at most SLICE_MS, then
@@ -32,6 +33,7 @@ import './ui/round57.css';
 // done, it is finished at once, but for no longer than HARD_MS: after that
 // the best web seen so far is used. (The Daily never takes that shortcut,
 // so it is the same web for everyone, on any phone.)
+
 export const DEAL_SLICE_MS = 10;
 export const DEAL_HARD_MS = 400;
 // Show best play: the pause between two moves, and before a night.
@@ -143,9 +145,9 @@ export const dealMethods = {
     refreshDealActions(stars) {
         const best = document.getElementById('show-best');
         const retry = document.getElementById('retry-web');
-        const hasPar = !!(this.deal && this.deal.par);
-        if (best) best.hidden = !hasPar || stars >= 3;
-        if (retry) retry.hidden = !this.deal;
+        const show = dealActionsShown({ hasDeal: !!this.deal, hasPar: !!(this.deal && this.deal.par), stars });
+        if (best) best.hidden = !show.best;
+        if (retry) retry.hidden = !show.retry;
     },
 
     // Replay the solver's moves on the same web, then come back to the

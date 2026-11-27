@@ -113,7 +113,8 @@ describe('Show best play and Retry this web', () => {
     });
 
     it('Show best play is offered after any result under 3 stars, when the deal has a par', () => {
-        expect(deal).toMatch(/best\.hidden = !hasPar \|\| stars >= 3/);
+        // Round 59 moved the rule into src/ui/deal-actions.js (tested there).
+        expect(deal).toContain('best.hidden = !show.best');
         expect(game).toContain('this.refreshDealActions(stars)');
     });
 

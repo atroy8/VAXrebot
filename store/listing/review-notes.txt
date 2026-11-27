@@ -3,9 +3,11 @@ Thank you for reviewing Galactic Outbreak.
 NO LOGIN. There are no accounts and no sign in. The game starts straight away and works offline. Progress is saved on the device only.
 
 HOW TO PLAY IN THREE LINES
-1. Tap Play, then Play level 1, then Begin Containment. Faces are people, lines are contacts, red faces are sick, red lines are where it can spread tonight.
+1. Tap Play, then Play level 1, then Begin Containment. Faces are people, lines are contacts, red faces are sick, red lines are where it will spread tonight (spread is certain: every red line crosses unless the player acts).
 2. Tap a red line to cut it (Sever Link). From day 2 you can tap Vaccinate and then a healthy person, from day 3 Quarantine and then a sick person.
 3. Tap Next day. You win when nobody is sick, and lose if cases reach the cap shown at the top.
+
+AFTER A LEVEL. The results screen says how few cases the best play allowed. Show best play replays those moves step by step on the same web, and Retry this web deals the same puzzle again.
 
 WHERE THINGS ARE
 - Settings: tap Play on the title screen, then the gear button at the top right of the star map. The gear is hidden on the title screen and during a level.

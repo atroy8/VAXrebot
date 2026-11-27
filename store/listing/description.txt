@@ -1,4 +1,4 @@
-The Blightborne have seeded a sickness across the galaxy, and you are the newest field epidemiologist on the Galactic Response Team. Every level is a small web of people. Lines are contacts. Each night the sick pass it on along those lines. Each day you get a few moves to stop it.
+The Blightborne have seeded a sickness across the galaxy, and you are the newest field epidemiologist on the Galactic Response Team. Every level is a small web of people. Lines are contacts. Each night the sick pass it on along those lines, with no dice: a red line means that person is sick tomorrow unless you act. Each day you get a few moves to stop it.
 
 Galactic Outbreak is a turn-based puzzle game you can play in a few minutes, and it quietly teaches the real science of how outbreaks grow and how they are stopped.
 
@@ -6,10 +6,16 @@ HOW IT PLAYS
 • Cut a red line to break a contact before the illness can cross it.
 • Vaccinate a healthy person so the outbreak has nowhere to go.
 • Quarantine a sick person so they cannot pass it on.
-• On later planets, test people to find hidden carriers and hand out masks to lower the odds on every line.
+• On later planets, test people to find hidden carriers and hand out masks, so the illness needs two nights to cross a line.
 • Tap Next day and watch what your choices did.
 
 You win when nobody is sick. You lose if cases reach the cap. Moves are limited every day, so the puzzle is always the same question real outbreak teams face: where does one action do the most good?
+
+EVERY WEB HAS A BEST ANSWER
+• The briefing tells you how few cases the best play allows. Match it for three stars.
+• Missed it? Show best play walks through the winning moves one by one, naming each and marking it on the web.
+• Retry this web to beat the same puzzle, or play again for a new web.
+• Real outbreaks involve chance. The game shows the worst case, so every move has a clear result you can learn from.
 
 WHAT YOU LEARN WITHOUT BEING LECTURED
 • R, the number that says whether an outbreak is growing or shrinking. It is live on screen and drops the moment you act.
@@ -29,7 +35,7 @@ WHAT IS IN THE GAME
 • A Daily puzzle that is the same for everyone that day, with a streak to keep and a result you can share.
 • Up to three stars per level, bonus goals, gold to spend on power-ups and permanent upgrades, and supply chests along the way.
 • A hint when you are stuck, and an undo for your last move.
-• Gentle mode in Settings: slower spread and one extra use of each tool every day, for younger players or a calmer game. Stars still count.
+• Gentle mode in Settings: one extra use of each tool every day and room for one more case, for younger players or a calmer game. Stars still count.
 • An original soundtrack, sound and vibration you can switch off one by one.
 
 GOOD TO KNOW
