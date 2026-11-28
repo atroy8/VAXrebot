@@ -48,10 +48,13 @@
     min-width: 72px;
     min-height: 44px;
     padding: 0 18px;
-    border: 2px solid rgba(236, 210, 126, 0.7);
+    /* Wide audience pass: a solid gold pill, so the way past the story is
+       the easiest thing to find on the screen. */
+    border: 2px solid var(--kin-300, #ecd27e);
     border-radius: 999px;
-    background: rgba(11, 24, 56, 0.6);
-    color: var(--kin-300, #ecd27e);
+    background: var(--kin-400, #ddb94a);
+    box-shadow: 0 3px 0 var(--kin-700, #8a6417);
+    color: var(--ai-900, #0b1838);
     font-family: inherit;
     font-size: 1rem;
     font-weight: 700;

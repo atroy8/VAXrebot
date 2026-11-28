@@ -30,9 +30,11 @@ describe('super-spreader levels', () => {
                 expect(carriers[0].state).toBe('infected');
                 expect(run.state.superSpreaderId).toBe(carriers[0].id);
                 const adj = adjacency(run.network.nodes, run.network.links);
-                expect(adj.get(carriers[0].id).size).toBeGreaterThanOrEqual(carrierDegree(run.network.nodes.length, level.variant));
-                // Nobody has more contacts than the carrier.
-                for (const n of run.network.nodes) expect(adj.get(n.id).size).toBeLessThanOrEqual(adj.get(carriers[0].id).size);
+                // Round 57: a few more contacts than there are cuts on day 1
+                // (carrierExtra), no longer half the web.
+                expect(adj.get(carriers[0].id).size).toBeGreaterThan(run.difficulty.dailyLimits.severLink);
+                // Nobody has as many contacts as the carrier.
+                for (const n of run.network.nodes) if (n !== carriers[0]) expect(adj.get(n.id).size).toBeLessThan(adj.get(carriers[0].id).size);
                 // Starting cases still match the level's tuning.
                 expect(run.state.stats.totalInfected).toBe(run.network.nodes.filter((n) => n.state === 'infected').length);
             }
@@ -42,8 +44,11 @@ describe('super-spreader levels', () => {
     it('bosses have the most connected carrier', () => {
         const boss = LEVELS[9];
         expect(boss.variant).toMatchObject({ type: 'superSpreader', boss: true });
-        expect(boss.variant.degreeShare).toBeGreaterThan(LEVELS[2].variant.degreeShare);
-        expect(carrierDegree(25, LEVELS.at(-1).variant)).toBe(14);
+        // Round 57: the size of the carrier's day 1 is a spec number now
+        // (carrierExtra, tuned per level); the old share of the web still
+        // works for callers that ask for it.
+        expect(boss.variant.carrierExtra).toBeGreaterThanOrEqual(1);
+        expect(carrierDegree(25, { degreeShare: 0.56 })).toBe(14);
     });
 
     it('quarantine arrives on day 2 on super-spreader levels, day 3 elsewhere', () => {
@@ -176,8 +181,10 @@ describe('levels without a tool', () => {
 
 describe('one shared outbreak setup', () => {
     it('game.js and the balance bots both build levels through buildOutbreak', () => {
-        expect(read('src/game.js')).toContain('buildOutbreak(');
-        expect(read('src/sim/balance.js')).toContain('buildOutbreak(');
+        // Round 57: both deal through src/sim/dealer.js, the one caller of buildOutbreak.
+        expect(read('src/game-deal.js')).toContain('startDeal(deal, this.tools)');
+        expect(read('src/sim/balance.js')).toContain('startDeal(deal, tools)');
+        expect(read('src/sim/dealer.js')).toContain('buildOutbreak(');
         expect(read('src/game.js')).not.toContain('generateNetwork(');
     });
 

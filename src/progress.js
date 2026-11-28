@@ -2,49 +2,52 @@
 // No DOM, no storage here; game.js wires these to src/save.js and the UI.
 // All numbers are documented below so balance stays legible.
 //
-// UNIFIED POINTS-TO-STARS SCORING
-// ------------------------------
-// Every contained win earns points from one formula, then stars are read
-// off the level's per-level `target` (src/config/levels.js). Losses,
-// timeouts, and anything else score 0 points and 0 stars.
+// STARS (round 57): RESULT AGAINST PAR
+// ------------------------------------
+// When a level is dealt, the solver (src/sim/solver.js) finds the best
+// achievable play on that exact web: par = { cases, deaths, days }. Par is a
+// concrete list of moves played through the real game, so it can always be
+// reached. Stars compare the player's result with it and nothing else:
+//   3 stars  a win with fewer cases than par, or the same cases and no more
+//            deaths than par (beating par counts, and it can happen on big
+//            webs where the solver's search is not exhaustive)
+//   2 stars  a win at most 1 case over par (2 on webs of 20 people or more)
+//   1 star   any other win
+//   0 stars  anything that is not a win
+// Days do NOT count for stars: recovery takes a fixed number of days, so
+// "faster" would only reward the same moves again. Stars do not depend on
+// how many people the web has or on any score. A win with a power-up can
+// still be 3 stars if it matches par (the score below pays for it).
 //
-// Points formula (on a 'contained' win):
+// SCORE (pays gold, 10 points = 1 gold)
+// -------------------------------------
+// Every contained win earns points from one formula. Losses score 0.
 //   points = 10 * survivors
-//          +  2 * totalRecovered
+//          +  1 * people who never fell sick
 //          + 20 * max(0, parDays - daysUsed)
 //          - 20 * powerUpsUsed
-// where survivors = initialPopulation - totalDead, parDays is the level's
-// scenario duration, daysUsed is the day the run ended on, and
-// powerUpsUsed counts power-up charges spent that run (power-ups are easy
-// mode, so each one costs a little glory).
-//
-// Scores are normalized per capita so a lucky high-population roll does
-// not inflate stars: score = points / initialPopulation * 100.
-// Star thresholds against the level's target:
-//   1 star: score >= target
-//   2 stars: score >= 130% of target
-//   3 stars: score >= 160% of target
-// A messy win below target still counts as completed (unlocking the next
-// level) but banks 0 stars; region star gates then require replays for a
-// cleaner run, Candy Crush style.
-//
-// Worked example (target 800, pop 100, par 18, 0 power-ups):
-//   clean fast win (0 dead, 40 recovered, day 8): 1000+80+200 = 1280 -> 3 stars
-//   decent win (3 dead, 30 recovered, day 12):     970+60+120 = 1150 -> 2 stars
-//   rough win (15 dead, 20 recovered, day 17):     850+40+20  =  910 -> 1 star
-//   disaster win (30 dead):                        700+...     < 800 -> 0 stars
+// survivors = initialPopulation - totalDead. parDays is the solver's days for
+// this deal (so only a run that ends sooner than the best line found earns
+// the speed bonus, which is rare: recovery takes a fixed number of days), or
+// the level's fallback when the web was not dealt. Scores are per capita so
+// a big web does not pay more: score = points / initialPopulation * 100.
+// Better play never scores less: fewer cases, fewer deaths, fewer power-ups.
+// A typical win scores 1,050 to 1,090 (about 105 to 109 gold), close to what
+// it paid before round 57 (the old formula paid 2 per person who recovered,
+// which rewarded letting people fall sick; that became 1 per person kept
+// well).
 
 import { levelById } from './config/levels.js';
 import { scenarios } from './config/scenarios.js';
+import { twoStarSlack } from './config/puzzle-specs.js';
 
 export const SCORING = {
     perSurvivor: 10,
-    perRecovered: 2,
+    perKeptWell: 1,
     perDayUnderPar: 20,
     perPowerUp: 20,
     perCapitaBase: 100,
-    twoStarRatio: 1.3,
-    threeStarRatio: 1.6,
+    speedGrace: 0,
 };
 
 // Funding (grant) awards per completed level:
@@ -90,12 +93,19 @@ export function lockReason(save, levels, regions, levelId) {
     return null;
 }
 
-// Par days: a level's tuned parDays when set (src/config/levels.js),
-// otherwise its scenario duration.
+// Par days for the score's speed bonus when a web was not dealt: a level's
+// parDays when set (src/config/levels.js), otherwise its scenario duration.
 export function parDaysFor(level) {
     if (level && level.tuning && level.tuning.parDays != null) return level.tuning.parDays;
     const scenario = level && scenarios[level.scenarioId];
     return scenario ? scenario.duration : 0;
+}
+
+// The day count the speed bonus is measured from on this run: the solver's
+// days for the deal plus the grace, or the level's fallback.
+export function speedParDays(stats, level) {
+    if (stats && stats.par && stats.par.days != null) return stats.par.days + SCORING.speedGrace;
+    return parDaysFor(level);
 }
 
 // Raw points for one run. `stats` is the game-state stats object plus two
@@ -108,17 +118,12 @@ export function calculatePoints(outcome, stats, level) {
     const pop = stats.initialPopulation || 0;
     if (pop <= 0) return 0;
     const survivors = Math.max(0, pop - (stats.totalDead || 0));
-    const recovered = stats.totalRecovered || 0;
-    const parDays = parDaysFor(resolved);
+    const keptWell = Math.max(0, pop - (stats.totalInfected || 0));
+    const parDays = speedParDays(stats, resolved);
     const daysUsed = stats.daysUsed == null ? parDays : stats.daysUsed;
     const speedBonus = SCORING.perDayUnderPar * Math.max(0, parDays - daysUsed);
     const powerUpPenalty = SCORING.perPowerUp * (stats.powerUpsUsed || 0);
-    return (
-        SCORING.perSurvivor * survivors +
-        SCORING.perRecovered * recovered +
-        speedBonus -
-        powerUpPenalty
-    );
+    return SCORING.perSurvivor * survivors + SCORING.perKeptWell * keptWell + speedBonus - powerUpPenalty;
 }
 
 // Per-capita score (0-~1500 scale) for one run.
@@ -128,21 +133,42 @@ export function calculateScore(outcome, stats, level) {
     return (calculatePoints(outcome, stats, level) / pop) * SCORING.perCapitaBase;
 }
 
-// Stars from score vs the level's target. `level` may be a level object or
-// a level id (resolved via LEVELS). A contained win below target still
-// counts as completed but earns 0 stars.
-export function calculateStars(outcome, stats, level) {
-    if (outcome !== 'contained') return 0;
-    const resolved = typeof level === 'string' ? levelById(level) : level;
-    const target = (resolved && resolved.target) || 0;
-    if (target <= 0) return 1; // no target configured: any win gets 1 star
-    const score = calculateScore(outcome, stats, resolved);
-    if (score >= target * SCORING.threeStarRatio) return 3;
-    if (score >= target * SCORING.twoStarRatio) return 2;
-    if (score >= target) return 1;
-    return 0;
+// Stars for a result against par. result = { outcome, cases, deaths,
+// population }, par = { cases, deaths } or null. Without a par (a web that
+// was not dealt) any win is 1 star.
+export function starsAgainstPar(result, par) {
+    if (!result || result.outcome !== 'contained') return 0;
+    if (!par) return 1;
+    const cases = result.cases || 0;
+    const deaths = result.deaths || 0;
+    if (cases < par.cases || (cases === par.cases && deaths <= (par.deaths || 0))) return 3;
+    if (cases <= par.cases + twoStarSlack(result.population || 0)) return 2;
+    return 1;
 }
 
+// Stars for a finished run. stats.par is put there when the level is dealt
+// (instantiate in src/sim/solver.js). `level` is not needed any more and is
+// kept so callers need not change.
+export function calculateStars(outcome, stats, _level) {
+    return starsAgainstPar({ outcome, cases: stats.totalInfected, deaths: stats.totalDead, population: stats.initialPopulation }, stats.par || null);
+}
+
+// Round 55 (Adam): points turn into gold at a fixed rate, and gold buys the
+// power-ups. Every POINTS_PER_GOLD points of a win's score is 1 gold, so a
+// better run always pays more (a typical win scores 900 to 1100: about 90 to
+// 110 gold). A loss scores nothing and pays nothing.
+export const POINTS_PER_GOLD = 10;
+
+export function goldForScore(score) {
+    return Math.max(0, Math.floor((Number(score) || 0) / POINTS_PER_GOLD));
+}
+
+export function goldAward(outcome, stats, level) {
+    return goldForScore(calculateScore(outcome, stats, level));
+}
+
+// The old star based award (75, 100, 125). No longer paid; kept so old
+// reports and tests that quote it still read.
 export function fundingAward(stars) {
     if (stars <= 0) return 0;
     return FUNDING_RULES.baseAward + FUNDING_RULES.perStarBonus * stars;
@@ -163,8 +189,9 @@ export function recordCompletion(save, levelId, outcome, stats) {
     const stars = calculateStars(outcome, stats, level);
     const prev = levelRecord(save, levelId);
     const next = {
+        ...save, // newer save fields (settings, upgrades, goals, daily) pass through
         version: save.version,
-        funding: save.funding + fundingAward(stars),
+        funding: save.funding + goldAward(outcome, stats, levelId),
         livesSaved: save.livesSaved + livesSavedForRun(outcome, stats),
         levels: { ...save.levels },
         powerups: { ...(save.powerups || {}) },
@@ -173,6 +200,7 @@ export function recordCompletion(save, levelId, outcome, stats) {
     if (outcome === 'contained') {
         const deaths = stats.totalDead;
         next.levels[levelId] = {
+            ...(save.levels[levelId] || {}), // keeps clear badges set elsewhere
             stars: Math.max(prev.stars, stars),
             completed: true,
             bestDeaths: prev.bestDeaths === null ? deaths : Math.min(prev.bestDeaths, deaths),

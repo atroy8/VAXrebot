@@ -1,0 +1,122 @@
+# Build the iOS app and upload it to TestFlight.
+#
+# Manual only: it runs when someone presses "Run workflow" on the Actions tab,
+# never on a push. It needs the four secrets below (store/RELEASE.md, step 5)
+# and fails at the "Check secrets" step with a clear message if one is missing.
+#
+#   ASC_KEY_ID       App Store Connect API key id, 10 characters
+#   ASC_ISSUER_ID    App Store Connect issuer id, a UUID
+#   ASC_API_KEY_P8   the whole text of the downloaded AuthKey_XXXXXXXXXX.p8 file
+#   APPLE_TEAM_ID    Apple Developer team id, 10 characters
+#
+# Signing is automatic: Xcode uses the API key to create the distribution
+# certificate and provisioning profile in the Apple account, so there is no
+# certificate to export and no profile to store.
+#
+# This workflow was written without access to a Mac or an Apple account and
+# has not been run yet. Expect to fix a detail or two on the first run.
+name: iOS TestFlight
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_number:
+        description: 'Build number (leave empty to use the run number)'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-testflight
+  cancel-in-progress: false
+
+jobs:
+  testflight:
+    name: Build, sign and upload
+    # macOS 26 ships Xcode 26, which Capacitor 8 and the App Store both need.
+    # If GitHub renames the image, use the newest macOS runner available.
+    runs-on: macos-26
+    timeout-minutes: 45
+    env:
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      ASC_API_KEY_P8: ${{ secrets.ASC_API_KEY_P8 }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      BUILD_NUMBER: ${{ inputs.build_number || github.run_number }}
+    steps:
+      - name: Check secrets
+        run: |
+          missing=""
+          for name in ASC_KEY_ID ASC_ISSUER_ID ASC_API_KEY_P8 APPLE_TEAM_ID; do
+            if [ -z "${!name}" ]; then missing="$missing $name"; fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing repository secrets:$missing. See store/RELEASE.md, step 5."
+            exit 1
+          fi
+
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build the web app and sync it into the iOS project
+        run: npm run build:ios
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Write the App Store Connect API key
+        run: |
+          mkdir -p "$RUNNER_TEMP/keys"
+          printf '%s\n' "$ASC_API_KEY_P8" > "$RUNNER_TEMP/keys/AuthKey_${ASC_KEY_ID}.p8"
+          chmod 600 "$RUNNER_TEMP/keys/AuthKey_${ASC_KEY_ID}.p8"
+
+      - name: Archive
+        run: |
+          xcodebuild archive \
+            -project ios/App/App.xcodeproj \
+            -scheme App \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/GalacticOutbreak.xcarchive" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$RUNNER_TEMP/keys/AuthKey_${ASC_KEY_ID}.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            CODE_SIGN_STYLE=Automatic \
+            CURRENT_PROJECT_VERSION="$BUILD_NUMBER"
+
+      - name: Export and upload to TestFlight
+        run: |
+          sed "s/__TEAM_ID__/$APPLE_TEAM_ID/" ios/App/ExportOptions.plist > "$RUNNER_TEMP/ExportOptions.plist"
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/GalacticOutbreak.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -exportPath "$RUNNER_TEMP/export" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$RUNNER_TEMP/keys/AuthKey_${ASC_KEY_ID}.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+
+      - name: Remove the API key
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/keys"
+
+      - name: Summary
+        run: |
+          echo "Uploaded build $BUILD_NUMBER of version $(node -p "require('./package.json').version")." >> "$GITHUB_STEP_SUMMARY"
+          echo "It appears in App Store Connect, TestFlight, after 5 to 30 minutes of processing." >> "$GITHUB_STEP_SUMMARY"

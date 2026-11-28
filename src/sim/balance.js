@@ -2,6 +2,9 @@
 // reports win rates and stars. Pure and seeded, so results are repeatable
 // and usable in tests (tests/balance.test.js) and from the CLI
 // (`npm run balance`, see scripts/balance.mjs).
+// Round 57: a run is a deal (src/sim/dealer.js). The seed picks the web the
+// dealer deals, and nothing after the deal is random except the choices of
+// the bots that tap at random (beginner, random), which are seeded too.
 //
 // Bots:
 //   passive - never acts. Must never earn a 'contained' win.
@@ -13,38 +16,28 @@
 //   smart   - a reasonable player: isolate the sick, cut their links to
 //             healthy people, vaccinate the people next in line, then the
 //             best-connected healthy people. Not optimal, just sensible.
-import { rollLevelRules } from '../config/difficulty-roll.js';
 import { tools } from '../config/tools.js';
 import { LEVELS } from '../config/levels.js';
-import { buildOutbreak } from './setup.js';
-import { initGameState } from './state.js';
+import { dealLevelCached, startDeal } from './dealer.js';
 import { canUseTool, toolDailyLimit } from './engine.js';
 import { applyNodeTool, severLink, advanceDay, neighbors, allActionsSpent } from './actions.js';
 import { calculateStars, calculateScore } from '../progress.js';
+import { maskedLink, linkLocked, hubContacts } from './mechanics.js';
+import { mulberry32 } from './rng.js';
 
-export function mulberry32(seed) {
-    let a = seed >>> 0;
-    return () => {
-        a = (a + 0x6d2b79f5) >>> 0;
-        let t = a;
-        t = Math.imul(t ^ (t >>> 15), t | 1);
-        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-    };
-}
+export { mulberry32 };
 
-// Build a level exactly the way game.js does, but with an injected rng.
-export function buildRun(level, rng) {
-    // Same per-play roll as the game: no picker, threat rises toward each prize box.
-    const { scenario, difficulty } = rollLevelRules(level, rng);
-    const [lo, hi] = scenario.populationRange;
-    const population = lo + Math.floor(rng() * (hi - lo + 1));
-    const state = initGameState(tools, population);
-    const out = buildOutbreak({ scenario, population, variant: level.variant || null, rng });
-    state.stats.totalInfected += out.initialCases;
-    state.envoyId = out.envoyId;
-    state.superSpreaderId = out.superSpreaderId;
-    return { scenario, difficulty, state, network: { nodes: out.nodes, links: out.links } };
+const nodeId = (ref) => (ref && typeof ref === 'object' ? ref.id : ref);
+
+// Build a level exactly the way game.js does: deal it (src/sim/dealer.js)
+// and open a playable copy. `seed` is the deal's seed; `meta` is
+// { gentle, upgrades } as the game applies them (src/config/meta-rules.js).
+// Deals are cached, so the four bots play the same web for the same seed.
+export function buildRun(level, seed, meta = null) {
+    // A dice function (the old signature) is read once for the deal's seed.
+    const dealSeed = typeof seed === 'function' ? Math.floor(seed() * 4294967296) : seed;
+    const deal = dealLevelCached(level, dealSeed >>> 0, meta ? { meta } : {});
+    return startDeal(deal, tools);
 }
 
 const degree = (network, id) => neighbors(network, id).length;
@@ -62,13 +55,16 @@ function tryNode(run, toolId, node) {
     const { allowed } = canUseTool(run.state, tools, toolId, run.difficulty, node);
     if (!allowed) return false;
     applyNodeTool(run.state, tools, toolId, node);
+    run.trace?.push({ toolId, node }); // src/sim/hint.js reads the bot's moves
     return true;
 }
 function tryLink(run, link) {
     if (run.difficulty.toolkit && !run.difficulty.toolkit.includes('severLink')) return false;
+    if (linkLocked(link, run.network)) return false; // the place that must stay open
     const { allowed } = canUseTool(run.state, tools, 'severLink', run.difficulty);
     if (!allowed) return false;
     severLink(run.state, run.network, link);
+    run.trace?.push({ toolId: 'severLink', link });
     return true;
 }
 
@@ -89,7 +85,8 @@ function handleVariant(run, { thorough }) {
     const map = byId(net);
     const carrier = run.state.superSpreaderId != null ? map.get(run.state.superSpreaderId) : null;
     if (carrier && carrier.state === 'infected') {
-        tryNode(run, 'quarantine', carrier);
+        // Isolating the carrier only helps while they still threaten someone.
+        if (neighbors(net, carrier.id).some((nb) => map.get(nb.id)?.state === 'healthy')) tryNode(run, 'quarantine', carrier);
         if (carrier.state === 'infected') {
             const cuts = neighbors(net, carrier.id).filter((nb) => map.get(nb.id)?.state === 'healthy');
             cuts.sort((a, b) => degree(net, b.id) - degree(net, a.id));
@@ -119,22 +116,55 @@ function handleVariant(run, { thorough }) {
     }
 }
 
+// Known cases the player can see: the sick, and carriers a test has found
+// (state 'exposed', later planets). The bots only ever read node.state, the
+// same thing the player sees, so they cannot peek at hidden carriers.
+const hot = (n) => !!n && (n.state === 'infected' || n.state === 'exposed');
+const offers = (run, toolId) => !run.difficulty.toolkit || run.difficulty.toolkit.includes(toolId);
+
+// Contact tracing (levels with the Test tool): people who look healthy and
+// have a known case among their contacts, the ones with the most such
+// contacts first, then the best connected.
+export function tracingTargets(network) {
+    const map = byId(network);
+    const out = [];
+    for (const n of network.nodes) {
+        if (n.removed || n.state !== 'healthy' || n.testedClear) continue;
+        const cases = neighbors(network, n.id).filter((x) => hot(map.get(x.id))).length;
+        if (cases > 0) out.push({ node: n, cases });
+    }
+    out.sort((a, b) => b.cases - a.cases || degree(network, b.node.id) - degree(network, a.node.id) || a.node.id - b.node.id);
+    return out.map((x) => x.node);
+}
+
 export const BOTS = {
     passive() {},
     beginner(run, rng) {
         handleVariant(run, { thorough: false });
         const net = run.network;
         const map = byId(net);
-        const sick = () => net.nodes.filter((n) => n.state === 'infected');
+        // A new player tests some contacts of the sick, in no special order.
+        if (offers(run, 'test')) for (const n of shuffled(tracingTargets(net), rng)) tryNode(run, 'test', n);
+        const sick = () => net.nodes.filter(hot);
         const healthyContacts = () => {
             const out = [];
             for (const n of sick()) for (const nb of neighbors(net, n.id)) if (map.get(nb.id)?.state === 'healthy') out.push(nb);
             return out;
         };
-        for (const c of shuffled(healthyContacts(), rng)) {
+        // Lines a cut can reach: not those of a place that must stay open.
+        const cuttable = () => {
+            const all = healthyContacts();
+            return net.nodes.some((n) => n.hub) ? all.filter((c) => !linkLocked(c.link, net)) : all;
+        };
+        for (const c of shuffled(cuttable(), rng)) {
             if (net.links.includes(c.link) && !tryLink(run, c.link)) break;
         }
         for (const n of shuffled(sick(), rng)) tryNode(run, 'quarantine', n);
+        // A new player hands masks to the sick and the people around them.
+        if (offers(run, 'mask')) {
+            for (const n of shuffled(sick(), rng)) tryNode(run, 'mask', n);
+            for (const c of shuffled(healthyContacts(), rng)) tryNode(run, 'mask', map.get(c.id));
+        }
         const front = [...new Set(healthyContacts().map((c) => c.id))];
         for (const id of shuffled(front, rng)) tryNode(run, 'vaccinate', map.get(id));
     },
@@ -150,47 +180,105 @@ export const BOTS = {
             } else tryNode(run, toolId, live[Math.floor(rng() * live.length)]);
         }
     },
+    // Round 57: under predictable spread a red line is a certainty, so the
+    // sensible player thinks in people, not lines: a person is only safe
+    // tonight when EVERY red line to them is dealt with. Isolate the sick who
+    // threaten the most people, vaccinate the people with the most red lines
+    // (one dose does the work of several cuts), then spend cuts on whoever
+    // can be saved completely, cheapest first. Still one day at a time and
+    // never looking ahead: sensible, not optimal.
     smart(run) {
         handleVariant(run, { thorough: true });
         const net = run.network;
         const map = byId(net);
-        const sick = net.nodes.filter((n) => n.state === 'infected');
+        // Travellers (later planets): a sick one will carry it to a new
+        // group tonight, so they are isolated before anyone else.
+        const roamers = net.nodes.filter((n) => n.traveller && !n.removed);
+        for (const n of roamers) if (hot(n)) tryNode(run, 'quarantine', n);
+        // 0. Contact tracing: test the contacts of known cases first, so
+        // the carriers found today can be isolated and cut off today.
+        if (offers(run, 'test')) for (const n of tracingTargets(net)) tryNode(run, 'test', n);
         const atRisk = (n) => n && n.state === 'healthy';
         const exposure = (id) => neighbors(net, id).filter((x) => atRisk(map.get(x.id))).length;
         // 1. Isolate the sick people with the most healthy contacts.
-        for (const n of [...sick].sort((a, b) => exposure(b.id) - exposure(a.id))) {
+        for (const n of net.nodes.filter(hot).sort((a, b) => exposure(b.id) - exposure(a.id) || a.id - b.id)) {
             if (exposure(n.id) > 0) tryNode(run, 'quarantine', n);
         }
-        // 2. Cut remaining links from the sick to healthy people, busiest first.
-        const cuts = [];
-        for (const n of net.nodes.filter((x) => x.state === 'infected')) {
-            for (const nb of neighbors(net, n.id)) if (atRisk(map.get(nb.id))) cuts.push(nb);
+        // Who is in danger tonight, and through which lines. A masked line
+        // that has not charged yet is tomorrow's problem.
+        const front = () => {
+            const out = new Map();
+            for (const n of net.nodes.filter(hot)) {
+                for (const nb of neighbors(net, n.id)) {
+                    const other = map.get(nb.id);
+                    if (!atRisk(other)) continue;
+                    if (maskedLink(n, other) && !nb.link.charged) continue;
+                    if (!out.has(other.id)) out.set(other.id, []);
+                    out.get(other.id).push(nb.link);
+                }
+            }
+            return out;
+        };
+        const onward = (id) => neighbors(net, id).filter((x) => atRisk(map.get(x.id))).length;
+        // Keep it open: the hub's own contacts matter most, since the hub's
+        // lines cannot be cut once the infection is next to it.
+        const gates = hubContacts(net);
+        const gate = (id) => (gates.has(id) || map.get(id)?.hub ? 1 : 0);
+        // 2. Vaccinate the people with the most red lines.
+        for (const [id] of [...front()].sort((a, b) => gate(b[0]) - gate(a[0]) || b[1].length - a[1].length || onward(b[0]) - onward(a[0]) || a[0] - b[0])) {
+            if (!tryNode(run, 'vaccinate', map.get(id))) break;
         }
-        cuts.sort((a, b) => degree(net, b.id) - degree(net, a.id));
-        for (const c of cuts) tryLink(run, c.link);
-        // 3. Vaccinate healthy people next to the sick, best connected first.
-        const front = new Set();
-        for (const n of net.nodes.filter((x) => x.state === 'infected')) {
-            for (const nb of neighbors(net, n.id)) if (atRisk(map.get(nb.id))) front.add(nb.id);
+        // 3. Cuts on whoever can be saved completely, cheapest first, the
+        // best connected first among equals.
+        const cutsLeft = () => (offers(run, 'severLink') && canUseTool(run.state, tools, 'severLink', run.difficulty).allowed ? toolDailyLimit(tools.severLink, run.difficulty, 'severLink') - run.state.dailyUsage.severLink : 0);
+        for (const [id, links] of [...front()].sort((a, b) => gate(b[0]) - gate(a[0]) || a[1].length - b[1].length || onward(b[0]) - onward(a[0]) || a[0] - b[0])) {
+            if (links.some((l) => linkLocked(l, net))) continue;
+            if (links.length > cutsLeft()) continue;
+            for (const l of links) tryLink(run, l);
         }
-        for (const id of [...front].sort((a, b) => degree(net, b) - degree(net, a))) tryNode(run, 'vaccinate', map.get(id));
-        // 4. Spare doses go to the best-connected healthy people (hubs).
-        const hubs = net.nodes.filter(atRisk).sort((a, b) => degree(net, b.id) - degree(net, a.id));
-        for (const n of hubs) if (!tryNode(run, 'vaccinate', n)) break;
+        // 4. Masks buy a night: first the sick who still threaten someone,
+        // then the people still in danger.
+        if (offers(run, 'mask')) {
+            const still = front();
+            const threat = new Map();
+            for (const links of still.values()) {
+                for (const l of links) {
+                    const a = map.get(nodeId(l.source));
+                    const b = map.get(nodeId(l.target));
+                    const sick = hot(a) ? a : b;
+                    threat.set(sick, (threat.get(sick) || 0) + 1);
+                }
+            }
+            for (const [n] of [...threat].sort((a, b) => b[1] - a[1] || a[0].id - b[0].id)) tryNode(run, 'mask', n);
+            for (const id of front().keys()) tryNode(run, 'mask', map.get(id));
+        }
+        // 5. Spare cuts still slow nothing by themselves, but a spare dose
+        // helps: healthy travellers (tomorrow's bridge), then the best
+        // connected healthy people next to the outbreak.
+        for (const n of roamers) if (atRisk(n)) tryNode(run, 'vaccinate', n);
+        const near = net.nodes.filter((n) => atRisk(n) && onward(n.id) > 0).sort((a, b) => degree(net, b.id) - degree(net, a.id) || a.id - b.id);
+        for (const n of near) if (!tryNode(run, 'vaccinate', n)) break;
     },
 };
 
 // Play one run to the end. Returns { outcome, stars, score, day, deaths }.
+// The seed picks the deal; the bots' own random choices use a stream from
+// the same seed, so a run is repeatable.
 export function playRun(level, bot, seed) {
-    const rng = mulberry32(seed);
-    const run = buildRun(level, rng);
+    return playDeal(dealLevelCached(level, seed >>> 0), bot, seed, level);
+}
+
+// The same on a deal already in hand (scripts/tune-puzzles.mjs).
+export function playDeal(deal, bot, seed = 1, level = null) {
+    const rng = mulberry32(seed ^ 0x5bd1e995);
+    const run = startDeal(deal, tools);
     let result = null;
     for (let guard = 0; guard < 60 && !result; guard++) {
         BOTS[bot](run, rng);
-        result = advanceDay(run.state, run.network, { scenario: run.scenario, difficulty: run.difficulty, rng }).result;
+        result = advanceDay(run.state, run.network, { scenario: run.scenario, difficulty: run.difficulty }).result;
     }
     const stats = { ...run.state.stats, daysUsed: run.state.day };
-    return { outcome: result, stars: calculateStars(result, stats, level), score: calculateScore(result, stats, level), day: run.state.day, deaths: stats.totalDead, recovered: stats.totalRecovered, pop: stats.initialPopulation };
+    return { outcome: result, stars: calculateStars(result, stats, level), score: calculateScore(result, stats, level), day: run.state.day, deaths: stats.totalDead, cases: stats.totalInfected, par: stats.par || null, recovered: stats.totalRecovered, pop: stats.initialPopulation };
 }
 
 // Summary per level for one bot: win rate, mean stars, outcome counts.

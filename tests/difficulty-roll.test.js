@@ -30,22 +30,27 @@ describe('difficulty rolls per play and rises toward each prize box', () => {
         }
     });
 
-    it('two plays of the same level can differ, and stay near the tuned baseline', () => {
+    // Round 57: the threat no longer wobbles the spread (there is no spread
+    // rate) or anything else per play. It is fixed by the level's place on
+    // the road to the next prize box, whatever dice are handed in.
+    it('two plays of the same level have the same rules, and the threat stays in its band', () => {
         const rng = mulberry32(7);
         for (const level of LEVELS) {
             const base = levelRules(level);
             const seen = new Set();
-            for (let k = 0; k < 20; k++) {
+            for (let k = 0; k < 5; k++) {
                 const r = rollLevelRules(level, rng);
-                seen.add(r.difficulty.transmissionMultiplier);
-                const ratio = r.difficulty.transmissionMultiplier / base.difficulty.transmissionMultiplier;
-                expect(ratio).toBeGreaterThanOrEqual(0.84);
-                expect(ratio).toBeLessThanOrEqual(1.16);
-                expect(Math.abs(r.scenario.caseCapFraction - base.scenario.caseCapFraction)).toBeLessThanOrEqual(0.0201);
+                seen.add(JSON.stringify(r));
+                expect(r.difficulty.transmissionMultiplier).toBe(base.difficulty.transmissionMultiplier);
+                expect(r.scenario.caseCapFraction).toBe(base.scenario.caseCapFraction);
+                const band = threatBand(LEVELS.indexOf(level));
+                expect(r.threat).toBeGreaterThanOrEqual(band.lo);
+                expect(r.threat).toBeLessThanOrEqual(band.hi);
+                expect(r.scenario.capSlack).toBeGreaterThanOrEqual(1);
                 expect(r.pips).toBeGreaterThanOrEqual(1);
                 expect(r.pips).toBeLessThanOrEqual(5);
             }
-            expect(seen.size).toBeGreaterThan(1);
+            expect(seen.size).toBe(1);
         }
     });
 
@@ -62,7 +67,9 @@ describe('difficulty rolls per play and rises toward each prize box', () => {
 
     it('threat lines are plain and have no em dash', () => {
         for (const t of [0, 0.5, 1]) {
-            expect(threatLine(t)).toMatch(/^This outbreak/);
+            // Round 57: the line is about the case cap, not about speed.
+            expect(threatLine(t)).toMatch(/case cap/);
+            expect(threatLine(t)).not.toMatch(/spreading/);
             expect(threatLine(t)).not.toContain('—');
         }
     });

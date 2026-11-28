@@ -1,0 +1,73 @@
+/* One screen briefing (wide audience pass). By default the briefing shows
+   the level name, one line of situation, any rule-changing twist, the tools
+   as chips, the threat pips and a big Begin button, with no scrolling on a
+   390 x 844 phone. The lesson, the disease profile, the star goal and the
+   longer explanations sit behind More, which opens in place. */
+/* The short card sits in the middle of the screen, nearer the thumb. */
+#briefing-screen .briefing-content { margin-top: auto; margin-bottom: auto; }
+
+#briefing-screen .briefing-mentor {
+    margin: -4px 0 12px;
+    font-size: 0.95rem;
+    line-height: 1.35;
+    color: var(--ai-700, #1b3a7a);
+}
+#briefing-screen .briefing-mentor[hidden],
+#briefing-screen .briefing-mentor:empty { display: none; }
+
+/* The situation is one plain line; its old label was a second heading. */
+#briefing-screen .briefing-description > strong { display: none; }
+#briefing-screen .briefing-description p { margin: 0; font-size: 1.05rem; line-height: 1.4; }
+
+/* A twist that changes the rules stays in view as one line. Its longer
+   explanation, and why the toolkit is what it is, open with More. */
+#briefing-screen .briefing-content:not(.more-open) .variant-text,
+#briefing-screen .briefing-content:not(.more-open) .kit-why { display: none; }
+
+#briefing-screen .threat-box {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    align-items: center;
+    gap: 4px 12px;
+    margin: 0 0 var(--space-16, 16px);
+    padding: 10px 14px;
+}
+#briefing-screen .threat-box .threat-meter { margin: 0; }
+#briefing-screen .threat-box .threat-line { grid-column: 1 / -1; margin: 0; font-size: 0.92rem; line-height: 1.35; }
+
+#briefing-screen .briefing-more { margin: 0 0 var(--space-16, 16px); }
+#briefing-screen .briefing-more-summary {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    min-height: 44px;
+    padding: 0 16px;
+    border-radius: 999px;
+    border: 2px solid var(--ai-200, #c7d6f0);
+    color: var(--ai-700, #1b3a7a);
+    font-weight: 700;
+    cursor: pointer;
+    list-style: none;
+    -webkit-tap-highlight-color: transparent;
+}
+#briefing-screen .briefing-more-summary::-webkit-details-marker { display: none; }
+#briefing-screen .briefing-more-summary::after {
+    content: '';
+    width: 8px;
+    height: 8px;
+    border-right: 3px solid currentColor;
+    border-bottom: 3px solid currentColor;
+    rotate: 45deg;
+    translate: 0 -2px;
+    transition: rotate 0.2s ease;
+}
+#briefing-screen .briefing-more[open] .briefing-more-summary::after { rotate: 225deg; translate: 0 2px; }
+#briefing-screen .briefing-more[open] .briefing-more-summary { margin-bottom: var(--space-16, 16px); }
+#briefing-screen .briefing-more > .lesson-card,
+#briefing-screen .briefing-more > .disease-dynamics { margin-bottom: var(--space-16, 16px); }
+#briefing-screen .briefing-more > .star-goal { margin: 0 0 4px; font-size: 0.92rem; }
+
+/* Begin is the one big thing to tap; the way back is smaller beside it. */
+#briefing-screen .briefing-actions #start-simulation { flex: 1.7; min-height: 60px; font-size: 1.1rem; }
+#briefing-screen .briefing-actions #back-to-menu { flex: 1; min-height: 60px; padding-left: 8px; padding-right: 8px; }

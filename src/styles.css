@@ -1055,6 +1055,39 @@
     line-height: 1.45;
 }
 
+/* Item 29 (b): one quiet line of real public health history from the land. */
+.globe-sheet-note {
+    font-size: 0.85rem;
+    font-style: italic;
+    color: #5a6478;
+    margin: -8px 0 16px;
+    padding-left: 10px;
+    border-left: 3px solid #e0c27a;
+    line-height: 1.4;
+}
+.globe-sheet-land {
+    display: block;
+    font-style: normal;
+    font-weight: 700;
+    font-size: 0.75rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #8a6a1f;
+    margin-bottom: 2px;
+}
+/* Item 29 (c): a citizen of the land beside its name. */
+.globe-sheet-land {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.globe-sheet-citizen {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    flex: none;
+}
+
 .globe-sheet-close {
     position: absolute;
     top: 10px;

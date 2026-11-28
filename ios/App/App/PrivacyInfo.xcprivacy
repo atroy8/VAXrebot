@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  App privacy manifest for VAXrebot (Galactic Outbreak).
+
+  Apple reads this file when a build is uploaded and folds it into the
+  privacy report that Xcode makes from an archive (Product, Archive, then
+  Generate Privacy Report in the Organizer).
+
+  It describes only the app's own code. Today that code collects nothing,
+  tracks nobody and calls none of Apple's "required reason" APIs: progress
+  lives in the web view's local storage, which belongs to WebKit and needs no
+  entry here. Capacitor and the Haptics plugin ship their own (empty)
+  manifests. When the AdMob and RevenueCat SDKs arrive, they bring their own
+  manifests too, so leave this file as it is unless the game's own Swift code
+  starts using UserDefaults, file timestamps, disk space or boot time.
+  tests/round60-privacy-manifest.test.js keeps it in step with
+  store/app-privacy.md and src/config/ads.js.
+-->
+<plist version="1.0">
+<dict>
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array/>
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array/>
+</dict>
+</plist>

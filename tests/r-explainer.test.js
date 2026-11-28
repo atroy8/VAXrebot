@@ -33,10 +33,10 @@ describe('R card text (round 16)', () => {
 
     it('answers the round 13 question: says why the game R can be higher than the briefing R0', () => {
         const high = rExplainer({ r: 5.5, r0: '1.5 - 2.0' });
-        expect(all(high)).toMatch(/R₀ 1\.5 - 2\.0/);
-        expect(all(high)).toMatch(/more crowded than a real town/);
+        expect(all(high)).toMatch(/R₀ is 1\.5 - 2\.0/);
+        expect(all(high)).toMatch(/more contacts than most/);
         // Near the estimate there is no need to explain a gap.
-        expect(all(rExplainer({ r: 2.2, r0: '1.5 - 2.0' }))).not.toMatch(/crowded/);
+        expect(all(rExplainer({ r: 2.2, r0: '1.5 - 2.0' }))).not.toMatch(/more contacts/);
         // No estimate: no comparison line.
         expect(rExplainer({ r: 2 }).lines).toHaveLength(2);
     });

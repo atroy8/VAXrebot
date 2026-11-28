@@ -6,6 +6,7 @@ import { LEVELS } from '../src/config/levels.js';
 import { levelRules } from '../src/config/level-rules.js';
 import { TOOLKITS, CLASSIC_TOOLS, SLOT_TOOLKITS, toolkitCard, toolsOf, toolOpenDays, DEFAULT_TOOL_DAYS } from '../src/config/toolkits.js';
 import { lessonFits } from '../src/config/campaign.js';
+import { MECHANIC_TOOLS } from '../src/config/planet-mechanics.js';
 import { tools } from '../src/config/tools.js';
 import { toolChips } from '../src/ui/game-screen-model.js';
 import { toolkitMarkup } from '../src/ui/briefing.js';
@@ -17,25 +18,26 @@ const read = (p) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
 const byKit = (id) => LEVELS.filter((l) => l.toolkit.id === id);
 
 describe('every level has a toolkit (item 16)', () => {
-    it('each of the 80 levels names 1 to 3 classic tools and a reason', () => {
+    // Wide audience round: later planets may swap in Test or Mask (MECHANIC_TOOLS).
+    it('each of the 80 levels names 1 to 3 tools and a reason', () => {
         expect(LEVELS).toHaveLength(80);
         for (const level of LEVELS) {
             expect(level.toolkit, level.id).toBeTruthy();
             expect(level.toolkit.tools.length).toBeGreaterThanOrEqual(1);
             expect(level.toolkit.tools.length).toBeLessThanOrEqual(3);
-            for (const t of level.toolkit.tools) expect(CLASSIC_TOOLS).toContain(t);
+            for (const t of level.toolkit.tools) expect([...CLASSIC_TOOLS, ...(level.mechanics ? MECHANIC_TOOLS : [])]).toContain(t);
             expect(level.toolkit.why.length).toBeGreaterThan(20);
         }
     });
 
     it('fits the scenario: school is Quarantine and Sever, the rollout vaccinates from day 1', () => {
-        for (const l of LEVELS.filter((x) => x.scenarioId === 'school')) expect(l.toolkit.tools.sort()).toEqual(['quarantine', 'severLink']);
+        for (const l of LEVELS.filter((x) => x.scenarioId === 'school' && !x.mechanics)) expect(l.toolkit.tools.sort()).toEqual(['quarantine', 'severLink']);
         for (const l of byKit('rollout')) {
             expect(l.toolkit.tools).toContain('vaccinate');
             const { difficulty } = levelRules(l);
             expect(toolAvailableDay(tools.vaccinate, difficulty, 'vaccinate')).toBe(1);
         }
-        for (const l of byKit('festival')) expect(l.toolkit.tools).toEqual(['severLink']);
+        for (const l of byKit('festival').filter((x) => !x.mechanics)) expect(l.toolkit.tools).toEqual(['severLink']);
     });
 
     it('twist levels never offer the missing tool', () => {
@@ -110,9 +112,18 @@ describe('balance bots only use the toolkit', () => {
         });
     }
 
-    it('the tuner only searches limits for kit tools', () => {
-        const src = read('scripts/tune-campaign.mjs');
-        expect(src).toContain('presetsFor(kit)');
+    // Round 57: scripts/tune-campaign.mjs is retired; scripts/tune-puzzles.mjs
+    // (src/sim/puzzle-lab.js) tunes the tool counts now.
+    it('the tuner only searches limits for kit tools', async () => {
+        const { tuningCandidates } = await import('../src/sim/puzzle-lab.js');
+        for (const level of [byKit('festival')[0], byKit('school')[0], byKit('rollout')[0]]) {
+            for (const c of tuningCandidates(level)) {
+                for (const t of CLASSIC_TOOLS) {
+                    if (level.toolkit.tools.includes(t)) expect(c.dailyLimits[t], `${level.id} ${t}`).toBeGreaterThan(0);
+                    else expect(c.dailyLimits[t], `${level.id} ${t}`).toBe(0);
+                }
+            }
+        }
     });
 });
 
@@ -132,7 +143,8 @@ describe('briefing toolkit card', () => {
 
     it('the briefing has a toolkit slot and game.js fills it on every level', () => {
         expect(read('index.html')).toContain('id="briefing-toolkit"');
-        expect(read('src/game.js')).toContain('showToolkit(level.toolkit, level.variant?.toolDays)');
+        // Round 57: the days shown are the ones in force (a tuner or an upgrade can move one).
+        expect(read('src/game.js')).toContain('showToolkit(level.toolkit, this.difficulty.toolDays || level.variant?.toolDays)');
     });
 });
 

@@ -3,8 +3,10 @@
 // No game logic here; callers pass plain data.
 import { formatR, rTone, rExplainer, rScalePos } from './game-screen-model.js';
 import { spriteFor } from '../sprites.js';
-import { toolChips, lossReason } from './game-screen-model.js';
+import { toolChips, trayChips, shopCanBuy, lossReason, titleClass } from './game-screen-model.js';
+import { POWER_UPS } from '../economy.js';
 import { threatPipsHtml } from './briefing.js';
+import { renderResultsLead } from './results-lead.js';
 
 // Small inline icons for the tool tray (no emoji on the game screen).
 const ICONS = {
@@ -14,15 +16,23 @@ const ICONS = {
         '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round" d="M4 11l8-7 8 7v9H4z"/><path fill="currentColor" d="M10 14h4v6h-4z"/></svg>',
     severLink:
         '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="18" r="3" fill="none" stroke="currentColor" stroke-width="2.4"/><circle cx="18" cy="18" r="3" fill="none" stroke="currentColor" stroke-width="2.4"/><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" d="M8 16L17 4M16 16L7 4"/></svg>',
+    // Later planets: a test tube and a face mask.
+    test:
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" d="M8 3h8M10 3v12a2.5 2.5 0 0 0 5 0V3M10 11h5"/></svg>',
+    mask:
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" d="M6 8c4-2 8-2 12 0v5c0 3-3 5-6 5s-6-2-6-5zM6 10H4a2 2 0 0 0 2 3M18 10h2a2 2 0 0 1-2 3M9 12h6"/></svg>',
     powerUp:
         '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>',
     shop:
         '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" d="M4 7h16l-1.5 12h-13zM9 7a3 3 0 0 1 6 0"/></svg>',
 };
-const TOOL_COLORS = { vaccinate: '#7c3aed', quarantine: '#f97316', severLink: '#0ea5e9' };
+const TOOL_COLORS = { vaccinate: '#7c3aed', quarantine: '#f97316', severLink: '#0ea5e9', test: '#0d9488', mask: '#2563eb' };
 
 export function renderHeader({ scenarioName, difficultyName, difficultyId, threatPips = null, day, infected, protected: protectedCount, population, paused = false, cases = null, caseCap = Infinity, r = null, actionsLeft = null, deaths = 0 }) {
-    document.getElementById('game-scenario-name').textContent = scenarioName;
+    const title = document.getElementById('game-scenario-name');
+    title.textContent = scenarioName;
+    title.className = titleClass(scenarioName);
+    title.title = scenarioName;
     const badge =
         threatPips != null
             ? `<span class="threat-badge" aria-label="Threat ${threatPips} of 5">${threatPipsHtml(threatPips)}</span>`
@@ -68,11 +78,11 @@ export function renderHeader({ scenarioName, difficultyName, difficultyId, threa
     }
 }
 
-// Bottom tool tray: one button per tool plus a Shop button. Power-ups with
-// no charges stay tappable ('empty') so a tap can open the shop.
+// Bottom tool tray: one button per tool, one per power-up the player holds,
+// plus a Shop button (round 50: empty power-ups live in the shop, not the tray).
 export function renderTools(tools, difficulty, day, dailyUsage, { charges = {}, funding = null, selected = null } = {}) {
     const toolsList = document.getElementById('tools-list');
-    const chips = toolChips(tools, difficulty, day, dailyUsage, charges);
+    const chips = trayChips(toolChips(tools, difficulty, day, dailyUsage, charges));
     const html = chips
         .map((c) => {
             const cls = ['tool-item', c.state === 'locked' || c.state === 'spent' || c.state === 'off' ? 'disabled' : '', c.state === 'off' ? 'off' : '', c.state === 'empty' ? 'empty' : '', selected === c.id ? 'selected' : '']
@@ -86,11 +96,15 @@ export function renderTools(tools, difficulty, day, dailyUsage, { charges = {}, 
                 </button>`;
         })
         .join('');
-    const shop = `<button type="button" class="tool-item shop-chip" data-tool="shop">
+    const canBuy = shopCanBuy(funding, Object.values(POWER_UPS).map((p) => p.cost));
+    const shop = `<button type="button" class="tool-item shop-chip${canBuy ? ' can-buy' : ''}" data-tool="shop">
             <span class="tool-icon">${ICONS.shop}</span>
-            <span class="tool-text"><span class="tool-name">Shop</span><span class="tool-usage">${funding == null ? 'Power-ups' : `${funding} funds`}</span></span>
+            <span class="tool-text"><span class="tool-name">Shop</span><span class="tool-usage">${funding == null ? 'Power-ups' : `${funding} gold`}</span></span>
         </button>`;
     toolsList.innerHTML = html + shop;
+    // Round 50: a tray longer than the screen pins the Shop chip at its right
+    // edge (game-screen.css), so Shop never scrolls out of reach.
+    toolsList.classList.toggle('scrolls', toolsList.scrollWidth > toolsList.clientWidth + 4);
 }
 
 // One-line hint over the network for the selected tool; empty hides it.
@@ -99,9 +113,67 @@ export function showToolHint(text) {
     if (!el) return;
     el.textContent = text || '';
     el.hidden = !text;
+    // Round 29: the newest message wins the bottom of the web. Picking a
+    // tool means the player has moved on, so toasts still showing fade out
+    // instead of sitting on top of the hint.
+    if (text) dismissToasts();
     // The hint teaches once, then gets out of the way of the network.
     clearTimeout(showToolHint.timer);
     if (text) showToolHint.timer = setTimeout(() => { el.hidden = true; }, 4500);
+}
+
+// Round 29: a toast and the tool hint share the bottom of the web on phones,
+// so whichever came second covered the other and left half a sentence
+// showing behind it. A toast now clears the hint, and a hint clears toasts.
+export function hideToolHint() {
+    const el = document.getElementById('tool-hint');
+    if (!el) return;
+    clearTimeout(showToolHint.timer);
+    el.hidden = true;
+}
+
+// Fade out every toast still on screen (see showToolHint).
+export function dismissToasts() {
+    const container = document.getElementById('notification-container');
+    if (!container) return;
+    for (const n of [...container.children]) {
+        if (n.dataset.leaving) continue;
+        clearTimeout(n._timer);
+        n.dataset.leaving = '1';
+        n.style.animation = 'fadeOutRight 0.25s forwards';
+        setTimeout(() => n.remove(), 250);
+    }
+}
+
+// Round 48: fade out one toast by its text (a line that has gone out of
+// date, such as "Quarantine opens on day 3" once day 3 has begun).
+export function dismissToast(message) {
+    const container = document.getElementById('notification-container');
+    if (!container || !message) return;
+    const text = String(message).replace(/[\p{Extended_Pictographic}\ufe0f\u200d]\s*/gu, '').trim();
+    for (const n of [...container.children]) {
+        if (n.dataset.leaving || n.textContent !== text) continue;
+        clearTimeout(n._timer);
+        n.dataset.leaving = '1';
+        n.style.animation = 'fadeOutRight 0.25s forwards';
+        setTimeout(() => n.remove(), 250);
+    }
+}
+
+// Round 52: tap feedback (info and error toasts) is about the day just
+// played. When the day turns, a line such as "Sever is used up for today"
+// would sit over a tray that says 3 left, so those fade out. Good news
+// (success) stays.
+export function dismissTapToasts() {
+    const container = document.getElementById('notification-container');
+    if (!container) return;
+    for (const n of [...container.children]) {
+        if (n.dataset.leaving || !TAP_TYPES.some((t) => n.className.includes(t))) continue;
+        clearTimeout(n._timer);
+        n.dataset.leaving = '1';
+        n.style.animation = 'fadeOutRight 0.25s forwards';
+        setTimeout(() => n.remove(), 250);
+    }
 }
 
 // Day banner (replaces the old text log): one line, fades on its own.
@@ -137,17 +209,36 @@ export function addLogEntry(day, message, important = false) {
 
 // Toasts: plain text (emoji stripped), an identical toast already on screen
 // is refreshed instead of stacked, and at most two show at once.
+const TAP_TYPES = ['notification info', 'notification error'];
+
 export function showNotification(message, type = 'info') {
     const container = document.getElementById('notification-container');
     if (!container) return;
     const text = String(message).replace(/[\p{Extended_Pictographic}\ufe0f\u200d]\s*/gu, '').trim();
+    hideToolHint();
+    // Round 38: tap feedback (info and error) is about the tap just made, so
+    // a new one replaces the last instead of stacking two lines over the web.
+    // Good news (success) stays up beside it.
+    if (type === 'info' || type === 'error') {
+        for (const n of [...container.children]) {
+            if (n.dataset.leaving || n.textContent === text || !TAP_TYPES.some((t) => n.className.includes(t))) continue;
+            clearTimeout(n._timer);
+            n.dataset.leaving = '1';
+            n.style.animation = 'fadeOutRight 0.25s forwards';
+            setTimeout(() => n.remove(), 250);
+        }
+    }
     let notification = [...container.children].find((n) => n.textContent === text && !n.dataset.leaving);
     if (!notification) {
         notification = document.createElement('div');
         notification.className = `notification ${type}`;
         notification.textContent = text;
         container.appendChild(notification);
-        while (container.children.length > 2) container.firstChild.remove();
+        // Keep at most two on screen; toasts already fading go first.
+        while (container.children.length > 2) {
+            const fading = [...container.children].find((n) => n.dataset.leaving);
+            (fading || container.firstChild).remove();
+        }
     }
     clearTimeout(notification._timer);
     notification._timer = setTimeout(() => {
@@ -157,7 +248,7 @@ export function showNotification(message, type = 'info') {
     }, 3000);
 }
 
-export function renderGameOver({ outcome, stats, difficultyId, threatPips = null, stars = 0, fundingEarned = 0, livesSaved = 0, caseCap = Infinity, tally = false, deathLines = [] }) {
+export function renderGameOver({ outcome, stats, difficultyId, threatPips = null, stars = 0, fundingEarned = 0, livesSaved = 0, caseCap = Infinity, tally = false, deathLines = [], headline = '' }) {
     const attackRate = stats.initialPopulation > 0 ? (stats.totalInfected / stats.initialPopulation) * 100 : 0;
     const caseFatalityRate = stats.totalInfected > 0 ? (stats.totalDead / stats.totalInfected) * 100 : 0;
 
@@ -189,6 +280,9 @@ export function renderGameOver({ outcome, stats, difficultyId, threatPips = null
                 : 'The simulation period has ended. Analyze the results and try a new strategy.';
 
     document.getElementById('game-over-title').textContent = title;
+    // Lean results: one sentence leads (results-headline.js) and the numbers
+    // below wait, closed, in Details. A loss has no stars or reward to show.
+    renderResultsLead({ headline, tally });
     document.getElementById('final-total-infected').textContent = stats.totalInfected;
     document.getElementById('final-total-dead').textContent = stats.totalDead;
     document.getElementById('final-total-recovered').textContent = stats.totalRecovered;
@@ -217,7 +311,7 @@ export function renderGameOver({ outcome, stats, difficultyId, threatPips = null
     // outbreak numbers folded away under a summary the player can open.
     document.getElementById('game-over-screen').classList.toggle('has-tally', !!tally);
     const statsWrap = document.getElementById('final-stats-wrap');
-    if (statsWrap) statsWrap.open = !tally;
+    if (statsWrap) statsWrap.open = true; // it sits inside Details now, which starts closed
     const tallyEl = document.getElementById('results-tally');
     if (tallyEl && !tally) {
         tallyEl.hidden = true;
@@ -229,7 +323,7 @@ export function renderGameOver({ outcome, stats, difficultyId, threatPips = null
         rewards.className = 'game-over-rewards';
         rewards.innerHTML = `
             <div class="reward-stars">${'★'.repeat(stars)}${'☆'.repeat(3 - stars)}</div>
-            <div class="reward-line">+${fundingEarned} funding earned</div>
+            <div class="reward-line">+${fundingEarned} gold earned</div>
             <div class="reward-line">${livesSaved.toLocaleString()} lives saved in this mission</div>`;
         document.getElementById('game-over-message').after(rewards);
     }
@@ -293,10 +387,10 @@ export function renderLegend() {
 // tap outside, or when the R value changes under it.
 const escapeHtml = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
-export function renderRCard({ r = null, r0 = '' } = {}) {
+export function renderRCard({ r = null, r0 = '', realR0Note = '' } = {}) {
     const card = document.getElementById('r-card');
     if (!card) return null;
-    const { value, headline, lines } = rExplainer({ r, r0 });
+    const { value, headline, lines } = rExplainer({ r, r0, realR0Note });
     const tone = rTone(r) || 'none';
     card.className = `r-card r-card--${tone}`;
     card.innerHTML = `<div class="r-card-top">

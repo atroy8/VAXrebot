@@ -72,6 +72,7 @@ import { createStorage, loadSave, writeSave } from './save.js';
 import { levelRecord } from './progress.js';
 import { LEVELS } from './config/levels.js';
 import { CHESTS } from './config/chests.js';
+import { POWER_UP_FIRST_DAY, powerUpsOpen, powerUpLockedLine } from './config/power-up-rules.js';
 
 export const POWER_UPS = {
     eureka: {
@@ -104,6 +105,9 @@ export const POWER_UPS = {
 };
 
 export const POWER_UP_IDS = Object.keys(POWER_UPS);
+
+// Round 55: power-ups open on day 3 (src/config/power-up-rules.js).
+export { POWER_UP_FIRST_DAY, powerUpsOpen, powerUpLockedLine };
 
 export function isPowerUp(id) {
     return Object.prototype.hasOwnProperty.call(POWER_UPS, id);
@@ -154,7 +158,7 @@ export function buyCharge(id) {
     const save = readSave();
     const cost = POWER_UPS[id].cost;
     if (save.funding < cost) {
-        return { ok: false, reason: `Not enough funding. ${POWER_UPS[id].name} costs ${cost}.`, save };
+        return { ok: false, reason: `Not enough gold. ${POWER_UPS[id].name} costs ${cost}.`, save };
     }
     save.funding -= cost;
     save.powerups[id] = (save.powerups[id] || 0) + 1;
@@ -262,7 +266,9 @@ function applyPay(gameApi) {
     }
     const sick = nodes
         .filter((n) => !n.removed && n.state === 'infected')
-        .sort((a, b) => (degree.get(b.id) || 0) - (degree.get(a.id) || 0))
+        // Round 57: a stable tie-break (lowest id), so the same web always
+        // sends the same people home.
+        .sort((a, b) => (degree.get(b.id) || 0) - (degree.get(a.id) || 0) || a.id - b.id)
         .slice(0, STAY_HOME.maxPeople);
     const until = (gameApi.gameState.day || 1) + STAY_HOME.days;
     for (const node of sick) {
@@ -288,7 +294,7 @@ function applyBlitz(gameApi) {
     }
     const pool = nodes
         .filter((n) => !n.removed && n.state === 'healthy')
-        .sort((a, b) => (degree.get(b.id) || 0) - (degree.get(a.id) || 0));
+        .sort((a, b) => (degree.get(b.id) || 0) - (degree.get(a.id) || 0) || a.id - b.id);
     const targets = pool.slice(0, 5);
     for (const node of targets) node.state = 'vaccinated';
     gameApi.gameState.stats.totalProtected += targets.length;
@@ -308,6 +314,10 @@ const USE_MESSAGES = {
 export function usePowerUp(id, gameApi) {
     if (!isPowerUp(id)) return { ok: false, reason: 'Unknown power-up.', save: readSave() };
     const save = readSave();
+    if (!powerUpsOpen(gameApi.gameState?.day)) {
+        gameApi.notify?.(powerUpLockedLine(), 'info');
+        return { ok: false, reason: 'Power-ups are not open yet.', save };
+    }
     if ((save.powerups[id] || 0) < 1) {
         gameApi.notify?.('No charges left. Open a supply crate or buy more in the shop.', 'error');
         return { ok: false, reason: 'No charges left.', save };

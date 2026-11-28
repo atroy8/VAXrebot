@@ -50,10 +50,14 @@ describe('How to play cards (round 26)', () => {
         expect(prop(rule('html .onboarding-card'), 'background')).not.toBe(vars['--ai-900']);
     });
 
-    it('shows once on the first level for a new player', () => {
+    // Wide audience pass: the cards no longer open by themselves. The guided
+    // first level (src/ui/coach.js) teaches on the live web instead, and the
+    // cards are the reference behind "?". See tests/wide-firstrun-coach.test.js.
+    it('is a reference behind "?", and the first level starts the coach instead', () => {
         const game = read('src/game.js');
-        expect(game).toContain('m.maybeShowOnboarding()');
+        expect(game).not.toContain('maybeShowOnboarding');
+        expect(game).toContain('m.showOnboarding()');
+        expect(game).toContain('m.startCoach(this)');
         expect(game).toContain('this.currentLevel.id === LEVELS[0].id');
-        expect(read('src/ui/onboarding.js')).toContain("localStorage.getItem(FLAG) === 'true'");
     });
 });

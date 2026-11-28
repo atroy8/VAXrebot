@@ -72,7 +72,7 @@ describe('buyCharge', () => {
     it('refuses when funding is short', () => {
         const result = buyCharge('eureka');
         expect(result.ok).toBe(false);
-        expect(result.reason).toMatch(/funding/i);
+        expect(result.reason).toMatch(/gold/i);
         expect(getCharges().eureka).toBe(0);
     });
 

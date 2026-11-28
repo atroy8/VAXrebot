@@ -39,7 +39,7 @@ export function generateRandomNetwork(n, p) {
 // no double lines between the same two people, and nobody left alone (each
 // cut off group is joined to the rest by one link), so every face on screen
 // is part of the puzzle. About 4 contacts per person on average.
-export const SMALL_WEB_MAX = 30;
+export const SMALL_WEB_MAX = 32;
 export const SMALL_WEB_DEGREE = 4;
 
 const idOf = (ref) => (ref && typeof ref === 'object' ? ref.id : ref);
@@ -84,8 +84,18 @@ export function cleanLinks(n, links, rng = Math.random) {
 //   random      festival crowds: friend groups of 3 or 4 who all know each
 //               other, joined by single mingling links. (An even random
 //               web let random tapping win a quarter of the time.)
-export function generateSmallWeb(networkType, n, rng = Math.random) {
+//
+// Wide audience round: later planets pass a higher `degree` (average
+// contacts per person, see PLANET_WEB_DEGREE in src/config/planet-mechanics.js)
+// so their diseases are truly more contagious: R0 on a web is contacts times
+// the chance per contact, and that chance is already close to 1. The extra
+// contacts keep each shape's character (more links per newcomer, a wider
+// ring, more mingling between friend groups). At the default degree no extra
+// dice are rolled, so the learning planets build the same webs per seed.
+export function generateSmallWeb(networkType, n, rng = Math.random, degree = SMALL_WEB_DEGREE) {
     const links = [];
+    // Extra links wanted per person, as a chance (each link serves two people).
+    const extra = Math.max(0, (degree - SMALL_WEB_DEGREE) / 2);
     if (networkType === 'scale-free') {
         const ends = [];
         for (let i = 1; i < Math.min(3, n); i++) {
@@ -94,7 +104,9 @@ export function generateSmallWeb(networkType, n, rng = Math.random) {
         }
         for (let i = 3; i < n; i++) {
             const picked = new Set();
-            for (let guard = 0; picked.size < 2 && guard < 20; guard++) picked.add(ends[Math.floor(rng() * ends.length)]);
+            // Two links per newcomer, or three for some on denser webs.
+            const want = extra > 0 && rng() < extra ? 3 : 2;
+            for (let guard = 0; picked.size < Math.min(want, i) && guard < 20; guard++) picked.add(ends[Math.floor(rng() * ends.length)]);
             for (const t of picked) {
                 links.push({ source: i, target: t });
                 ends.push(i, t);
@@ -107,6 +119,8 @@ export function generateSmallWeb(networkType, n, rng = Math.random) {
                 if (rng() < 0.2) target = Math.floor(rng() * n);
                 links.push({ source: i, target });
             }
+            // Denser webs: some people also know the neighbour three along.
+            if (extra > 0 && rng() < extra) links.push({ source: i, target: (i + 3) % n });
         }
     } else {
         // Festival crowd: people arrive in friend groups of 3 or 4 who all
@@ -127,6 +141,18 @@ export function generateSmallWeb(networkType, n, rng = Math.random) {
             const other = groups[Math.floor(rng() * groups.length)];
             if (other !== g) links.push({ source: pick(g), target: pick(other) });
         });
+        // Denser webs: more mingling between groups (never inside one, where
+        // everyone already knows everyone).
+        if (extra > 0 && groups.length > 1) {
+            groups.forEach((g, gi) => {
+                for (const person of g) {
+                    if (rng() >= extra) continue;
+                    let oi = Math.floor(rng() * (groups.length - 1));
+                    if (oi >= gi) oi++;
+                    links.push({ source: person, target: pick(groups[oi]) });
+                }
+            });
+        }
     }
     return cleanLinks(n, links, rng);
 }
@@ -135,8 +161,8 @@ export function generateSmallWeb(networkType, n, rng = Math.random) {
 // Webs of up to SMALL_WEB_MAX people (every campaign level since item 14)
 // use the small web shapes; bigger ones keep the original parameters
 // (m=4, k=8, p=0.15, p=0.08).
-export function generateNetwork(networkType, n, rng = Math.random) {
-    if (n <= SMALL_WEB_MAX) return generateSmallWeb(networkType, n, rng);
+export function generateNetwork(networkType, n, rng = Math.random, degree = SMALL_WEB_DEGREE) {
+    if (n <= SMALL_WEB_MAX) return generateSmallWeb(networkType, n, rng, degree || SMALL_WEB_DEGREE);
     switch (networkType) {
         case 'scale-free': return generateScaleFreeNetwork(n, 4);
         case 'small-world': return generateSmallWorldNetwork(n, 8, 0.15);

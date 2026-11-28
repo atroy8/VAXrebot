@@ -21,9 +21,9 @@ export const CLASSIC_TOOLS = Object.freeze(['vaccinate', 'quarantine', 'severLin
 // First day of each classic tool when nothing brings it forward. Mirrors
 // availableDay in src/config/tools.js (kept here to avoid an import cycle
 // through economy.js; tests/toolkits.test.js checks they agree).
-export const DEFAULT_TOOL_DAYS = Object.freeze({ vaccinate: 2, quarantine: 3, severLink: 1 });
+export const DEFAULT_TOOL_DAYS = Object.freeze({ vaccinate: 2, quarantine: 3, severLink: 1, test: 2, mask: 1 });
 
-export const TOOL_LABELS = Object.freeze({ vaccinate: 'Vaccinate', quarantine: 'Quarantine', severLink: 'Sever' });
+export const TOOL_LABELS = Object.freeze({ vaccinate: 'Vaccinate', quarantine: 'Quarantine', severLink: 'Sever', test: 'Test', mask: 'Mask' });
 
 export const TOOLKITS = Object.freeze({
     full: {
@@ -39,7 +39,7 @@ export const TOOLKITS = Object.freeze({
     school: {
         id: 'school',
         tools: ['quarantine', 'severLink'],
-        why: 'A flu shot takes about two weeks to protect, too slow for this outbreak. Send sick students home and split up classes.',
+        why: 'The Gale Fever vaccine takes about two weeks to protect, too slow for this outbreak. Send sick students home and split up classes.',
     },
     schoolNoVaccines: {
         id: 'schoolNoVaccines',
@@ -49,7 +49,7 @@ export const TOOLKITS = Object.freeze({
     festival: {
         id: 'festival',
         tools: ['severLink'],
-        why: 'Norovirus has no vaccine, and a festival field has no wards. Close the walkways between friend groups.',
+        why: 'Feastbane has no vaccine yet, and a festival field has no wards. Close the walkways between friend groups.',
     },
     festivalNoWards: {
         id: 'festivalNoWards',
@@ -60,7 +60,7 @@ export const TOOLKITS = Object.freeze({
         id: 'rollout',
         tools: ['vaccinate', 'severLink'],
         toolDays: { vaccinate: 1 },
-        why: 'Trial doses just landed, so vaccinate from day 1. The wards are full: cancel flights between the sick and the healthy instead. Ring vaccination like this helped end Ebola in Guinea in 2015.',
+        why: 'Trial doses just landed, so vaccinate from day 1. The wards are full: cancel flights between the sick and the healthy instead. On Earth, ring vaccination like this helped end Ebola in Guinea in 2015.',
     },
     envoy: {
         id: 'envoy',
@@ -70,7 +70,7 @@ export const TOOLKITS = Object.freeze({
     boss: {
         id: 'boss',
         tools: ['vaccinate', 'quarantine', 'severLink'],
-        why: 'The final stand against the carrier. Every tool is yours.',
+        why: 'The final stand against the carrier. Every tool is yours, even the first trial doses of a vaccine.',
     },
 });
 

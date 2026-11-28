@@ -15,7 +15,15 @@ export const SUPPORT_URL = './support.html';
 export const PUBLIC_PRIVACY_URL = 'https://atroy8.github.io/VAXrebot/privacy.html';
 export const PUBLIC_SUPPORT_URL = 'https://atroy8.github.io/VAXrebot/support.html';
 
-export function settingsMarkup({ adsRemoved, haptics = null }) {
+// Sound switches: Music plus the three layers of the sound pass.
+export const SOUND_SWITCHES = [
+    ['music', 'Music'],
+    ['effects', 'Sound effects'],
+    ['ambience', 'Planet ambience'],
+    ['voices', 'Crowd voices'],
+];
+
+export function settingsMarkup({ adsRemoved, haptics = null, gentle = null, sound = null }) {
     return `
         <div class="settings-sheet" role="dialog" aria-modal="true" aria-labelledby="settings-title">
             <div class="settings-head">
@@ -45,6 +53,31 @@ export function settingsMarkup({ adsRemoved, haptics = null }) {
             </section>`
                     : ''
             }
+            ${
+                gentle
+                    ? `<section class="settings-group">
+                <h3>Play</h3>
+                <label class="settings-row settings-switch">
+                    <span>Gentle mode</span>
+                    <input type="checkbox" data-act="gentle" ${gentle.enabled ? 'checked' : ''}>
+                </label>
+                <p class="settings-note">Slower spread and one extra use of each tool every day. Stars still count.</p>
+            </section>`
+                    : ''
+            }
+            ${
+                sound
+                    ? `<section class="settings-group">
+                <h3>Sound</h3>${SOUND_SWITCHES.map(
+                    ([key, label]) => `
+                <label class="settings-row settings-switch">
+                    <span>${label}</span>
+                    <input type="checkbox" data-act="sound" data-sound="${key}" ${sound[key] !== false ? 'checked' : ''}>
+                </label>`
+                ).join('')}
+            </section>`
+                    : ''
+            }
             <section class="settings-group">
                 <h3>About</h3>
                 <button type="button" class="settings-row" data-act="replay-story">Replay story</button>
@@ -58,7 +91,7 @@ export function settingsMarkup({ adsRemoved, haptics = null }) {
         </div>`;
 }
 
-export function mountSettings({ monetization, haptics = null, onResetProgress, notify = () => {} } = {}) {
+export function mountSettings({ monetization, haptics = null, gentle = null, audio = null, onResetProgress, notify = () => {} } = {}) {
     if (typeof document === 'undefined' || document.querySelector('.settings-fab')) return null;
 
     const fab = document.createElement('button');
@@ -81,7 +114,8 @@ export function mountSettings({ monetization, haptics = null, onResetProgress, n
         if (backdrop) return;
         backdrop = document.createElement('div');
         backdrop.className = 'settings-backdrop';
-        backdrop.innerHTML = settingsMarkup({ adsRemoved: monetization?.adsRemoved === true, haptics });
+        const sound = audio?.getSoundPrefs ? { ...audio.getSoundPrefs(), music: audio.isMusicEnabled() } : null;
+        backdrop.innerHTML = settingsMarkup({ adsRemoved: monetization?.adsRemoved === true, haptics, gentle, sound });
         document.body.appendChild(backdrop);
         backdrop.addEventListener('click', (e) => {
             if (e.target === backdrop) return close();
@@ -102,7 +136,7 @@ export function mountSettings({ monetization, haptics = null, onResetProgress, n
                 const btn = e.target.closest('[data-act]');
                 if (!resetArmed) {
                     resetArmed = true;
-                    btn.textContent = 'Tap again to erase all stars and funding';
+                    btn.textContent = 'Tap again to erase all stars and gold';
                 } else {
                     close();
                     onResetProgress?.();
@@ -110,8 +144,18 @@ export function mountSettings({ monetization, haptics = null, onResetProgress, n
             }
         });
         backdrop.addEventListener('change', (e) => {
+            if (e.target.dataset.act === 'gentle') {
+                gentle?.setEnabled(e.target.checked);
+                return;
+            }
             if (e.target.dataset.act === 'haptics') {
                 haptics?.setEnabled(e.target.checked);
+                return;
+            }
+            if (e.target.dataset.act === 'sound') {
+                const key = e.target.dataset.sound;
+                if (key === 'music') audio?.setMusicEnabled(e.target.checked);
+                else audio?.setSoundPref(key, e.target.checked);
                 return;
             }
             if (e.target.dataset.act !== 'preview-owned') return;

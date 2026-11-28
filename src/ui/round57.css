@@ -1,0 +1,55 @@
+/* Round 57: par, best play and the predictable mechanics. Additive. */
+
+/* Results: Show best play and Retry this web, under the headline. */
+.results-more { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin: 8px 0 2px; }
+.results-more:not(:has(.results-more-btn:not([hidden]))) { display: none; }
+.results-more-btn[hidden] { display: none; }
+.results-more-btn { min-height: 44px; padding: 8px 14px; font-size: 0.92rem; flex: 1 1 140px; max-width: 220px; }
+
+/* The banner over the tool tray while the best play is shown. Taps on the
+   web and the tray do nothing during it (the solver is playing), so the
+   tray's place on screen is free for the one button that still works. */
+.demo-banner {
+    position: absolute;
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
+    z-index: 6;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 8px 8px 8px 16px;
+    border-radius: 16px;
+    background: rgba(20, 24, 60, 0.94);
+    color: #fff;
+    font: 700 1rem/1.25 'Fredoka', system-ui, sans-serif;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+    pointer-events: auto;
+}
+.demo-banner[hidden] { display: none; }
+/* Round 58: a small progress line over the move being made. */
+.demo-copy { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.demo-head { font-size: 0.74rem; font-weight: 600; opacity: 0.78; letter-spacing: 0.01em; }
+.demo-text { font-size: 0.98rem; line-height: 1.2; }
+.demo-banner .demo-skip { min-height: 44px; padding: 6px 14px; font-size: 0.9rem; white-space: nowrap; flex: none; }
+#game-screen.is-demo .network-container,
+#game-screen.is-demo #tool-tray { pointer-events: none; }
+#game-screen.is-demo #tool-tray > :not(.demo-banner) { opacity: 0.45; }
+#game-screen.is-demo #tool-tray > .demo-banner { pointer-events: auto; }
+
+/* The star meter is three steps now (cases against par), not a score bar. */
+.star-meter-steps { display: flex; gap: 6px; margin: 8px 0 6px; padding: 0; list-style: none; }
+.star-meter-step { flex: 1 1 0; padding: 5px 4px; border-radius: 10px; background: #fff; border: 1px solid var(--washi-edge, #e7dcc0); text-align: center; font-size: 0.72rem; color: var(--color-text-secondary, #55617f); line-height: 1.25; }
+.star-meter-step i { display: block; font-style: normal; font-size: 0.8rem; letter-spacing: -1px; color: #b8c2d6; }
+.star-meter-step.on { border-color: var(--kin-500, #c9a227); background: #fff8db; color: var(--color-text, #16213f); }
+.star-meter-step.on i { color: var(--kin-600, #a9801f); }
+
+/* Travellers: the dotted line to tonight's stop, and a cross on the line
+   that will be dropped. Drawn over the web, never in the way of a tap. */
+.travel-plan { position: fixed; left: 0; top: 0; pointer-events: none; z-index: 30; }
+.travel-plan--line { height: 0; border-top: 5px dotted #7c3aed; filter: drop-shadow(0 0 1.5px #fff) drop-shadow(0 0 1.5px #fff); transform-origin: 0 0; }
+.travel-plan--drop { width: 22px; height: 22px; border-radius: 50%; background: rgba(20, 24, 60, 0.85); color: #c4a0ff; font: 700 16px/22px system-ui, sans-serif; text-align: center; }
+
+/* The briefing's par line sits in the Threat box, in plain sight. */
+#briefing-screen .threat-box > .star-goal { grid-column: 1 / -1; margin: 6px 0 0; font-size: 0.95rem; font-weight: 600; color: var(--color-text, #16213f); }

@@ -1,5 +1,6 @@
 // EpidemicSimulator: orchestration only. Sim math lives in src/sim/*,
 // rendering in src/ui/*, audio in src/audio.js. Still exposed as window.game.
+import { levelR0Range, formatR0 } from './sim/r0.js';
 import { scenarios } from './config/scenarios.js';
 import { difficulties } from './config/difficulties.js';
 import { tools } from './config/tools.js';
@@ -18,23 +19,28 @@ import {
     isLevelUnlocked,
     calculateStars,
     fundingAward,
+    goldAward,
+    calculateScore,
+    POINTS_PER_GOLD,
     livesSavedForRun,
     recordCompletion,
-    parDaysFor,
-    levelRecord,
+    speedParDays,
 } from './progress.js';
-import { isPowerUp, usePowerUp, getCharges, getFunding } from './economy.js';
+import { isPowerUp, usePowerUp, getCharges, getFunding, powerUpLockedLine } from './economy.js';
+import { nextStepTarget, markNextStep } from './ui/next-step.js';
+import { shouldSkipToCare, CARE_SKIP_MS } from './ui/care-skip.js';
+import './ui/buttons.css';
 import './ui/game-screen.css';
+import './ui/planet-tint.css';
 import './ui/averted.css';
 import './ui/variants.css';
 import './ui/app-shell.css'; // last: safe areas and native touch feel (round 18)
-import { toolHint, dayBanner, rFellBelowOne, R_BELOW_ONE_TEXT, shouldAutoPause, toolChips, autoToolForTap, noToolTapHint, idleTapMode } from './ui/game-screen-model.js';
+import { toolHint, dayBanner, rFellBelowOne, rTick, R_BELOW_ONE_TEXT, shouldAutoPause, toolChips, autoToolForTap, noToolTapHint, idleTapMode, usedUpNudge, spentToolLine, careNudgeStep } from './ui/game-screen-model.js';
 import { renderCareBox, flyToCareBox } from './ui/care-box.js';
 import { mountShop, renderShop } from './ui/shop.js';
-import { buildOutbreak } from './sim/setup.js';
-import { initGameState } from './sim/state.js';
-import { checkGameOver as resolveGameOver, canUseTool, canAdvanceDay, spreadIsOver, resolveAftermath, LOSS_RESULTS } from './sim/engine.js';
-import { deathToast, resultsDeathLines } from './ui/deaths.js';
+import { checkGameOver as resolveGameOver, canUseTool, canAdvanceDay, spreadIsOver, resolveAftermath, LOSS_RESULTS, careStillHelps } from './sim/engine.js';
+import { deathToast, resultsDeathLines, realR0NoteFor } from './ui/deaths.js';
+import { storyBriefing, storyResults } from './ui/story.js';
 import {
     applyNodeTool,
     severLink,
@@ -42,22 +48,32 @@ import {
     allActionsSpent,
     actionsRemaining,
     caseCapFor,
-    effectiveR,
+    liveR,
 } from './sim/actions.js';
-import { rollLevelRules, threatLine } from './config/difficulty-roll.js';
+import { threatLine } from './config/difficulty-roll.js';
 import { createAutoAdvance } from './ui/auto-advance.js';
 import { showScreen as renderScreen, refreshGlobeHome } from './ui/screens.js';
 import { requestChestOpen } from './ui/pending-chest.js';
 import { createViewLoader } from './ui/view-loader.js';
 import { lessonFor, debriefLine } from './config/lessons.js';
-import { snapshotNetwork, noResponseCases, avertedSummary } from './sim/counterfactual.js';
+import { noResponseCases, avertedSummary } from './sim/counterfactual.js';
 import { renderAverted } from './ui/averted.js';
+import { resultsActions } from './ui/results-actions.js';
+import { resultsHeadline } from './ui/results-headline.js';
+import { resultsLeadSlots } from './ui/results-lead.js';
+import { civilizationForLevel } from './config/civilizations.js';
+import { setFaceCivilization } from './ui/face-token.js';
+import { castLevel, personFor } from './ui/people.js';
+import { applyPlanetTint } from './ui/planet-tint.js';
+import { guardScreenTaps } from './ui/tap-guard.js';
 import {
     renderHeader,
     renderTools,
     renderLegend,
     addLogEntry,
     showNotification,
+    dismissToast,
+    dismissTapToasts,
     showToolHint,
     showDayBanner,
     renderGameOver,
@@ -65,10 +81,14 @@ import {
     closeRCard,
     isRCardOpen,
 } from './ui/panels.js';
-import { fillBriefing, showThreat, fillLessonCard, showVariantCallout, showStarGoal, showToolkit } from './ui/briefing.js';
+import { fillBriefing, showThreat, fillLessonCard, showVariantCallout, showToolkit } from './ui/briefing.js';
 import { variantCallout } from './sim/variants.js';
+import { mechanicToolFeedback, onsetToast, mechanicsResultsLine, dayLabel, HUB_LOCKED_TEXT } from './ui/mechanics-text.js';
+import { linkLocked } from './sim/mechanics.js';
 import { renderLevelSelect } from './ui/level-select.js';
 import { AudioEngine } from './audio.js';
+import { metaMethods } from './game-meta.js';
+import { dealMethods } from './game-deal.js';
 
 // Music-hook thresholds (stingers are implemented by the audio track; every
 // call below uses optional chaining so nothing breaks if they land later):
@@ -147,6 +167,8 @@ export class EpidemicSimulator {
         this.settings = mountSettings({
             monetization: this.monetization,
             haptics: this.haptics,
+            gentle: this.gentleSetting(),
+            audio: this.audio,
             notify: (msg) => showNotification(msg, 'info'),
             onResetProgress: () => {
                 this.save = resetSave(this.storage);
@@ -176,6 +198,13 @@ export class EpidemicSimulator {
     }
 
     bindEvents() {
+        // Round 40: a tap already on its way when a screen opens (a late Next
+        // day tap as the level ends) must not press the button that appears
+        // under the thumb (src/ui/tap-guard.js).
+        this.screenGuards = {
+            'game-over': guardScreenTaps(document.getElementById('game-over-screen')),
+            briefing: guardScreenTaps(document.getElementById('briefing-screen')),
+        };
         document.getElementById('start-game-btn').addEventListener('click', () => this.showScreen('menu'));
 
         document.getElementById('level-grid').addEventListener('click', (e) => {
@@ -205,10 +234,6 @@ export class EpidemicSimulator {
                 this.togglePause();
             }
         });
-        const tray = document.getElementById('tools-list');
-        tray.addEventListener('scroll', () => {
-            tray.classList.toggle('at-end', tray.scrollLeft + tray.clientWidth >= tray.scrollWidth - 4);
-        }, { passive: true });
         document.getElementById('shop-sheet').addEventListener('click', (e) => {
             if (e.target.closest('[data-shop-close]')) this.closeShop();
         });
@@ -219,14 +244,27 @@ export class EpidemicSimulator {
         });
         document.getElementById('tools-list').addEventListener('click', (e) => {
             const toolItem = e.target.closest('.tool-item');
-            if (!toolItem || !this.gameState) return;
+            if (!toolItem || !this.gameState || this.demo) return;
             const toolId = toolItem.dataset.tool;
             if (toolId === 'shop' || toolItem.classList.contains('empty')) {
                 this.openShop();
                 return;
             }
             // Locked or spent tools explain themselves instead of doing nothing.
+            // Round 38: a used-up tool says the same line a red line tap
+            // would (spentToolLine), so the two never stack as two toasts.
             if (toolItem.classList.contains('disabled')) {
+                // Round 55: a power-up before day 3 says when it opens.
+                if (isPowerUp(toolId)) {
+                    showNotification(powerUpLockedLine(), 'info');
+                    return;
+                }
+                const chips = this.currentChips();
+                const chip = chips.find((c) => c.id === toolId);
+                if (chip && chip.state === 'spent') {
+                    showNotification(spentToolLine(toolId, chips, this.tapContext()), 'info');
+                    return;
+                }
                 const { reason } = canUseTool(this.gameState, this.tools, toolId, this.difficulty);
                 if (reason) showNotification(reason.replace(/^[^A-Za-z]+/, ''), 'info');
                 return;
@@ -243,16 +281,26 @@ export class EpidemicSimulator {
         // Leaving the results screen is the only place an ad may show.
         document.getElementById('play-again').addEventListener('click', () =>
             this.leaveResults(() => {
-                if (this.currentLevel) this.rollThreat(); // a replay rolls a fresh threat
+                // Round 57: a replay deals a new web (Retry this web keeps it).
+                if (this.currentLevel) {
+                    this.rollThreat();
+                    this.beginDeal();
+                }
                 this.startGame();
             })
         );
         document
             .getElementById('try-different-scenario')
             .addEventListener('click', () => this.leaveResults(() => this.showScreen('welcome')));
+        // Round 34: a win goes straight on to the next level's briefing.
+        document.getElementById('next-level')?.addEventListener('click', () => {
+            const nextId = this.nextLevelId;
+            if (!nextId) return;
+            this.leaveResults(() => this.selectLevel(nextId));
+        });
         // A prize box on the award screen: back to the map, which flies to
         // the box and opens it (the same exit path, so ad pacing still applies).
-        document.getElementById('results-tally')?.addEventListener('click', (e) => {
+        document.getElementById('results-lead')?.addEventListener('click', (e) => {
             const card = e.target.closest?.('[data-chest-id]');
             if (!card) return;
             e.stopPropagation();
@@ -267,6 +315,8 @@ export class EpidemicSimulator {
         document.getElementById('master-volume').addEventListener('input', (e) => {
             this.audio.setVolume(e.target.value);
         });
+        this.bindMeta(); // Hint, Undo, Gentle offer, Daily share (src/game-meta.js)
+        this.bindDeal(); // Retry this web, Show best play (src/game-deal.js)
     }
 
     // The rules in force: the level's tuned difficulty when a level is
@@ -279,6 +329,8 @@ export class EpidemicSimulator {
         closeRCard();
         renderScreen(screenName);
         this.currentScreen = screenName;
+        this.audio.setScene?.(screenName, this.currentLevel?.regionId); // planet ambience in a level
+        this.screenGuards?.[screenName]?.arm();
 
         if (screenName === 'welcome') refreshGlobeHome(); // back on the candy planet
         if (screenName === 'menu') {
@@ -294,28 +346,43 @@ export class EpidemicSimulator {
         if (!isLevelUnlocked(this.save, LEVELS, REGIONS, levelId)) return;
         const level = levelById(levelId);
         if (!level) return;
+        this.daily = null; // a campaign level, not the Daily puzzle
         this.currentLevel = level;
         this.selectedDifficulty = level.difficultyId;
         this.rollThreat();
         // Briefing shows the mission name; the disease profile still comes
         // from the underlying scenario.
         fillBriefing({ ...this.currentScenario, name: level.name, description: level.blurb });
-        this.currentR0 = this.difficulties[level.difficultyId]?.R0 || '';
+        // Round 52: R₀ here comes from this play's own rules (src/sim/r0.js),
+        // so the HUD's day 1 R lands near it instead of far above a fixed label.
+        const r0 = levelR0Range({
+            networkType: this.currentScenario.networkType,
+            populationRange: this.currentScenario.populationRange,
+            degree: this.currentScenario.webDegree,
+        });
+        this.currentR0 = formatR0(r0.lo, r0.hi);
         showThreat({ pips: this.threat.pips, line: threatLine(this.threat.value), r0: this.currentR0 });
-        showStarGoal({ parDays: parDaysFor(level), best: levelRecord(this.save, level.id).stars || 0 });
+        // Round 57: deal this play's web now, while the briefing is read.
+        // The star line says what 3 stars means on it as soon as it is known.
+        this.beginDeal();
         const lesson = lessonFor(level.id);
         fillLessonCard('briefing-lesson', lesson?.title, lesson?.brief);
         showVariantCallout(variantCallout(level.variant));
-        showToolkit(level.toolkit, level.variant?.toolDays);
+        // Later planets: the level's new idea joins the callout (planet-mechanics.js).
+        if (level.mechanics) showVariantCallout(variantCallout(level.variant, level.mechanics));
+        showToolkit(level.toolkit, this.difficulty.toolDays || level.variant?.toolDays);
+        storyBriefing(level); // the mentor's line
         // Start fetching the network view while the player reads the briefing.
         this.viewLoader.prefetch();
+        this.refreshMetaBriefing(); // bonus goals, Gentle tag
         this.showScreen('briefing');
     }
 
     // No difficulty picker: every play rolls its own threat, rising toward
     // the next prize box (src/config/difficulty-roll.js).
     rollThreat() {
-        const rules = rollLevelRules(this.currentLevel);
+        // Gentle mode and shop upgrades are applied on top of the roll (src/game-meta.js).
+        const rules = this.rollMetaRules();
         this.currentScenario = rules.scenario;
         this.activeDifficulty = rules.difficulty;
         this.threat = { value: rules.threat, pips: rules.pips };
@@ -335,21 +402,27 @@ export class EpidemicSimulator {
                 this.startingGame = false;
             }
         }
-        // Population varies per scenario: pick uniformly from the scenario's
-        // range so each run feels different. The 8%-or-5-deaths loss rule
-        // keeps the math fair at any size.
-        const [popMin, popMax] = this.currentScenario.populationRange;
-        const population = popMin + Math.floor(Math.random() * (popMax - popMin + 1));
+        this.beginMetaRun(); // fresh hint and undo state
         this.autoAdvance.cancel();
         this.endWrapUp();
         this.lastR = null;
-        this.gameState = initGameState(this.tools, population);
+        // Round 57: the web, its first cases and its par come from the deal
+        // made while the briefing was up (src/game-deal.js). Retry this web
+        // and Show best play open the same deal again.
         this.createNetwork();
         this.selectedTool = null;
         showToolHint('');
         this.closeShop();
         document.getElementById('game-screen').classList.remove('is-paused');
         document.getElementById('pause-game').setAttribute('aria-pressed', 'false');
+        // Item 29 (c): the people wear the clothes of the level's land.
+        const civ = civilizationForLevel(this.currentLevel);
+        // Round 53: a new crowd of different people for this play.
+        castLevel(civ);
+        this.view.setCivilization?.(civ);
+        setFaceCivilization(civ);
+        // Wide audience: the planet's colours tint the HUD, sky and tray too.
+        applyPlanetTint(document.getElementById('game-screen'), this.currentLevel?.regionId);
         // Item 22: the scene behind the web comes from the level's planet. The
         // view chunk (loaded lazily) holds the palette code, so the entry
         // bundle stays small.
@@ -360,37 +433,30 @@ export class EpidemicSimulator {
             idleTapMode: () => (this.gameState ? idleTapMode(this.currentChips()) : null),
             // Isolated, in treatment or cured: faces fly to the care box.
             onBoxed: (leaving) => {
-                flyToCareBox(leaving, { onLand: () => this.audio.playSound(1046, 0.08, 'sine') });
+                flyToCareBox(leaving, { onLand: () => this.audio.sfx('careLand') });
             },
         });
         this.view.update(this.network.nodes, this.network.links, true);
         this.updateUI();
         this.showScreen('game');
-        // Round 26: a new player sees How to play once, on their first level.
-        // It was built but never wired, so the rules only showed behind "?".
-        if (this.currentLevel && this.currentLevel.id === LEVELS[0].id) {
-            import('./ui/onboarding.js').then((m) => m.maybeShowOnboarding());
+        this.refreshTravelPlan(); // travellers: tonight's moves, from the first morning
+        // A new player learns by doing: on their first level a coach bubble
+        // points at the next thing to tap (src/ui/coach.js). It replaced the
+        // three How to play cards, which now live behind "?" as a reference.
+        if (this.currentLevel && this.currentLevel.id === LEVELS[0].id && !this.demo) {
+            import('./ui/coach.js').then((m) => m.startCoach(this));
         }
         addLogEntry(this.gameState.day, `Simulation started for ${this.currentScenario.name}.`, true);
     }
 
     createNetwork() {
-        // Shared with the balance bots (src/sim/setup.js), so puzzle levels
-        // (super-spreader, Envoy) are set up the same way everywhere.
-        const out = buildOutbreak({
-            scenario: this.currentScenario,
-            population: this.gameState.stats.initialPopulation,
-            variant: this.currentLevel?.variant || null,
-        });
-        this.gameState.stats.totalInfected += out.initialCases;
-        this.gameState.envoyId = out.envoyId;
-        this.gameState.superSpreaderId = out.superSpreaderId;
-        this.network = { nodes: out.nodes, links: out.links };
-        // Opening snapshot for the no-response baseline on the results screen.
-        this.openingSnapshot = snapshotNetwork(this.network);
+        // Shared with the balance bots (src/sim/dealer.js), so every level
+        // is dealt and set up the same way everywhere.
+        this.openDeal();
     }
 
     handleNodeClick(event, node) {
+        if (this.demo) return; // the solver is playing (Show best play)
         if (this.selectedTool === 'severLink') return; // Sever tool only works on links
         if (node.removed) return;
         if (!this.selectedTool && !this.autoPickTool('node', node.state)) return;
@@ -404,6 +470,7 @@ export class EpidemicSimulator {
         );
         if (!allowed) {
             showNotification(reason, 'error');
+            this.audio.sfx('error');
             return;
         }
         this.applyToolToNode(this.selectedTool, node);
@@ -413,22 +480,36 @@ export class EpidemicSimulator {
         return toolChips(this.tools, this.difficulty, this.gameState.day, this.gameState.dailyUsage, getCharges());
     }
 
+    // What the used-up nudges need to know about the web (round 38).
+    tapContext() {
+        const nodes = (this.network && this.network.nodes) || [];
+        // Round 39: spreadOver tells the hints not to send the player to
+        // vaccines or red lines once the outbreak cannot grow.
+        return { sickFree: nodes.filter((n) => !n.removed && n.state === 'infected').length, spreadOver: !!this.network && spreadIsOver(this.network) };
+    }
+
     // No tool chosen yet: pick the one that fits the tap (round 27), or say
     // which tool would. Returns true when a tool is now selected.
     autoPickTool(kind, nodeState) {
         const chips = this.currentChips();
         const toolId = autoToolForTap(kind, nodeState, chips);
         if (!toolId) {
-            showNotification(noToolTapHint(kind, chips), 'info');
+            showNotification(noToolTapHint(kind, chips, { ...this.tapContext(), nodeState }), 'info');
             return false;
         }
-        this.selectTool(toolId);
+        this.selectTool(toolId, { hint: false });
         return true;
     }
 
     handleLinkClick(event, link) {
+        if (this.demo) return;
         if (!this.selectedTool && !this.autoPickTool('link')) return;
         if (this.selectedTool !== 'severLink') return;
+        // Later planets: the place that must stay open keeps its lines.
+        if (linkLocked(link, this.network)) {
+            showNotification(HUB_LOCKED_TEXT, 'info');
+            return;
+        }
         const { allowed, reason } = canUseTool(
             this.gameState,
             this.tools,
@@ -437,12 +518,14 @@ export class EpidemicSimulator {
         );
         if (!allowed) {
             showNotification(reason, 'error');
+            this.audio.sfx('error');
             return;
         }
         this.applyToolToLink(link);
     }
 
     applyToolToNode(toolId, node) {
+        this.rememberForUndo();
         let logMessage = '';
         if (toolId === 'vaccinate' || toolId === 'quarantine') {
             // Shared pure action (src/sim/actions.js): the balance bot runs
@@ -467,9 +550,18 @@ export class EpidemicSimulator {
             if (MILESTONE_THRESHOLDS.some((m) => prevProtected < m && this.gameState.stats.totalProtected >= m)) {
                 this.audio.playStinger?.('milestone');
             }
+        } else if (toolId === 'test' || toolId === 'mask') {
+            // Later planets (src/sim/mechanics.js): a test says what it found.
+            const result = applyNodeTool(this.gameState, this.tools, toolId, node);
+            const said = mechanicToolFeedback(toolId, result, node);
+            logMessage = said.log;
+            showNotification(said.toast, said.tone);
+            this.haptics.play(result.positive ? 'milestone' : 'tool');
+            // A test result cannot be unseen, so a test is never undone.
+            if (toolId === 'test') this.undoSnap = null;
         }
 
-        this.audio.playSound(800, 0.2, 'sine');
+        this.audio.sfx(toolId, { id: node.id });
 
         addLogEntry(this.gameState.day, logMessage);
         this.updateUI();
@@ -478,6 +570,7 @@ export class EpidemicSimulator {
     }
 
     applyToolToLink(linkToRemove) {
+        this.rememberForUndo();
         // Snip effect first, while both ends still exist in the view.
         this.view.animateSever?.(linkToRemove);
         severLink(this.gameState, this.network, linkToRemove);
@@ -495,16 +588,33 @@ export class EpidemicSimulator {
     // After every action: when no daily actions are left, start the
     // auto-advance countdown. Power-ups and Next day stay available.
     afterAction() {
-        if (!this.gameState || this.gameState.gameOver) return;
+        this.refreshTravelPlan();
+        if (!this.gameState || this.gameState.gameOver || this.demo) return;
         this.maybeWrapUp();
         if (this.wrapUp || this.gameState.paused) return;
+        this.releaseUsedUpTool();
         if (allActionsSpent(this.gameState, this.tools, this.difficulty)) this.autoAdvance.start();
+    }
+
+    // Round 31: a tool that just hit its daily limit lets go, so the next tap
+    // auto-picks a tool that is still ready (round 27) instead of drawing a
+    // red limit error, and a toast says what is ready.
+    releaseUsedUpTool() {
+        const toolId = this.selectedTool;
+        if (!toolId || isPowerUp(toolId)) return;
+        const chips = this.currentChips();
+        const chip = chips.find((c) => c.id === toolId);
+        if (!chip || chip.state !== 'spent') return;
+        this.selectTool(toolId); // deselect
+        const nudge = usedUpNudge(toolId, chips, this.tapContext());
+        if (nudge) showNotification(nudge, 'info');
     }
 
     // Countdown display on the Next day button; null clears it.
     renderCountdown(leftMs, progress = 0) {
         const btn = document.getElementById('next-day');
         const hold = document.getElementById('hold-advance');
+        this.audio.countdown?.(leftMs);
         if (!btn) return;
         if (leftMs == null) {
             btn.classList.remove('counting');
@@ -527,7 +637,7 @@ export class EpidemicSimulator {
             return;
         }
         if (this.autoAdvance.isRunning()) this.autoAdvance.hold();
-        openRCard({ r: this.lastR, r0: this.currentR0 });
+        openRCard({ r: this.lastR, r0: this.currentR0, realR0Note: realR0NoteFor(this.currentScenario) });
     }
 
     nextDay() {
@@ -537,37 +647,32 @@ export class EpidemicSimulator {
             return;
         }
         this.autoAdvance.cancel();
+        // Round 52: yesterday's tap feedback is out of date once the day turns.
+        dismissTapToasts();
+        // Round 48: a care line about waiting for Quarantine is out of date
+        // once the day moves on; maybeWrapUp says what is true now.
+        const nudges = this.gameState.careNudges;
+        if (nudges && nudges.waitingText) dismissToast(nudges.waitingText);
         const difficulty = this.difficulty;
         // Coaching: count actions left unused when a day ends by choice.
         if (!this.wrapUp) {
             const left = actionsRemaining(this.gameState, this.tools, difficulty);
             this.gameState.stats.unusedActions = (this.gameState.stats.unusedActions || 0) + left;
         }
-        const { spread, outcomes, result, activeBefore } = advanceDay(this.gameState, this.network, {
+        const { spread, outcomes, result } = advanceDay(this.gameState, this.network, {
             scenario: this.currentScenario,
             difficulty,
         });
         const { events, count } = spread;
-        // Smooth day-to-day noise: blend today's R with yesterday's.
-        const rToday = effectiveR(count, activeBefore, difficulty.recoveryTime);
-        const prevR = this.lastR;
-        this.lastR = rToday == null ? this.lastR : this.lastR == null ? rToday : 0.5 * rToday + 0.5 * this.lastR;
-        // Round 16: the first day R drops under 1 is the turning point of an
-        // outbreak, so mark it (once per level) with a toast and a chime.
-        if (!result && !this.gameState.stats.rBelowOneDay && rFellBelowOne(prevR, this.lastR)) {
-            this.gameState.stats.rBelowOneDay = this.gameState.day - 1;
-            showNotification(R_BELOW_ONE_TEXT, 'success');
-            this.audio.playStinger?.('milestone');
-            this.haptics.play('milestone');
-            document.getElementById('r-stat')?.classList.add('r-celebrate');
-            setTimeout(() => document.getElementById('r-stat')?.classList.remove('r-celebrate'), 1600);
-        }
-        if (isRCardOpen()) openRCard({ r: this.lastR, r0: this.currentR0 });
         for (const { source, target } of events) {
             this.view.animateVirus(source, target);
-            this.audio.playSound(150, 0.2, 'triangle');
+            this.audio.sfx('infection', { id: target?.id });
         }
         if (count > 0) addLogEntry(this.gameState.day, `${count} new infections reported.`, true);
+        // Later planets: carriers who showed symptoms overnight (no virus
+        // flies for them, since nobody saw the moment they caught it).
+        const onsetLine = result ? '' : onsetToast(spread);
+        if (onsetLine) showNotification(onsetLine, 'info');
         // Music hook: spike stinger when a day produces 8+ new infections.
         if (count >= SPIKE_INFECTION_THRESHOLD) {
             this.audio.playStinger?.('spike');
@@ -582,6 +687,7 @@ export class EpidemicSimulator {
         }
         const deaths = outcomes.filter((o) => o.outcome === 'died');
         const died = deaths.length;
+        for (const o of outcomes) if (o.outcome !== 'died') this.audio.sfx('cure', { id: o.node.id });
         if (!result) {
             showDayBanner(dayBanner({ day: this.gameState.day - 1, newCases: count, recovered: outcomes.length - died, died }));
         }
@@ -590,35 +696,64 @@ export class EpidemicSimulator {
             for (const { node } of deaths) this.view.animateDeath?.(node);
             const first = !this.gameState.stats.deathToastShown;
             this.gameState.stats.deathToastShown = true;
+            // Each person lost is named, here and on the results.
+            const names = deaths.map((d) => personFor(d.node.id).label);
+            (this.gameState.lostNames ||= []).push(...names);
             if (!result) {
                 const inWard = deaths.every((d) => d.inWard);
-                showNotification(deathToast({ count: died, firstThisLevel: first, inWard }), 'info');
+                showNotification(deathToast({ count: died, firstThisLevel: first, inWard, names }), 'info');
             }
-            this.audio.playSound(196, 0.6, 'sine');
+            this.audio.sfx('death');
             this.haptics.play('tool');
             this.view.update(this.network.nodes, this.network.links);
         }
 
         if (result) this.finishGame(result);
 
-        this.audio.playSound(600, 0.1, 'sine');
+        this.audio.sfx('dayStart');
         addLogEntry(this.gameState.day, `Day ${this.gameState.day} begins.`, true);
         this.updateUI();
         this.view.update(this.network.nodes, this.network.links);
         // Music hook: let the audio track adjust the mood after each day.
-        this.audio.updateMood?.(this.gameState.stats);
+        this.audio.updateMood?.(this.gameState.stats, { cap: caseCapFor(this.gameState, this.currentScenario), r: this.lastR });
         this.maybeWrapUp();
+        this.afterMetaDay(); // Undo ends with the day
+        this.refreshTravelPlan(); // tonight's moves of the travellers
     }
 
     // When no sick person is in contact with anyone who could still catch
-    // it, no move can change the outcome. Say so, then fast-forward the last
-    // days while the remaining patients recover (or not), and end the round.
+    // it and isolation can no longer help the sick (round 39), no move can
+    // change the outcome. Say so, then fast-forward the last days while the
+    // remaining patients recover (or not), and end the round.
     maybeWrapUp() {
         if (!this.gameState || this.gameState.gameOver || this.wrapUp) return;
+        if (this.demo) return this.checkGameOver(); // Show best play steps the days itself
         if (!spreadIsOver(this.network)) return;
         // Nobody sick at all: that is already a result.
         this.checkGameOver();
         if (this.gameState.gameOver) return;
+        // Round 39: isolation still halves the sick's death risk, so while
+        // Quarantine can reach someone sick, the player keeps the controls.
+        const care = careStillHelps(this.gameState, this.network, this.tools, this.difficulty, this.difficulty.recoveryTime);
+        if (care) {
+            // Round 48: one line while Quarantine is still closed, and one
+            // more on the morning it opens (careNudgeStep).
+            const seen = (this.gameState.careNudges ||= {});
+            const nudge = careNudgeStep(care, this.gameState.day, seen);
+            if (nudge) {
+                const first = !seen.waiting && !seen.open;
+                seen[nudge.kind] = true;
+                if (nudge.kind === 'waiting') seen.waitingText = nudge.text;
+                else if (seen.waitingText) dismissToast(seen.waitingText);
+                showNotification(nudge.text, 'success');
+                if (first) this.audio.playStinger?.('milestone');
+                else this.haptics.play('tool');
+            }
+            // Round 55 (Adam): nothing is left to do until Quarantine opens,
+            // so the days roll on by themselves instead of asking for taps.
+            this.skipToCareDay(care);
+            return;
+        }
         this.autoAdvance.cancel();
         if (this.selectedTool) this.selectTool(this.selectedTool); // deselect
         this.closeShop();
@@ -662,7 +797,8 @@ export class EpidemicSimulator {
             this.gameState,
             this.network,
             this.currentScenario.duration,
-            caseCapFor(this.gameState, this.currentScenario)
+            caseCapFor(this.gameState, this.currentScenario),
+            this.currentScenario.goal || null
         );
         if (result) this.finishGame(result);
     }
@@ -671,18 +807,23 @@ export class EpidemicSimulator {
         if (this.gameState.gameOver) return;
         // Item 20: a loss mid-day (from a power-up) still settles the sick.
         if (LOSS_RESULTS.includes(result)) {
-            resolveAftermath(this.gameState, this.network, this.difficulty.recoveryTime, this.difficulty.fatalityRate);
+            resolveAftermath(this.gameState, this.network);
         }
         this.autoAdvance.cancel();
         closeRCard();
         this.gameState.gameOver = true;
         this.gameState.outcome = result;
-        this.audio.playSound(261, 1.0, 'sine');
         // Music hook: 'win' for contained, 'loss' for everything else
         // (overwhelmed, timeout, burnout: none of them are victories).
         this.audio.playStinger?.(result === 'contained' ? 'win' : 'loss');
         this.haptics.play(result === 'contained' ? 'win' : 'loss');
         this.audio.stopGameMusic?.();
+        this.refreshTravelPlan();
+        // Show best play: no results, no rewards, back to the real results.
+        if (this.demo) {
+            setTimeout(() => this.endDemo(), 1400);
+            return;
+        }
         setTimeout(() => this.showGameOver(), 1000);
     }
 
@@ -707,12 +848,13 @@ export class EpidemicSimulator {
         // Points-to-stars scoring needs the run length and the level target.
         stats.daysUsed = this.gameState.day;
         const stars = calculateStars(outcome, stats, this.currentLevel);
-        const fundingEarned = fundingAward(stars);
+        // A Daily practice replay pays nothing (only the first attempt counts).
+        const fundingEarned = this.daily?.practice ? 0 : goldAward(outcome, stats, this.currentLevel);
         const livesSaved = livesSavedForRun(outcome, stats);
         // Care bonus for the people looked after (wins only), paid on top.
-        const bonus = careBonus(outcome, stats, this.currentLevel);
+        const bonus = this.daily?.practice ? { lines: [], total: 0 } : careBonus(outcome, stats, this.currentLevel);
         let chests = [];
-        if (this.currentLevel) {
+        if (this.currentLevel && !this.daily) {
             const before = this.save;
             this.save = recordCompletion(this.save, this.currentLevel.id, outcome, stats);
             this.save = { ...this.save, funding: this.save.funding + bonus.total };
@@ -734,23 +876,56 @@ export class EpidemicSimulator {
             livesSaved,
             caseCap: caseCapFor(this.gameState, this.currentScenario),
             tally: showTally,
-            deathLines: resultsDeathLines({ outcome, stats, scenario: this.currentScenario, fatalityRate: this.difficulty?.fatalityRate }),
+            deathLines: resultsDeathLines({ outcome, stats, lostNames: this.gameState.lostNames || [] }),
+            headline: resultsHeadline({ outcome, meter: starProgress(outcome, stats, this.currentLevel), lessonId: this.currentLevel?.lessonId, unusedActions: stats.unusedActions ?? 0, stats, caseCap: caseCapFor(this.gameState, this.currentScenario) }),
         });
         if (showTally) {
             playResultsTally(document.getElementById('results-tally'), {
-                bins: { treatment: stats.treated || 0, isolated: stats.isolated || 0, cured: stats.totalRecovered || 0 },
+                bins: { treatment: stats.treated || 0, isolated: stats.isolated || 0, cured: stats.totalRecovered || 0, lost: stats.totalDead || 0 },
                 bonus,
                 stars,
                 baseFunding: fundingEarned,
+                // Round 55: points turn into gold at a fixed rate.
+                awardLabel: `${Math.round(calculateScore(outcome, stats, this.currentLevel))} points, ${POINTS_PER_GOLD} points = 1 gold`,
                 chests,
                 meter: starProgress(outcome, stats, this.currentLevel),
                 sound: (kind, i = 0) => this.playTallySound(kind, i),
+                lead: resultsLeadSlots(),
             });
         }
         const lesson = this.currentLevel ? lessonFor(this.currentLevel.id) : null;
-        fillLessonCard('game-over-lesson', lesson?.title, debriefLine(lesson, outcome, { unusedActions: stats.unusedActions ?? 0 }));
+        fillLessonCard('game-over-lesson', lesson?.title, [debriefLine(lesson, outcome, { unusedActions: stats.unusedActions ?? 0 }), mechanicsResultsLine(stats, this.currentScenario)].filter(Boolean).join(' '));
         this.renderAvertedCard(outcome, stats);
+        // The mentor's reaction and the real disease behind the strain.
+        storyResults({ level: this.currentLevel, outcome, stats, scenario: this.currentScenario, fatalityRate: this.difficulty?.fatalityRate, caseCap: caseCapFor(this.gameState, this.currentScenario), parDays: this.currentLevel ? speedParDays(stats, this.currentLevel) : 0 });
+        this.applyResultsActions(outcome);
+        this.refreshDealActions(stars);
+        this.settleMeta(outcome, stats, stars, fundingEarned + bonus.total); // goals, Daily, Gentle offer
         this.showScreen('game-over');
+    }
+
+    // Round 34: Next level leads a win, Try again leads a loss, and the map
+    // is always there (src/ui/results-actions.js).
+    applyResultsActions(outcome) {
+        const plan = resultsActions({ outcome, levelId: this.currentLevel?.id, save: this.save, levels: LEVELS, regions: REGIONS });
+        this.nextLevelId = plan.nextLevelId;
+        const buttons = {
+            replay: document.getElementById('play-again'),
+            map: document.getElementById('try-different-scenario'),
+            next: document.getElementById('next-level'),
+        };
+        if (!buttons.replay || !buttons.map) return;
+        buttons.replay.textContent = plan.replayLabel;
+        buttons.map.textContent = plan.mapLabel;
+        if (buttons.next) buttons.next.hidden = plan.primary !== 'next';
+        for (const [key, btn] of Object.entries(buttons)) {
+            if (!btn) continue;
+            btn.classList.toggle('btn--primary', key === plan.primary);
+            btn.classList.toggle('btn--secondary', key !== plan.primary);
+        }
+        const row = buttons.replay.parentElement;
+        row?.classList.toggle('has-next', plan.primary === 'next');
+        row?.classList.toggle('lead-replay', plan.primary === 'replay');
     }
 
     // Cases averted: the player's outbreak against a no-response baseline
@@ -762,11 +937,7 @@ export class EpidemicSimulator {
         try {
             if (this.openingSnapshot) {
                 const d = this.difficulty;
-                const baseline = noResponseCases(this.openingSnapshot, {
-                    transmissionRate: this.currentScenario.baseTransmissionRate * d.transmissionMultiplier,
-                    recoveryTime: d.recoveryTime,
-                    fatalityRate: d.fatalityRate,
-                });
+                const baseline = noResponseCases(this.openingSnapshot, { recoveryTime: d.recoveryTime });
                 const population = stats.initialPopulation;
                 const actual = stats.totalInfected;
                 data = { summary: avertedSummary({ actual, baseline, population, outcome }), actual, baseline, population };
@@ -780,14 +951,18 @@ export class EpidemicSimulator {
     // Little rising blips for the tally; pitch climbs as a bin fills.
     playTallySound(kind, i = 0) {
         const a = this.audio;
-        if (kind === 'tick') a.playSound(660 + Math.min(i, 20) * 30, 0.06, 'sine');
-        else if (kind === 'line') a.playSound(880, 0.1, 'triangle');
-        else if (kind === 'star') a.playSound(1046 + i * 262, 0.25, 'sine');
-        else if (kind === 'coin') a.playSound(1568, 0.05, 'square');
-        else if (kind === 'prize') a.playStinger ? a.playStinger('milestone') : a.playSound(1318, 0.4, 'sine');
+        if (kind === 'tick') a.sfx('count', { step: i });
+        else if (kind === 'line') a.sfx('tallyLine');
+        else if (kind === 'star') a.sfx('star', { step: i });
+        else if (kind === 'coin') a.sfx('coin');
+        else if (kind === 'prize') a.sfx('milestone');
     }
 
-    selectTool(toolId) {
+    // hint: false when a tap picked the tool and used it in the same moment
+    // (round 32). The player has just done what the hint would say, and on a
+    // phone the hint sat over the bottom of the web for 4.5 s, often on top
+    // of the sick person they were working on.
+    selectTool(toolId, { hint = true } = {}) {
         this.selectedTool = this.selectedTool === toolId ? null : toolId;
         this.view.setToolMode?.(this.selectedTool);
         document.querySelectorAll('.tool-item').forEach((item) => {
@@ -795,12 +970,13 @@ export class EpidemicSimulator {
             item.classList.toggle('selected', on);
             item.setAttribute('aria-pressed', String(on));
         });
-        showToolHint(this.selectedTool ? toolHint(this.selectedTool, this.tools) : '');
+        showToolHint(this.selectedTool && hint ? toolHint(this.selectedTool, this.tools) : '');
     }
 
     // Power-up flow: hand the economy module the gameApi it needs, spend
     // one charge, and sync the persisted save back onto this.save.
     usePowerUpFlow(powerUpId) {
+        if (!this.beforePowerUp()) return;
         const gameApi = {
             network: this.network,
             gameState: this.gameState,
@@ -809,7 +985,7 @@ export class EpidemicSimulator {
             refreshUI: () => this.updateUI(),
             updateView: () => this.view.update(this.network.nodes, this.network.links),
             checkGameOver: () => this.checkGameOver(),
-            playSound: (freq, dur, type) => this.audio.playSound(freq, dur, type),
+            playSound: () => this.audio.sfx('powerUp'),
         };
         const result = usePowerUp(powerUpId, gameApi);
         if (result.save) this.save = result.save;
@@ -830,6 +1006,7 @@ export class EpidemicSimulator {
                 this.updateUI();
             },
         });
+        this.refreshMetaShop(); // permanent upgrades under the power-ups
     }
 
     openShop() {
@@ -843,14 +1020,49 @@ export class EpidemicSimulator {
         if (sheet) sheet.hidden = true;
     }
 
+    // Round 35: R is read off the web as it stands (liveR in
+    // src/sim/actions.js), so it moves the moment the player cuts a red link
+    // or isolates someone, not a day later. The first time it drops from
+    // above 1 to 1 or below is the turning point of an outbreak: mark it once
+    // per level with a toast and a chime (only once it reads under 1.0, since the
+    // toast says below 1). When it drops straight to nothing
+    // the Spread stopped! card says it instead.
+    refreshR() {
+        if (!this.gameState || !this.network || !this.currentScenario) return;
+        const difficulty = this.difficulty;
+        const prevR = this.lastR;
+        this.lastR = liveR(this.network);
+        if (!this.gameState.gameOver && !this.wrapUp && !this.gameState.stats.rBelowOneDay && rFellBelowOne(prevR, this.lastR) && this.lastR < 0.95 && !spreadIsOver(this.network)) {
+            this.gameState.stats.rBelowOneDay = this.gameState.day;
+            showNotification(R_BELOW_ONE_TEXT, 'success');
+            this.audio.sfx('rBelowOne');
+            this.haptics.play('milestone');
+            document.getElementById('r-stat')?.classList.add('r-celebrate');
+            setTimeout(() => document.getElementById('r-stat')?.classList.remove('r-celebrate'), 1600);
+        }
+        else if (prevR != null && !this.gameState.gameOver) {
+            const tick = rTick(prevR, this.lastR);
+            const el = document.getElementById('r-stat');
+            if (tick && el) {
+                el.classList.remove('r-tick-down', 'r-tick-up');
+                void el.offsetWidth; // restart the animation on quick taps
+                el.classList.add(`r-tick-${tick}`);
+                clearTimeout(this.rTickTimer);
+                this.rTickTimer = setTimeout(() => el.classList.remove('r-tick-down', 'r-tick-up'), 700);
+            }
+        }
+        if (isRCardOpen()) openRCard({ r: this.lastR, r0: this.currentR0, realR0Note: realR0NoteFor(this.currentScenario) });
+    }
+
     updateUI() {
+        this.refreshR();
         const difficulty = this.difficulty;
         renderHeader({
             scenarioName: this.currentLevel ? this.currentLevel.name : this.currentScenario.name,
             difficultyName: difficulty.name,
             difficultyId: this.selectedDifficulty,
             threatPips: this.threat?.pips ?? null,
-            day: this.gameState.day,
+            day: dayLabel(this.gameState.day, this.currentScenario.goal),
             infected: this.network.nodes.filter((n) => n.state === 'infected').length,
             protected: this.gameState.stats.totalProtected,
             population: this.network.nodes.length,
@@ -872,6 +1084,46 @@ export class EpidemicSimulator {
         // also early-returns via canAdvanceDay as a second layer).
         const nextDayBtn = document.getElementById('next-day');
         if (nextDayBtn) nextDayBtn.disabled = this.gameState.paused;
+        this.refreshMetaHud(); // Hint price, Undo button
+        this.refreshNextStep();
+    }
+
+    // Spread is over and the only move left is to isolate the sick, but
+    // Quarantine is not open (or is used up) today: go to the next day after
+    // a short beat, and again each morning, until it opens. Pausing or
+    // leaving the level stops it.
+    skipToCareDay(care) {
+        if (!shouldSkipToCare(care, this.gameState)) return;
+        const state = this.gameState;
+        const day = state.day;
+        clearTimeout(this.careSkipTimer);
+        this.careSkipTimer = setTimeout(() => {
+            if (this.gameState !== state || state.gameOver || state.paused || this.wrapUp || state.day !== day || this.currentScreen !== 'game') return;
+            this.nextDay();
+        }, CARE_SKIP_MS);
+    }
+
+    // Round 55: glow on the button for the next sensible step (next-step.js).
+    refreshNextStep() {
+        if (!this.gameState || !this.network) return;
+        const facts = { gameOver: this.gameState.gameOver, wrapUp: !!this.wrapUp, paused: this.gameState.paused, counting: this.autoAdvance.isRunning(), selectedTool: this.selectedTool };
+        let move = null;
+        if (!facts.gameOver && !facts.wrapUp && !facts.paused && !facts.selectedTool) {
+            try {
+                move = this.peekHint?.() || null;
+            } catch {
+                move = null;
+            }
+            // Spread is over: the one useful move is care for the sick, so
+            // Quarantine glows when it is open today, and nothing while the
+            // days roll on to it (skipToCareDay).
+            if (spreadIsOver(this.network)) {
+                const care = careStillHelps(this.gameState, this.network, this.tools, this.difficulty, this.difficulty.recoveryTime);
+                move = care && care.day <= this.gameState.day ? { toolId: 'quarantine' } : null;
+                if (care && care.day > this.gameState.day) facts.counting = true;
+            }
+        }
+        markNextStep(nextStepTarget({ ...facts, move }));
     }
 
     togglePause() {
@@ -888,3 +1140,9 @@ export class EpidemicSimulator {
         this.updateUI();
     }
 }
+
+// Hint, Undo, Gentle mode, bonus goals, the Daily puzzle and upgrades live in
+// src/game-meta.js and are mixed in here, so this file only carries hooks.
+Object.assign(EpidemicSimulator.prototype, metaMethods);
+// Dealing, par, Retry this web and Show best play live in src/game-deal.js.
+Object.assign(EpidemicSimulator.prototype, dealMethods);

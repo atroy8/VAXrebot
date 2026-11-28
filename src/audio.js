@@ -6,6 +6,9 @@
 //   stopThemeMusic(), playSound(freq, dur, type), playSnip(), setVolume(v),
 //   updateMood(stats), playStinger(name), setMusicEnabled(bool),
 //   isMusicEnabled(), startGameMusic(), stopGameMusic()
+// Added for the sound pass (named effects, planet ambience, crowd voices):
+//   sfx(name, opts), setScene(screen, planetId), countdown(leftMs),
+//   getSoundPrefs(), setSoundPref(key, on), debug
 //
 // Music (round 14): one song, "Starlight Response" (src/audio-song.js), in
 // two arrangements. Calm on the start page, map, briefing and results;
@@ -13,6 +16,39 @@
 // both arrangements into two buses and crossfades them when the screen
 // changes. Nothing plays before the first user gesture.
 import { mixedEvents, createScheduler, arrangementForScreen, busTargets, midiToFreq, ARRANGEMENTS, CROSSFADE_S, SONG } from './audio-song.js';
+
+import { SfxPlayer, SFX } from './audio-sfx.js';
+import { AmbienceEngine, tensionLevel, isRelaxed } from './audio-ambience.js';
+import { voiceDesc, createVoiceLimiter } from './audio-voices.js';
+
+// Effects, Ambience and Voices switches (Settings), saved together.
+export const SOUND_PREFS_KEY = 'vaxrebot_sound_prefs';
+export const SOUND_PREF_DEFAULTS = Object.freeze({ effects: true, ambience: true, voices: true });
+
+export function readSoundPrefs(storage) {
+    try {
+        const saved = JSON.parse(storage.getItem(SOUND_PREFS_KEY) || '{}') || {};
+        const out = { ...SOUND_PREF_DEFAULTS };
+        for (const k of Object.keys(out)) if (typeof saved[k] === 'boolean') out[k] = saved[k];
+        return out;
+    } catch (e) {
+        return { ...SOUND_PREF_DEFAULTS };
+    }
+}
+
+// In a level the planet's ambience is the bed and the song ducks under it
+// (to this share of its usual level) instead of stopping.
+export const MUSIC_BUS_GAIN = 0.45;
+export const MUSIC_DUCK = 0.4;
+const AMBIENCE_BUS_GAIN = 1;
+const VOICE_GAIN = 2.2; // formant filters eat level, so voices are lifted to sit just under the effects
+
+// Old stinger names map onto named effects.
+const STINGERS = { spike: 'spike', milestone: 'milestone', win: 'win', loss: 'loss' };
+const STAR_STEPS = [0, 4, 7]; // G, B, D: three stars climb a major triad
+const COUNT_SCALE = [0, 2, 5, 7, 9]; // the tally climbs the yo scale
+// Controls that get the soft tap sound.
+const TAP_SELECTOR = 'button, .tool-item, .level-card, [role="button"], a.settings-row, input[type="checkbox"]';
 
 const MUSIC_ENABLED_KEY = 'vaxrebot_music_enabled';
 
@@ -44,6 +80,17 @@ export class AudioEngine {
         this.noiseBuffer = null;
         this.mood = 0; // 0 = calm, 1 = full outbreak crisis
         this.toggleButton = null;
+
+        // Sound pass: named effects, planet ambience, crowd voices.
+        this.sfxPlayer = null;
+        this.ambience = null;
+        this.ambienceBus = null;
+        this.soundPrefs = readSoundPrefs(typeof localStorage === 'undefined' ? null : localStorage);
+        this.voiceLimiter = createVoiceLimiter();
+        this.scene = { screen: null, planetId: null };
+        this.nightBurst = { at: -10, count: 0 };
+        this.endedAt = -10;
+        this.lastCount = null;
     }
 
     initAudio() {
@@ -59,8 +106,17 @@ export class AudioEngine {
             this.sfxBus.connect(this.masterGain);
 
             this.musicBus = this.audioContext.createGain();
-            this.musicBus.gain.value = 0.45; // Modest: music supports, never shouts
+            this.musicBus.gain.value = MUSIC_BUS_GAIN; // Modest: music supports, never shouts
             this.musicBus.connect(this.masterGain);
+
+            this.ambienceBus = this.audioContext.createGain();
+            this.ambienceBus.gain.value = AMBIENCE_BUS_GAIN;
+            this.ambienceBus.connect(this.masterGain);
+            this.sfxPlayer = new SfxPlayer(this.audioContext, this.sfxBus);
+            this.ambience = new AmbienceEngine(this.audioContext, this.ambienceBus, {
+                player: this.sfxPlayer,
+                canPlay: () => this._audible() && this.soundPrefs.ambience,
+            });
 
             this.setupThemeMusic();
             this._injectMusicToggle();
@@ -97,8 +153,9 @@ export class AudioEngine {
         }
     }
 
+    // Thin fallback for callers without a named effect. Prefer sfx(name).
     playSound(frequency, duration, type = 'sine') {
-        if (!this.audioContext || this.masterGain.gain.value === 0) return;
+        if (!this._audible() || !this.soundPrefs.effects) return;
         const oscillator = this.audioContext.createOscillator();
         const gainNode = this.audioContext.createGain();
         oscillator.connect(gainNode);
@@ -113,58 +170,132 @@ export class AudioEngine {
         oscillator.stop(this.audioContext.currentTime + duration);
     }
 
-    // Sever "snip": a crisp scissor click (filtered noise), a bright pitch
-    // drop like a snapped cable, and a soft low thump for weight.
+    // Sever "snip": the signature effect, see SFX.snip in src/audio-sfx.js.
     playSnip() {
-        if (!this.audioContext || this.masterGain.gain.value === 0) return;
-        const ctx = this.audioContext;
-        if (ctx.state === 'suspended') ctx.resume();
-        const t = ctx.currentTime;
-        const out = this.sfxBus || this.masterGain;
-
-        const len = Math.floor(ctx.sampleRate * 0.05);
-        const buf = ctx.createBuffer(1, len, ctx.sampleRate);
-        const data = buf.getChannelData(0);
-        for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3);
-        const noise = ctx.createBufferSource();
-        noise.buffer = buf;
-        const hp = ctx.createBiquadFilter();
-        hp.type = 'highpass';
-        hp.frequency.value = 3500;
-        const ng = ctx.createGain();
-        ng.gain.value = 0.35;
-        noise.connect(hp).connect(ng).connect(out);
-        noise.start(t);
-
-        const twang = ctx.createOscillator();
-        const tg = ctx.createGain();
-        twang.type = 'triangle';
-        twang.frequency.setValueAtTime(1800, t);
-        twang.frequency.exponentialRampToValueAtTime(420, t + 0.16);
-        tg.gain.setValueAtTime(0.16, t);
-        tg.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
-        twang.connect(tg).connect(out);
-        twang.start(t);
-        twang.stop(t + 0.22);
-
-        const thump = ctx.createOscillator();
-        const hg = ctx.createGain();
-        thump.type = 'sine';
-        thump.frequency.setValueAtTime(140, t + 0.02);
-        thump.frequency.exponentialRampToValueAtTime(55, t + 0.18);
-        hg.gain.setValueAtTime(0.0001, t);
-        hg.gain.exponentialRampToValueAtTime(0.22, t + 0.03);
-        hg.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
-        thump.connect(hg).connect(out);
-        thump.start(t);
-        thump.stop(t + 0.25);
+        this.sfx('snip');
     }
 
     // Master volume (0..1). Replaces the old direct masterGain access.
     setVolume(value) {
         if (this.masterGain) {
-            this.masterGain.gain.value = value;
+            this.masterGain.gain.value = Number(value) || 0;
         }
+    }
+
+    // ------------------------------------------------------------------
+    // Sound pass: named effects, crowd voices, planet ambience
+    // ------------------------------------------------------------------
+
+    // True once the player has touched the screen and the volume is up.
+    _audible() {
+        return Boolean(this.audioContext && this.masterGain && this.hadGesture && Number(this.masterGain.gain.value) !== 0);
+    }
+
+    // Play a named effect (src/audio-sfx.js). Unknown names are ignored.
+    // opts: { id } seeds per person detune and picks the crowd voice,
+    //       { step } transposes 'star' and 'count', { delay } seconds.
+    // A few names also drive the crowd and the ambience, so game.js needs
+    // one call per moment: 'infection' coughs (and the crowd gasps on the
+    // third case of a night), 'cure' cheers, 'win' sighs with relief.
+    sfx(name, opts = {}) {
+        try {
+            const player = this.sfxPlayer;
+            if (!player || !this._audible()) return null;
+            const ctx = this.audioContext;
+            if (ctx.state === 'suspended') ctx.resume();
+            const now = ctx.currentTime;
+            const id = Number(opts.id) || 0;
+            let semis = 0;
+            if (name === 'infection') {
+                const burst = this.nightBurst;
+                burst.count = now - burst.at < 0.4 ? burst.count + 1 : 1;
+                burst.at = now;
+                if (burst.count === 3) this._voice('gasp', id + 101, 0.12);
+                this._voice('cough', id);
+            } else if (name === 'cure') {
+                this._voice('cheer', id);
+            } else if (name === 'win') {
+                this.endedAt = now;
+                this._voice('cheer', id + 7, 0.35);
+                this._voice('sigh', id + 3, 0.9);
+                this.ambience?.setTension(0, true);
+            } else if (name === 'loss') {
+                this.endedAt = now;
+            } else if (name === 'rBelowOne') {
+                this.ambience?.setTension(this.ambience.tension * 0.35, true);
+            } else if (name === 'dayStart') {
+                // The night passes: clappers now, the morning bell a moment
+                // later. Skipped when the level has just ended.
+                if (now - this.endedAt < 0.5) return null;
+                if (this.soundPrefs.effects) player.play('dayEnd');
+                opts = { ...opts, delay: 0.32 };
+            } else if (name === 'star') {
+                semis = STAR_STEPS[Math.max(0, Math.min(2, opts.step || 0))];
+            } else if (name === 'count') {
+                const i = Math.max(0, Math.min(14, opts.step || 0));
+                semis = 12 * Math.floor(i / 5) + COUNT_SCALE[i % 5];
+            }
+            if (!this.soundPrefs.effects || !SFX[name]) return null;
+            return player.play(name, { delay: opts.delay || 0, semis, seed: opts.id });
+        } catch (e) {
+            return null; // Never throw into the game loop.
+        }
+    }
+
+    // One wordless crowd reaction, pitched by the person's id and rate limited.
+    _voice(kind, id, delay = 0) {
+        if (!this.soundPrefs.voices) return;
+        const now = this.audioContext.currentTime;
+        const at = this.voiceLimiter.schedule(now + delay);
+        if (at == null) return;
+        this.sfxPlayer.play(voiceDesc(kind, id), { delay: at - now, gain: VOICE_GAIN, seed: id });
+    }
+
+    // Called from showScreen: a level gets its planet's ambience and the
+    // song ducks under it; every other screen fades the ambience out.
+    setScene(screen, planetId = null) {
+        try {
+            this.scene = { screen, planetId };
+            if (!this.ambience) return;
+            const on = screen === 'game' && this.soundPrefs.ambience && this.hadGesture;
+            if (on) {
+                if (this.ambience.planet == null) this.ambience.setTension(0, false);
+                this.ambience.start(planetId);
+            } else {
+                this.ambience.stop();
+            }
+            this.musicBus.gain.setTargetAtTime(MUSIC_BUS_GAIN * (on ? MUSIC_DUCK : 1), this.audioContext.currentTime, 0.6);
+        } catch (e) { /* never throw into the game loop */ }
+    }
+
+    // Auto-advance countdown: one wood tick each time the whole second
+    // changes. leftMs null means the countdown is gone.
+    countdown(leftMs) {
+        const n = leftMs == null ? null : Math.ceil(leftMs / 1000);
+        if (n === this.lastCount) return;
+        this.lastCount = n;
+        if (n != null && n > 0) this.sfx('tick');
+    }
+
+    getSoundPrefs() {
+        return { ...this.soundPrefs };
+    }
+
+    // key: 'effects' | 'ambience' | 'voices'
+    setSoundPref(key, on) {
+        if (!(key in SOUND_PREF_DEFAULTS)) return;
+        this.soundPrefs[key] = !!on;
+        try {
+            localStorage.setItem(SOUND_PREFS_KEY, JSON.stringify(this.soundPrefs));
+        } catch (e) { /* storage unavailable; keep in-memory value */ }
+        if (key === 'ambience') this.setScene(this.scene.screen, this.scene.planetId);
+    }
+
+    // Counters for tests and the browser check: audio nodes built so far.
+    get debug() {
+        const s = this.sfxPlayer ? this.sfxPlayer.stats : { played: 0, dropped: 0, stolen: 0, nodes: 0 };
+        const amb = this.ambience;
+        return { ...s, nodes: s.nodes + (amb ? amb.nodesCreated : 0), ambience: amb ? amb.planet : null, tension: amb ? amb.tension : 0 };
     }
 
     // ------------------------------------------------------------------
@@ -174,8 +305,13 @@ export class AudioEngine {
     // stats: { day, infected, dead, totalInfected, population }
     // Safe no-op until init, or when music is disabled. Starts the song on
     // the first call so game.js only needs this one call per day.
-    updateMood(stats = {}) {
+    // extra: { cap, r } (case cap and live R) drives the ambience tension.
+    updateMood(stats = {}, extra = {}) {
         try {
+            if (this.ambience && this.ambience.planet) {
+                const r = extra.r ?? null;
+                this.ambience.setTension(tensionLevel({ cases: stats.totalInfected, cap: extra.cap, r }), isRelaxed(r));
+            }
             if (!this.audioContext || !this.musicEnabled) return;
             const { infected = 0, dead = 0, totalInfected = 0, population = 1 } = stats;
             const pop = Math.max(1, population);
@@ -211,6 +347,16 @@ export class AudioEngine {
             if (this.songWanted) this._startSong();
             this._startWatch();
         };
+        // iOS only unlocks audio on touchend or click, and suspends it again
+        // after a call or the lock screen, so keep resuming on real taps.
+        const unlock = (e) => {
+            try {
+                if (this.audioContext && this.audioContext.state !== 'running') this.audioContext.resume();
+                if (e.type === 'click' && e.target?.closest?.(TAP_SELECTOR)) this.sfx('tap');
+            } catch (err) { /* ignore */ }
+        };
+        document.addEventListener('touchend', unlock, true);
+        document.addEventListener('click', unlock, true);
         document.addEventListener('pointerdown', onGesture, true);
         document.addEventListener('keydown', onGesture, true);
         document.addEventListener('visibilitychange', () => {
@@ -460,54 +606,10 @@ export class AudioEngine {
     // Event stingers: short, distinct, tasteful. No-op when disabled/uninit.
     // ------------------------------------------------------------------
 
-    // name: 'spike' | 'milestone' | 'win' | 'loss'
+    // name: 'spike' | 'milestone' | 'win' | 'loss'. These are named effects
+    // now (src/audio-sfx.js), so they follow the Effects switch.
     playStinger(name) {
-        try {
-            if (!this.audioContext || !this.musicEnabled) return;
-            if (this.audioContext.state === 'suspended') {
-                this.audioContext.resume();
-            }
-            switch (name) {
-                case 'spike':
-                    this._stingerSequence([[622.25, 0.12, 'sawtooth'], [659.25, 0.18, 'sawtooth']], 0, 0.09);
-                    break;
-                case 'milestone':
-                    this._stingerSequence([[523.25, 0.2, 'sine'], [659.25, 0.2, 'sine'], [783.99, 0.35, 'sine']], 0.09, 0.16);
-                    break;
-                case 'win':
-                    this._stingerSequence(
-                        [[523.25, 0.18, 'triangle'], [587.33, 0.18, 'triangle'], [659.25, 0.18, 'triangle'], [783.99, 0.5, 'triangle']],
-                        0.12, 0.2
-                    );
-                    break;
-                case 'loss':
-                    this._stingerSequence([[392.0, 0.3, 'sine'], [311.13, 0.3, 'sine'], [233.08, 0.6, 'sine']], 0.22, 0.3);
-                    break;
-                default:
-                    break; // unknown names are ignored, never throw
-            }
-        } catch (e) {
-            // Never throw into the game loop.
-        }
-    }
-
-    // notes: [freq, dur, type][]; gap seconds between note starts; vol per note.
-    _stingerSequence(notes, gap, vol) {
-        const ctx = this.audioContext;
-        notes.forEach(([freq, dur, type], i) => {
-            const startAt = ctx.currentTime + i * (gap + dur * 0.55);
-            const osc = ctx.createOscillator();
-            osc.type = type;
-            osc.frequency.value = freq;
-            const gain = ctx.createGain();
-            gain.gain.setValueAtTime(0.0001, startAt);
-            gain.gain.exponentialRampToValueAtTime(vol, startAt + 0.02);
-            gain.gain.exponentialRampToValueAtTime(0.0001, startAt + dur);
-            osc.connect(gain);
-            gain.connect(this.musicBus);
-            osc.start(startAt);
-            osc.stop(startAt + dur + 0.05);
-        });
+        if (STINGERS[name]) this.sfx(STINGERS[name]);
     }
 
     // ------------------------------------------------------------------

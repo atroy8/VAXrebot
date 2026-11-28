@@ -4,7 +4,7 @@
 // happened with a "no intervention" baseline and count the cases averted.
 // Here the baseline is simulated from the level's opening snapshot (same
 // people, same contacts, same first cases) with nobody acting, run to the
-// natural end of the outbreak. Pure: no DOM, rng injectable for tests.
+// natural end of the outbreak. Pure: no DOM, no dice.
 import { simulateSpread, updateOutcomes } from './engine.js';
 
 const nodeId = (ref) => (ref && typeof ref === 'object' ? ref.id : ref);
@@ -18,9 +18,10 @@ export function snapshotNetwork(network) {
     };
 }
 
-// One no-response outbreak from the snapshot. Returns total people infected
-// (the first cases included) when nobody is infectious any more.
-export function noResponseRun(snapshot, { transmissionRate, recoveryTime, fatalityRate, rng = Math.random, maxDays = 365 }) {
+// The no-response outbreak from the snapshot. Returns total people infected
+// (the first cases included) when nobody is infectious any more. Round 57:
+// spread is certain, so one run is the answer (no more median of many).
+export function noResponseRun(snapshot, { recoveryTime = 5, maxDays = 365 } = {}) {
     const network = {
         nodes: snapshot.nodes.map((n) => ({ id: n.id, state: n.state, daysInfected: 0, removed: false })),
         links: snapshot.links.map((l) => ({ source: l.source, target: l.target })),
@@ -33,19 +34,15 @@ export function noResponseRun(snapshot, { transmissionRate, recoveryTime, fatali
     const state = { stats };
     for (let day = 0; day < maxDays; day++) {
         if (!network.nodes.some((n) => n.state === 'infected')) break;
-        simulateSpread(state, network, transmissionRate, rng);
-        updateOutcomes(state, network, recoveryTime, fatalityRate, rng);
+        simulateSpread(state, network);
+        updateOutcomes(state, network, recoveryTime);
     }
     return stats.totalInfected;
 }
 
-// Median no-response outbreak size over `runs` simulations.
+// Kept under its old name: the no-response outbreak size.
 export function noResponseCases(snapshot, opts = {}) {
-    const runs = Math.max(1, opts.runs ?? 41);
-    const sizes = [];
-    for (let i = 0; i < runs; i++) sizes.push(noResponseRun(snapshot, opts));
-    sizes.sort((a, b) => a - b);
-    return sizes[Math.floor(sizes.length / 2)];
+    return noResponseRun(snapshot, opts);
 }
 
 // The results line. `actual` is the player's total cases, `baseline` the
@@ -56,9 +53,9 @@ export function avertedSummary({ actual, baseline, population, outcome }) {
     const averted = Math.max(0, baseline - actual);
     const base = baseline >= population
         ? `With no response, all ${population} people would have caught it.`
-        : `With no response, about ${baseline} of ${population} people would have caught it.`;
+        : `With no response, ${baseline} of ${population} people would have caught it.`;
     if (outcome === 'contained') {
-        // A lucky baseline can come in under a hard-won result: say only the baseline.
+        // Nothing averted (a level's own goal can end it early): say only the baseline.
         if (averted <= 0) return { averted: 0, text: base };
         return {
             averted,

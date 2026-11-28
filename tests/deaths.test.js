@@ -5,11 +5,11 @@ import { readFileSync } from 'node:fs';
 import { scenarios } from '../src/config/scenarios.js';
 import { LEVELS, REGIONS } from '../src/config/levels.js';
 import { levelRules } from '../src/config/level-rules.js';
-import { gameFatality, dailyDeathChance, personFatality, oneIn, GAME_CFR_MIN, GAME_CFR_MAX, TREATED_FACTOR } from '../src/sim/fatality.js';
+import { gameFatality, frailCount, inWard, oneIn, GAME_CFR_MIN, GAME_CFR_MAX, MAX_FRAIL } from '../src/sim/fatality.js';
 import { updateOutcomes, resolveAftermath } from '../src/sim/engine.js';
 import { advanceDay } from '../src/sim/actions.js';
 import { playRun } from '../src/sim/balance.js';
-import { deathToast, resultsDeathLines, briefingCfr } from '../src/ui/deaths.js';
+import { deathToast, resultsDeathLines, briefingCfr, basedOnCard } from '../src/ui/deaths.js';
 
 const read = (p) => readFileSync(new URL(p, import.meta.url), 'utf8');
 const stateWith = () => ({ day: 1, stats: { totalDead: 0, totalRecovered: 0, totalInfected: 0, initialPopulation: 10, totalProtected: 0, linksSevered: 0 }, dailyUsage: {} });
@@ -43,13 +43,15 @@ describe('real case fatality rates', () => {
         }
     });
 
-    it('daily chances add up to the illness chance, and ward care halves it', () => {
-        const h = dailyDeathChance(0.3, 7);
-        expect(1 - Math.pow(1 - h, 7)).toBeCloseTo(0.3, 10);
-        expect(dailyDeathChance(0, 7)).toBe(0);
-        expect(dailyDeathChance(1, 7)).toBe(1);
-        expect(personFatality({ state: 'infected' }, 0.3)).toBe(0.3);
-        expect(personFatality({ state: 'quarantined', sickWhileQuarantined: true }, 0.3)).toBeCloseTo(0.3 * TREATED_FACTOR);
+    // Round 57: the daily death roll is gone. The disease's rate now sets
+    // how many people are frail, and a ward saves them for certain.
+    it('a deadlier disease marks more people as frail, never more than the limit', () => {
+        expect(frailCount(20, GAME_CFR_MAX)).toBeGreaterThan(frailCount(20, GAME_CFR_MIN));
+        expect(frailCount(8, GAME_CFR_MIN)).toBe(1);
+        expect(frailCount(60, GAME_CFR_MAX)).toBe(MAX_FRAIL);
+        expect(inWard({ state: 'quarantined', sickWhileQuarantined: true })).toBe(true);
+        expect(inWard({ state: 'infected' })).toBe(false);
+        expect(inWard({ state: 'quarantined' })).toBe(false);
     });
 
     it('reads out odds in plain words', () => {
@@ -60,28 +62,33 @@ describe('real case fatality rates', () => {
 });
 
 describe('dying during the illness', () => {
-    it('a sick person can die on the first day of illness, not only the last', () => {
+    it('a frail person outside a ward is lost on the third night, and leaves the web', () => {
         const state = stateWith();
-        const network = { nodes: [{ id: 0, state: 'infected', daysInfected: 1 }], links: [] };
-        const out = updateOutcomes(state, network, 7, 0.3, () => 0.01);
+        const network = { nodes: [{ id: 0, state: 'infected', daysInfected: 3, frail: true }], links: [] };
+        const out = updateOutcomes(state, network, 7, 0.3, () => 0.99);
         expect(out).toEqual([{ node: expect.objectContaining({ id: 0, state: 'dead' }), outcome: 'died', inWard: false }]);
         expect(state.stats.totalDead).toBe(1);
         expect(network.nodes).toHaveLength(0);
     });
 
-    it('a roll that kills an untreated person spares one in a ward', () => {
-        const roll = () => dailyDeathChance(0.3, 7) * 0.75; // under the untreated chance, over the ward chance
+    it('the same person in a ward is spared, whatever the dice would have said', () => {
         const a = stateWith();
-        const sick = { nodes: [{ id: 0, state: 'infected', daysInfected: 2 }], links: [] };
-        expect(updateOutcomes(a, sick, 7, 0.3, roll)[0].outcome).toBe('died');
+        const sick = { nodes: [{ id: 0, state: 'infected', daysInfected: 3, frail: true }], links: [] };
+        expect(updateOutcomes(a, sick, 7, 0.3, () => 0.99)[0].outcome).toBe('died');
         const b = stateWith();
-        const ward = { nodes: [{ id: 0, state: 'quarantined', sickWhileQuarantined: true, daysInfected: 2 }], links: [] };
-        expect(updateOutcomes(b, ward, 7, 0.3, roll)).toHaveLength(0);
+        const ward = { nodes: [{ id: 0, state: 'quarantined', sickWhileQuarantined: true, daysInfected: 3, frail: true }], links: [] };
+        expect(updateOutcomes(b, ward, 7, 0.3, () => 0)).toHaveLength(0);
     });
 
-    it('nobody freshly infected (day 0) is rolled', () => {
+    it('someone who is not frail never dies', () => {
         const state = stateWith();
-        const network = { nodes: [{ id: 0, state: 'infected', daysInfected: 0 }], links: [] };
+        const network = { nodes: [{ id: 0, state: 'infected', daysInfected: 4 }], links: [] };
+        expect(updateOutcomes(state, network, 7, 1, () => 0)).toHaveLength(0);
+    });
+
+    it('nobody freshly infected (day 0) is resolved', () => {
+        const state = stateWith();
+        const network = { nodes: [{ id: 0, state: 'infected', daysInfected: 0, frail: true }], links: [] };
         expect(updateOutcomes(state, network, 7, 1, () => 0)).toHaveLength(0);
     });
 });
@@ -91,15 +98,13 @@ describe('aftermath of a lost level', () => {
         const state = stateWith();
         const network = {
             nodes: [
-                { id: 0, state: 'infected', daysInfected: 2 },
+                { id: 0, state: 'infected', daysInfected: 2, frail: true },
                 { id: 1, state: 'infected', daysInfected: 1 },
                 { id: 2, state: 'healthy', daysInfected: 0 },
             ],
             links: [],
         };
-        const rolls = [0, 0.99];
-        let i = 0;
-        const out = resolveAftermath(state, network, 7, 0.3, () => rolls[i++]);
+        const out = resolveAftermath(state, network, 7, 0.3, () => 0.5);
         expect(out.map((o) => o.outcome)).toEqual(['died', 'recovered']);
         expect(state.stats.aftermathDead).toBe(1);
         expect(state.stats.totalDead).toBe(1);
@@ -161,15 +166,21 @@ describe('deaths on every planet (balance)', () => {
 
 describe('death words and screens', () => {
     it('the first death in a level teaches ward care, later ones just count', () => {
-        expect(deathToast({ count: 1, firstThisLevel: true })).toMatch(/ward/);
+        expect(deathToast({ count: 1, firstThisLevel: true })).toMatch(/Quarantine saves them/);
         expect(deathToast({ count: 2 })).toBe('2 people did not survive.');
-        expect(deathToast({ count: 1, firstThisLevel: true, inWard: true })).toMatch(/Even with care/);
+        expect(deathToast({ count: 1, firstThisLevel: true })).toMatch(/third night/);
     });
 
     it('results explain aftermath deaths and the real rate', () => {
         const lines = resultsDeathLines({ outcome: 'overwhelmed', stats: { totalDead: 3, aftermathDead: 2 }, scenario: scenarios.global, fatalityRate: 0.3 });
         expect(lines[0]).toMatch(/^2 more people/);
-        expect(lines.at(-1)).toMatch(/^For real: WHO counts/);
+        // Wide audience pass: the real rate moved to the Based on card.
+        expect(lines.join(' ')).not.toMatch(/For real/);
+        const card = basedOnCard({ scenario: scenarios.global, fatalityRate: 0.3 });
+        expect(card.lines.some((l) => /^For real: WHO counts/.test(l))).toBe(true);
+        // Round 57: the game's own rule is explained, and that it is the worst case.
+        expect(card.lines.at(-1)).toMatch(/heart mark stand for the about 1 in 3/);
+        expect(card.lines.join(' ')).toMatch(/Real outbreaks involve chance/);
         const clean = resultsDeathLines({ outcome: 'contained', stats: { totalDead: 0 }, scenario: scenarios.school, fatalityRate: 0.135 });
         expect(clean[0]).toMatch(/Nobody died/);
         for (const l of [...lines, ...clean]) expect(l).not.toContain('—');
@@ -181,7 +192,11 @@ describe('death words and screens', () => {
         expect(html).toContain('id="lost-stat" hidden');
         expect(html).toContain('id="final-total-dead"');
         expect(html).toContain('id="final-death-notes"');
-        expect(html).toContain('id="briefing-cfr"');
+        // Wide audience pass: the briefing shows the strain's traits; the real
+        // death rate is on the results' Based on card instead.
+        expect(html).not.toContain('id="briefing-cfr"');
+        expect(html).toContain('id="briefing-traits"');
+        expect(html).toContain('id="results-based-on"');
         expect(read('../src/ui/panels.js')).toContain("getElementById('deaths-count')");
         expect(read('../src/ui/network-view-3d.js')).toContain('animateDeath(node)');
         expect(read('../src/game.js')).toContain('this.view.animateDeath?.(node)');

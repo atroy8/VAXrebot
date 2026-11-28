@@ -5,12 +5,14 @@ import '@fontsource/fredoka/700.css';
 import { EpidemicSimulator } from './game.js';
 import { mountGlobeHome } from './ui/screens.js';
 import { maybeShowPrologue, bindPrologueReplay } from './ui/prologue.js';
+// App Store pass: safe areas, native touch feel and the Capacitor bridge. Last, so its CSS wins.
+import './ui/native-shell.js';
 
         document.addEventListener('DOMContentLoaded', () => {
             window.game = new EpidemicSimulator();
             // The 3D globe replaces the video intro as the home/start screen.
             // Level taps route through the existing briefing flow.
-            mountGlobeHome({ onPlayLevel: (levelId) => window.game.selectLevel(levelId) });
+            mountGlobeHome({ onPlayLevel: (levelId) => window.game.selectLevel(levelId) })?.then?.(() => window.game.mountDailyEntry());
             // Story prologue on first launch, over the start page; Settings can replay it.
             maybeShowPrologue();
             bindPrologueReplay();

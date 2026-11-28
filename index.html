@@ -3,13 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <meta name="theme-color" content="#4b2a8c">
+    <meta name="theme-color" content="#0b1838">
     <title>Galactic Outbreak</title>
     <meta name="description" content="Galactic Outbreak: the galaxy's last hope. Stop an alien-spread virus world by world with real public health tools.">
     <meta name="apple-mobile-web-app-title" content="Galactic Outbreak">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="format-detection" content="telephone=no">
+    <link rel="manifest" href="./manifest.webmanifest">
+    <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%237fd8a4' stroke='%231f7a4a' stroke-width='4'/%3E%3Ccircle cx='23' cy='27' r='4' fill='%23234'/%3E%3Ccircle cx='41' cy='27' r='4' fill='%23234'/%3E%3Cpath d='M21 39q11 9 22 0' fill='none' stroke='%23234' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E">
 </head>
 <body>
@@ -22,8 +25,8 @@
             <div class="intro-wrap">
                 <video id="intro-video" class="intro-video" autoplay muted loop playsinline></video>
                 <div class="intro-overlay">
-                    <h1>Epidemic Control Simulator</h1>
-                    <p class="menu-subtitle">An interactive simulation of epidemic control.</p>
+                    <h1>Galactic Outbreak</h1>
+                    <p class="menu-subtitle">Stop the spread. Save the galaxy.</p>
                     <button id="start-game-btn" class="btn btn--primary btn--lg">Start</button>
                 </div>
             </div>
@@ -35,7 +38,7 @@
         <div id="menu-screen" class="screen">
             <div class="container">
                 <div class="menu-header">
-                    <h1>Epidemic Control Simulator</h1>
+                    <h1>Galactic Outbreak</h1>
                     <p class="menu-subtitle">You are a field epidemiologist. Contain outbreaks, earn stars, save lives.</p>
                     <div class="hud-bar">
                         <span id="hud-stars" class="hud-item">⭐ 0</span>
@@ -53,32 +56,40 @@
         <div id="briefing-screen" class="screen">
             <div class="briefing-content">
                 <h2 id="briefing-title"></h2>
+                <div class="mentor-line" id="briefing-mentor" hidden></div>
+                <div class="briefing-description">
+                    <strong>Situation Briefing:</strong>
+                    <p id="briefing-description-text"></p>
+                </div>
+                <div class="variant-card" id="briefing-variant" role="note" hidden><strong class="variant-title"></strong><p class="variant-text"></p></div>
+                <div class="toolkit-card" id="briefing-toolkit" role="note" hidden></div>
+                <div class="threat-box">
+                    <strong>Threat</strong>
+                    <div class="threat-meter" id="threat-meter" role="img" aria-label="Threat"></div>
+                    <p class="threat-line" id="threat-line"></p>
+                    <!-- Round 57: what 3 stars means on this deal (the solver's par). Out of More, so it is seen. -->
+                    <p class="star-goal" id="star-goal" aria-live="polite"></p>
+                </div>
+                <!-- Everything a player can start without lives behind More. -->
+                <details class="briefing-more" id="briefing-more">
+                <summary class="briefing-more-summary">More</summary>
                 <div class="lesson-card" id="briefing-lesson" hidden>
                     <span class="lesson-kicker">Lesson</span>
                     <strong class="lesson-title" id="briefing-lesson-title"></strong>
                     <p class="lesson-text" id="briefing-lesson-text"></p>
                 </div>
-                <div class="briefing-description">
-                    <strong>Situation Briefing:</strong>
-                    <p id="briefing-description-text"></p>
-                </div>
-                <div class="toolkit-card" id="briefing-toolkit" role="note" hidden></div>
                  <div class="disease-dynamics">
                     <strong>Disease Profile:</strong>
                     <div class="dynamics-grid">
-                        <div><strong>Disease:</strong> <span id="briefing-disease"></span></div>
-                        <div id="briefing-cfr-row"><strong>Real death rate:</strong> <span id="briefing-cfr"></span></div>
+                        <div><strong>Strain:</strong> <span id="briefing-disease"></span></div>
+                        <div id="briefing-traits-row"><strong>Behaviour:</strong> <span id="briefing-traits"></span></div>
                         <div><strong>Agent:</strong> <span id="briefing-agent"></span></div>
                         <div><strong>Vector:</strong> <span id="briefing-vector"></span></div>
-                        <div><strong>Est. R₀:</strong> <span id="briefing-r0"></span></div>
+                        <div><strong>R₀ here:</strong> <span id="briefing-r0"></span></div>
                     </div>
                 </div>
-                <div class="threat-box">
-                    <strong>Threat</strong>
-                    <div class="threat-meter" id="threat-meter" role="img" aria-label="Threat"></div>
-                    <p class="threat-line" id="threat-line"></p>
-                    <p class="star-goal" id="star-goal"></p>
-                </div>
+                </details>
+                <div class="briefing-goals" id="briefing-goals" hidden></div>
                 <div class="briefing-actions">
                     <button class="btn btn--secondary" id="back-to-menu">Back to map</button>
                     <button class="btn btn--primary" id="start-simulation">Begin Containment</button>
@@ -153,11 +164,21 @@
                 </div>
 
                 <div class="panel tools-panel" id="tool-tray">
+                    <!-- Round 57: shown over the tray while the solver's best play is replayed. -->
+                    <div class="demo-banner" id="demo-banner" role="status" hidden><span class="demo-copy"><span class="demo-head" id="demo-head">Best play</span><span class="demo-text" id="demo-text">Watch the best play</span></span><button type="button" class="btn btn--secondary demo-skip" id="demo-skip">Back to results</button></div>
                     <h4 class="tools-title">Tools</h4>
                     <div class="tools-list" id="tools-list" role="toolbar" aria-label="Tools">
                         <!-- Tools will be generated here -->
                     </div>
                     <div class="day-controls">
+                        <button type="button" class="btn btn--secondary meta-btn" id="hint-btn" aria-label="Hint">
+                            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.6 10.8c.6.5 1 1.2 1.1 2.2h5c.1-1 .5-1.7 1.1-2.2A6 6 0 0 0 12 3z"/></svg>
+                            <span class="meta-btn-cost">Hint</span>
+                        </button>
+                        <button type="button" class="btn btn--secondary meta-btn" id="undo-btn" aria-label="Undo last move" hidden>
+                            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" d="M8 5L3 10l5 5M3 10h11a6 6 0 0 1 0 12h-3"/></svg>
+                            <span class="meta-btn-cost">Undo</span>
+                        </button>
                         <button type="button" class="btn btn--secondary hold-btn" id="hold-advance" hidden>Hold</button>
                         <button type="button" class="btn btn--primary next-day-btn" id="next-day">Next day</button>
                     </div>
@@ -185,6 +206,22 @@
         <div id="game-over-screen" class="screen">
              <div class="game-over-content">
                     <h2 id="game-over-title"></h2>
+                    <!-- The lead: stars, one sentence, the reward. The rest is in Details. -->
+                    <div class="results-lead" id="results-lead">
+                        <div class="results-stars" id="results-stars"></div>
+                        <div class="mentor-line" id="results-mentor" hidden></div>
+                        <p class="results-headline" id="results-headline"></p>
+                        <div class="results-goals" id="results-goals" hidden></div>
+                        <div class="results-reward" id="results-reward"></div>
+                        <div class="results-meta" id="results-meta"></div>
+                        <!-- Round 57: watch the solver's best line, or try the same web again. -->
+                        <div class="results-more" id="results-more">
+                            <button type="button" class="btn btn--secondary results-more-btn" id="show-best" hidden>Show best play</button>
+                            <button type="button" class="btn btn--secondary results-more-btn" id="retry-web" hidden>Retry this web</button>
+                        </div>
+                    </div>
+                    <details class="results-details" id="results-details">
+                    <summary class="results-details-summary">Details</summary>
                     <div id="final-difficulty-badge"></div>
                     <div class="tally" id="results-tally" hidden></div>
                     <details class="final-stats-wrap" id="final-stats-wrap" open>
@@ -218,15 +255,18 @@
                     </details>
                     <p id="game-over-message" class="game-over-message"></p>
                     <ul id="final-death-notes" class="final-death-notes" hidden></ul>
+                    <details class="based-on" id="results-based-on" hidden></details>
                     <div class="averted" id="averted" role="status" hidden></div>
                     <div class="lesson-card lesson-card--debrief" id="game-over-lesson" hidden>
                         <span class="lesson-kicker">Lesson</span>
                         <strong class="lesson-title" id="game-over-lesson-title"></strong>
                         <p class="lesson-text" id="game-over-lesson-text"></p>
                     </div>
+                    </details>
                     <div class="game-over-actions">
                         <button class="btn btn--secondary" id="play-again">Replay Level</button>
                         <button class="btn btn--primary" id="try-different-scenario">Back to map</button>
+                        <button class="btn btn--primary" id="next-level" hidden>Next level</button>
                     </div>
                 </div>
         </div>

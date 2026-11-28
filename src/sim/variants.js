@@ -1,7 +1,7 @@
 // Puzzle level variants (round 14). Pure: no DOM, rng injectable.
 //
 // A level may carry `variant` (src/config/campaign.js):
-//   superSpreader { degreeShare or degree, toolDays, boss }  one carrier with many contacts
+//   superSpreader { degreeShare or degree, above, networkType, toolDays, boss }  one carrier with many contacts
 //                                            starts sick (node.superSpreader)
 //   envoy { minDistance }                     one marked person far from the
 //                                            first cases (node.envoy); if the
@@ -33,23 +33,82 @@ export function carrierDegree(population, { degree, degreeShare } = {}) {
 
 // Pick the best connected person, give them extra contacts until they have
 // enough of them (carrierDegree), and make them sick. Returns the carrier node.
+// opts.above (round 57): the carrier has exactly the contacts asked for and
+// everyone else has fewer, so "more contacts than anyone" is true on every
+// deal and the size of day 1 is the spec's to choose. Anyone else with as
+// many contacts loses a few lines (trimBusiest), never a line the web needs
+// to stay in one piece.
 export function placeSuperSpreader(nodes, links, opts = {}, rng = Math.random) {
     const degree = carrierDegree(nodes.length, opts);
-    const adj = adjacency(nodes, links);
+    let adj = adjacency(nodes, links);
     let carrier = nodes[0];
     for (const n of nodes) if (adj.get(n.id).size > adj.get(carrier.id).size) carrier = n;
+    const target = Math.min(degree, nodes.length - 1);
+    if (opts.above) {
+        // The carrier first (down to the target if they started above it).
+        trimBusiest(nodes, links, (id) => (id === carrier.id ? target : Infinity), null);
+        adj = adjacency(nodes, links);
+    }
     const mine = adj.get(carrier.id);
     const others = nodes.filter((n) => n.id !== carrier.id && !mine.has(n.id));
-    const target = Math.min(degree, nodes.length - 1);
+    // With `above`, new contacts go to the people with the fewest lines, so
+    // as little as possible has to be trimmed afterwards.
+    if (opts.above) others.sort((a, b) => adj.get(b.id).size - adj.get(a.id).size || b.id - a.id);
     while (mine.size < target && others.length) {
-        const k = Math.floor(rng() * others.length);
+        const k = opts.above ? others.length - 1 - Math.floor(rng() * Math.min(3, others.length)) : Math.floor(rng() * others.length);
         const other = others.splice(k, 1)[0];
         links.push({ source: carrier.id, target: other.id });
         mine.add(other.id);
     }
+    // Then everyone else, below the carrier, without touching the carrier's lines.
+    if (opts.above) trimBusiest(nodes, links, (id) => (id === carrier.id ? Infinity : target - 1), carrier.id);
     carrier.state = 'infected';
     carrier.superSpreader = true;
     return carrier;
+}
+
+// Remove lines until nobody has more contacts than limitOf(id). A line is
+// only removed when both ends keep at least two contacts and the web stays
+// connected, and never a line of `keepId`. Mutates links.
+export function trimBusiest(nodes, links, limitOf, keepId = null) {
+    for (let guard = 0; guard < 300; guard++) {
+        const adj = adjacency(nodes, links);
+        const over = nodes.filter((n) => adj.get(n.id).size > limitOf(n.id)).sort((a, b) => adj.get(b.id).size - limitOf(b.id) - (adj.get(a.id).size - limitOf(a.id)) || a.id - b.id);
+        if (!over.length) return;
+        let removed = false;
+        for (const n of over) {
+            // Drop the line to the busiest neighbour that can spare it.
+            const choices = [...adj.get(n.id)].filter((m) => m !== keepId && adj.get(m).size > 2).sort((a, b) => adj.get(b).size - adj.get(a).size || a - b);
+            for (const m of choices) {
+                const k = links.findIndex((l) => (nodeId(l.source) === n.id && nodeId(l.target) === m) || (nodeId(l.source) === m && nodeId(l.target) === n.id));
+                if (k < 0) continue;
+                const [gone] = links.splice(k, 1);
+                if (connected(nodes, links)) {
+                    removed = true;
+                    break;
+                }
+                links.splice(k, 0, gone);
+            }
+            if (removed) break;
+        }
+        if (!removed) return; // nothing more can go without breaking the web
+    }
+}
+
+function connected(nodes, links) {
+    if (!nodes.length) return true;
+    const adj = adjacency(nodes, links);
+    const seen = new Set([nodes[0].id]);
+    const queue = [nodes[0].id];
+    for (let i = 0; i < queue.length; i++) {
+        for (const nb of adj.get(queue[i])) {
+            if (!seen.has(nb)) {
+                seen.add(nb);
+                queue.push(nb);
+            }
+        }
+    }
+    return seen.size === nodes.length;
 }
 
 // Shortest hop count from any sick person to every node (Infinity when out
@@ -98,22 +157,74 @@ export function placeEnvoy(nodes, links, { minDistance = 3 } = {}, rng = Math.ra
     return envoy;
 }
 
+// Keep it open (later planets, src/sim/mechanics.js): mark the place that
+// must stay open. It is the best connected healthy person who is not next
+// to a first case, given extra contacts (never to a sick person) until they
+// know about `degreeShare` of the web. Returns the hub node, or null.
+export function placeHub(nodes, links, { degreeShare = 0.35, minDegree = 5 } = {}, rng = Math.random) {
+    const adj = adjacency(nodes, links);
+    const dist = distancesFromSick(nodes, links);
+    const healthy = nodes.filter((n) => n.state === 'healthy');
+    if (!healthy.length) return null;
+    let pool = healthy.filter((n) => dist.get(n.id) >= 2);
+    if (!pool.length) pool = healthy;
+    pool.sort((a, b) => adj.get(b.id).size - adj.get(a.id).size || a.id - b.id);
+    const hub = pool[0];
+    const mine = adj.get(hub.id);
+    // At least as many contacts as the busiest person on the web.
+    const busiest = Math.max(...nodes.map((n) => adj.get(n.id).size));
+    const want = Math.min(healthy.length - 1, Math.max(minDegree, busiest, Math.round(degreeShare * nodes.length)));
+    const others = healthy.filter((n) => n.id !== hub.id && !mine.has(n.id));
+    while (mine.size < want && others.length) {
+        const other = others.splice(Math.floor(rng() * others.length), 1)[0];
+        links.push({ source: hub.id, target: other.id });
+        mine.add(other.id);
+    }
+    // A new contact makes that person busier too, so keep going until the
+    // hub really is the busiest person on the web (round 57: it could end one
+    // contact short of someone it had just been joined to).
+    const busiestOther = () => {
+        const now = adjacency(nodes, links);
+        let top = 0;
+        for (const n of nodes) if (n.id !== hub.id) top = Math.max(top, now.get(n.id).size);
+        return top;
+    };
+    while (others.length && mine.size < busiestOther()) {
+        const other = others.splice(Math.floor(rng() * others.length), 1)[0];
+        links.push({ source: hub.id, target: other.id });
+        mine.add(other.id);
+    }
+    hub.hub = true;
+    return hub;
+}
+
 // True when the Envoy is sick, sick in isolation, or has died.
 export function envoyLost(network, envoyId) {
     if (envoyId == null) return false;
     const envoy = network.nodes.find((n) => n.id === envoyId);
     if (!envoy || envoy.removed || envoy.state === 'dead') return true;
-    return envoy.state === 'infected' || (envoy.state === 'quarantined' && !!envoy.sickWhileQuarantined);
+    // A known carrier (tested positive, later planets) has caught it too.
+    return envoy.state === 'infected' || envoy.state === 'exposed' || (envoy.state === 'quarantined' && !!envoy.sickWhileQuarantined);
 }
 
-// Briefing callout for a variant.
-export function variantCallout(variant) {
+// Briefing callout for a variant. Later planets can add a new idea to a
+// level (level.mechanics, src/config/planet-mechanics.js): its callout
+// shows alone, or after the puzzle's own line when the level has both.
+export function variantCallout(variant, mechanics = null) {
+    const own = puzzleCallout(variant);
+    const extra = mechanics && mechanics.callout ? mechanics.callout : null;
+    if (!extra) return own;
+    if (!own) return { title: extra.title, text: extra.text };
+    return { title: own.title, text: `${own.text} ${extra.title}. ${extra.text}` };
+}
+
+function puzzleCallout(variant) {
     if (!variant) return null;
     switch (variant.type) {
         case 'superSpreader':
             return {
                 title: variant.boss ? 'Boss: the Blightborne carrier' : 'Puzzle: stop the super-spreader',
-                text: 'The person with the red crown has more contacts than anyone. Cut their links on day 1 and isolate them on day 2.',
+                text: 'The crowned carrier has more contacts than anyone, and each one catches it tonight. You cannot cut every line: choose who to save.',
             };
         case 'envoy':
             return { title: 'Puzzle: protect the Envoy', text: 'The person with the gold star must not fall ill. If they do, the mission fails.' };

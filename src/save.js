@@ -17,6 +17,14 @@
 //   powerups: { eureka: number, blitz: number, pay: number },  // charge inventory
 //   openedChests: string[]    // supply chest ids already claimed (each opens once)
 // }
+// Wide audience round (still version 2, every field optional in old saves
+// and filled with a default on load, see META_DEFAULTS):
+//   settings: { gentle: boolean }     // Gentle mode switch
+//   upgrades: string[]                // permanent shop upgrades owned
+//   goals: { [levelId]: string[] }    // bonus goals ever completed per level
+//   daily: { lastDate, streak, best, last }   // Daily puzzle streak
+//   lossStreak: { levelId, count }    // losses in a row on one level
+//   levels[levelId] may also carry standardClear / gentleClear: true
 // Unlock state is DERIVED from completions + gating rules (src/progress.js),
 // never stored, so the rules stay the single source of truth.
 //
@@ -25,10 +33,42 @@
 // reset to a fresh save rather than crashing. resetSave() is exposed for a
 // future settings-screen button.
 
+// Upgrade ids replaced over time, old to new. Mirrors UPGRADE_RENAMES in
+// src/config/upgrades.js (kept here so the save has no imports; a test
+// checks they agree).
+const UPGRADE_RENAMES = { earlyWarning: 'rapidResponse' };
+
 export const SAVE_KEY = 'vaxrebot-save-v1';
 export const SAVE_VERSION = 2;
 
 const DEFAULT_CHARGES = { eureka: 0, blitz: 0, pay: 0 };
+
+// Defaults for the meta-game fields. A function, so nobody shares objects.
+export function metaDefaults() {
+    return {
+        settings: { gentle: false },
+        upgrades: [],
+        goals: {},
+        daily: { lastDate: null, streak: 0, best: 0, last: null },
+        lossStreak: { levelId: null, count: 0 },
+    };
+}
+
+const isObject = (x) => !!x && typeof x === 'object' && !Array.isArray(x);
+
+// Fill the meta-game fields of a loaded save, keeping whatever is valid.
+export function withMetaDefaults(data) {
+    const d = metaDefaults();
+    return {
+        settings: { ...d.settings, ...(isObject(data.settings) ? data.settings : {}) },
+        // Round 57: Early warning became Rapid response; a save that owns the
+        // old upgrade owns the new one (never twice).
+        upgrades: Array.isArray(data.upgrades) ? [...new Set(data.upgrades.filter((x) => typeof x === 'string').map((x) => UPGRADE_RENAMES[x] || x))] : d.upgrades,
+        goals: isObject(data.goals) ? data.goals : d.goals,
+        daily: { ...d.daily, ...(isObject(data.daily) ? data.daily : {}) },
+        lossStreak: { ...d.lossStreak, ...(isObject(data.lossStreak) ? data.lossStreak : {}) },
+    };
+}
 
 export function createMemoryBackend() {
     const store = new Map();
@@ -69,6 +109,7 @@ export function freshSave() {
         levels: {},
         powerups: { ...DEFAULT_CHARGES },
         openedChests: [],
+        ...metaDefaults(),
     };
 }
 
@@ -93,6 +134,7 @@ function normalizeSave(data) {
         version: SAVE_VERSION,
         powerups: { ...DEFAULT_CHARGES, ...(data.powerups || {}) },
         openedChests: Array.isArray(data.openedChests) ? data.openedChests : [],
+        ...withMetaDefaults(data),
     };
 }
 

@@ -1,0 +1,2207 @@
+[
+ {
+  "rules": {
+   "id": "mizuho-1",
+   "scenarioId": "care",
+   "difficultyId": "easy",
+   "lessonId": "act-early",
+   "target": 650,
+   "population": [
+    8,
+    11
+   ],
+   "variant": null,
+   "toolkitId": "full",
+   "tools": [
+    "vaccinate",
+    "quarantine",
+    "severLink"
+   ],
+   "tuning": {
+    "initialInfected": 1,
+    "transmissionMultiplier": 5,
+    "caseCapFraction": 0.45,
+    "parDays": 6,
+    "dailyLimits": {
+     "vaccinate": 2,
+     "quarantine": 2,
+     "severLink": 3
+    }
+   },
+   "scenario": {
+    "networkType": "small-world",
+    "duration": 18,
+    "initialInfected": 1,
+    "baseTransmissionRate": 0.18,
+    "populationRange": [
+     8,
+     11
+    ],
+    "caseCapFraction": 0.45,
+    "realCfr": 0.24
+   },
+   "difficulty": {
+    "transmissionMultiplier": 5,
+    "toolLimitMultiplier": 1.5,
+    "recoveryTime": 5,
+    "fatalityRate": 0.289,
+    "dailyLimits": {
+     "vaccinate": 2,
+     "quarantine": 2,
+     "severLink": 3
+    },
+    "toolkit": [
+     "vaccinate",
+     "quarantine",
+     "severLink"
+    ]
+   },
+   "difficultyKeys": [
+    "R0",
+    "dailyLimits",
+    "description",
+    "fatalityRate",
+    "icon",
+    "name",
+    "recoveryTime",
+    "toolLimitMultiplier",
+    "toolkit",
+    "transmissionMultiplier"
+   ]
+  },
+  "play": {
+   "smart": {
+    "counts": {
+     "contained": 30
+    },
+    "stars": [
+     0,
+     2,
+     21,
+     7
+    ]
+   },
+   "beginner": {
+    "counts": {
+     "contained": 30
+    },
+    "stars": [
+     0,
+     0,
+     20,
+     10
+    ]
+   },
+   "random": {
+    "counts": {
+     "overwhelmed": 27,
+     "contained": 3
+    },
+    "stars": [
+     27,
+     0,
+     1,
+     2
+    ]
+   }
+  }
+ },
+ {
+  "rules": {
+   "id": "mizuho-2",
+   "scenarioId": "school",
+   "difficultyId": "easy",
+   "lessonId": "isolation",
+   "target": 645,
+   "population": [
+    9,
+    12
+   ],
+   "variant": null,
+   "toolkitId": "school",
+   "tools": [
+    "quarantine",
+    "severLink"
+   ],
+   "tuning": {
+    "initialInfected": 1,
+    "transmissionMultiplier": 5,
+    "caseCapFraction": 0.25,
+    "parDays": 6,
+    "dailyLimits": {
+     "vaccinate": 0,
+     "quarantine": 3,
+     "severLink": 3
+    }
+   },
+   "scenario": {
+    "networkType": "small-world",
+    "duration": 21,
+    "initialInfected": 1,
+    "baseTransmissionRate": 0.12,
+    "populationRange": [
+     9,
+     12
+    ],
+    "caseCapFraction": 0.25,
+    "realCfr": 0.0002
+   },
+   "difficulty": {
+    "transmissionMultiplier": 5,
+    "toolLimitMultiplier": 1.5,
+    "recoveryTime": 5,
+    "fatalityRate": 0.135,
+    "dailyLimits": {
+     "vaccinate": 0,
+     "quarantine": 3,
+     "severLink": 3
+    },
+    "toolkit": [
+     "quarantine",
+     "severLink"
+    ]
+   },
+   "difficultyKeys": [
+    "R0",
+    "dailyLimits",
+    "description",
+    "fatalityRate",
+    "icon",
+    "name",
+    "recoveryTime",
+    "toolLimitMultiplier",
+    "toolkit",
+    "transmissionMultiplier"
+   ]
+  },
+  "play": {
+   "smart": {
+    "counts": {
+     "contained": 30
+    },
+    "stars": [
+     0,
+     0,
+     21,
+     9
+    ]
+   },
+   "beginner": {
+    "counts": {
+     "contained": 29,
+     "overwhelmed": 1
+    },
+    "stars": [
+     1,
+     0,
+     18,
+     11
+    ]
+   },
+   "random": {
+    "counts": {
+     "overwhelmed": 30
+    },
+    "stars": [
+     30,
+     0,
+     0,
+     0
+    ]
+   }
+  }
+ },
+ {
+  "rules": {
+   "id": "mizuho-3",
+   "scenarioId": "urban",
+   "difficultyId": "easy",
+   "lessonId": "super-spreaders",
+   "target": 633,
+   "population": [
+    11,
+    14
+   ],
+   "variant": {
+    "type": "superSpreader",
+    "degreeShare": 0.5,
+    "toolDays": {
+     "quarantine": 2
+    },
+    "boss": false
+   },
+   "toolkitId": "market",
+   "tools": [
+    "vaccinate",
+    "quarantine",
+    "severLink"
+   ],
+   "tuning": {
+    "initialInfected": 1,
+    "transmissionMultiplier": 4.6,
+    "caseCapFraction": 0.55,
+    "parDays": 6,
+    "dailyLimits": {
+     "vaccinate": 2,
+     "quarantine": 2,
+     "severLink": 2
+    }
+   },
+   "scenario": {
+    "networkType": "scale-free",
+    "duration": 14,
+    "initialInfected": 1,
+    "baseTransmissionRate": 0.15,
+    "populationRange": [
+     11,
+     14
+    ],
+    "caseCapFraction": 0.55,
+    "realCfr": 0.01
+   },
+   "difficulty": {
+    "transmissionMultiplier": 4.6,
+    "toolLimitMultiplier": 1.5,
+    "recoveryTime": 5,
+    "fatalityRate": 0.22,
+    "dailyLimits": {
+     "vaccinate": 2,
+     "quarantine": 2,
+     "severLink": 2
+    },
+    "toolkit": [
+     "vaccinate",
+     "quarantine",
+     "severLink"
+    ],
+    "toolDays": {
+     "quarantine": 2
+    }
+   },
+   "difficultyKeys": [
+    "R0",
+    "dailyLimits",
+    "description",
+    "fatalityRate",
+    "icon",
+    "name",
+    "recoveryTime",
+    "toolDays",
+    "toolLimitMultiplier",
+    "toolkit",
+    "transmissionMultiplier"
+   ]
+  },
+  "play": {
+   "smart": {
+    "counts": {
+     "contained": 27,
+     "overwhelmed": 3
+    },
+    "stars": [
+     3,
+     1,
+     15,
+     11
+    ]
+   },
+   "beginner": {
+    "counts": {
+     "contained": 25,
+     "overwhelmed": 5
+    },
+    "stars": [
+     5,
+     0,
+     11,
+     14
+    ]
+   },
+   "random": {
+    "counts": {
+     "overwhelmed": 22,
+     "contained": 8
+    },
+    "stars": [
+     22,
+     0,
+     6,
+     2
+    ]
+   }
+  }
+ },
+ {
+  "rules": {
+   "id": "mizuho-4",
+   "scenarioId": "festival",
+   "difficultyId": "easy",
+   "lessonId": "hubs",
+   "target": 651,
+   "population": [
+    13,
+    16
+   ],
+   "variant": null,
+   "toolkitId": "festival",
+   "tools": [
+    "severLink"
+   ],
+   "tuning": {
+    "initialInfected": 2,
+    "transmissionMultiplier": 2.3,
+    "caseCapFraction": 0.45,
+    "parDays": 6,
+    "dailyLimits": {
+     "vaccinate": 0,
+     "quarantine": 0,
+     "severLink": 4
+    }
+   },
+   "scenario": {
+    "networkType": "random",
+    "duration": 10,
+    "initialInfected": 2,
+    "baseTransmissionRate": 0.2,
+    "populationRange": [
+     13,
+     16
+    ],
+    "caseCapFraction": 0.45,
+    "realCfr": 0.0003
+   },
+   "difficulty": {
+    "transmissionMultiplier": 2.3,
+    "toolLimitMultiplier": 1.5,
+    "recoveryTime": 5,
+    "fatalityRate": 0.144,
+    "dailyLimits": {
+     "vaccinate": 0,
+     "quarantine": 0,
+     "severLink": 4
+    },
+    "toolkit": [
+     "severLink"
+    ]
+   },
+   "difficultyKeys": [
+    "R0",
+    "dailyLimits",
+    "description",
+    "fatalityRate",
+    "icon",
+    "name",
+    "recoveryTime",
+    "toolLimitMultiplier",
+    "toolkit",
+    "transmissionMultiplier"
+   ]
+  },
+  "play": {
+   "smart": {
+    "counts": {
+     "contained": 28,
+     "overwhelmed": 2
+    },
+    "stars": [
+     2,
+     1,
+     22,
+     5
+    ]
+   },
+   "beginner": {
+    "counts": {
+     "contained": 26,
+     "overwhelmed": 4
+    },
+    "stars": [
+     4,
+     0,
+     23,
+     3
+    ]
+   },
+   "random": {
+    "counts": {
+     "overwhelmed": 25,
+     "contained": 5
+    },
+    "stars": [
+     25,
+     0,
+     3,
+     2
+    ]
+   }
+  }
+ },
+ {
+  "rules": {
+   "id": "mizuho-5",
+   "scenarioId": "school",
+   "difficultyId": "easy",
+   "lessonId": "contact-tracing",
+   "target": 659,
+   "population": [
+    9,
+    12
+   ],
+   "variant": {
+    "type": "noVaccines"
+   },
+   "toolkitId": "schoolNoVaccines",
+   "tools": [
+    "quarantine",
+    "severLink"
+   ],
+   "tuning": {
+    "initialInfected": 1,
+    "transmissionMultiplier": 4.5,
+    "caseCapFraction": 0.45,
+    "parDays": 6,
+    "dailyLimits": {
+     "vaccinate": 0,
+     "quarantine": 3,
+     "severLink": 2
+    }
+   },
+   "scenario": {
+    "networkType": "small-world",
+    "duration": 21,
+    "initialInfected": 1,
+    "baseTransmissionRate": 0.12,
+    "populationRange": [
+     9,
+     12
+    ],
+    "caseCapFraction": 0.45,
+    "realCfr": 0.0002
+   },
+   "difficulty": {
+    "transmissionMultiplier": 4.5,
+    "toolLimitMultiplier": 1.5,
+    "recoveryTime": 5,
+    "fatalityRate": 0.135,
+    "dailyLimits": {
+     "vaccinate": 0,
+     "quarantine": 3,
+     "severLink": 2
+    },
+    "toolkit": [
+     "quarantine",
+     "severLink"
+    ]
+   },
+   "difficultyKeys": [
+    "R0",
+    "dailyLimits",
+    "description",
+    "fatalityRate",
+    "icon",
+    "name",
+    "recoveryTime",
+    "toolLimitMultiplier",
+    "toolkit",
+    "transmissionMultiplier"
+   ]
+  },
+  "play": {
+   "smart": {
+    "counts": {
+     "contained": 29,
+     "overwhelmed": 1
+    },
+    "stars": [
+     1,
+     0,
+     23,
+     6
+    ]
+   },
+   "beginner": {
+    "counts": {
+     "contained": 28,
+     "overwhelmed": 2
+    },
+    "stars": [
+     2,
+     1,
+     22,
+     5
+    ]
+   },
+   "random": {
+    "counts": {
+     "overwhelmed": 25,
+     "contained": 5
+    },
+    "stars": [
+     25,
+     1,
+     3,
+     1
+    ]
+   }
+  }
+ },
+ {
+  "rules": {
+   "id": "mizuho-6",
+   "scenarioId": "global",
+   "difficultyId": "easy",
+   "lessonId": "keep-r-below-1",
+   "target": 617,
+   "population": [
+    13,
+    16
+   ],
+   "variant": null,
+   "toolkitId": "rollout",
+   "tools": [
+    "vaccinate",
+    "severLink"
+   ],
+   "tuning": {
+    "initialInfected": 3,
+    "transmissionMultiplier": 3.6,
+    "caseCapFraction": 0.55,
+    "parDays": 6,
+    "dailyLimits": {
+     "vaccinate": 1,
+     "quarantine": 0,
+     "severLink": 2
+    }
+   },
+   "scenario": {
+    "networkType": "scale-free",
+    "duration": 21,
+    "initialInfected": 3,
+    "baseTransmissionRate": 0.14,
+    "populationRange": [
+     13,
+     16
+    ],
+    "caseCapFraction": 0.55,
+    "realCfr": 0.36
+   },
+   "difficulty": {
+    "transmissionMultiplier": 3.6,
+    "toolLimitMultiplier": 1.5,
+    "recoveryTime": 5,
+    "fatalityRate": 0.298,
+    "dailyLimits": {
+     "vaccinate": 1,
+     "quarantine": 0,
+     "severLink": 2
+    },
+    "toolkit": [
+     "vaccinate",
+     "severLink"
+    ],
+    "toolDays": {
+     "vaccinate": 1
+    }
+   },
+   "difficultyKeys": [
+    "R0",
+    "dailyLimits",
+    "description",
+    "fatalityRate",
+    "icon",
+    "name",
+    "recoveryTime",
+    "toolDays",
+    "toolLimitMultiplier",
+    "toolkit",
+    "transmissionMultiplier"
+   ]
+  },
+  "play": {
+   "smart": {
+    "counts": {
+     "contained": 29,
+     "overwhelmed": 1
+    },
+    "stars": [
+     1,
+     0,
+     20,
+     9
+    ]
+   },
+   "beginner": {
+    "counts": {
+     "contained": 24,
+     "overwhelmed": 6
+    },
+    "stars": [
+     6,
+     2,
+     16,
+     6
+    ]
+   },
+   "random": {
+    "counts": {
+     "overwhelmed": 27,
+     "contained": 3
+    },
+    "stars": [
+     27,
+     0,
+     2,
+     1
+    ]
+   }
+  }
+ },
+ {
+  "rules": {
+   "id": "mizuho-7",
+   "scenarioId": "care",
+   "difficultyId": "easy",
+   "lessonId": "protect-vulnerable",
+   "target": 730,
+   "population": [
+    11,
+    14
+   ],
+   "variant": {
+    "type": "envoy",
+    "minDistance": 3
+   },
+   "toolkitId": "envoy",
+   "tools": [
+    "quarantine",
+    "severLink"
+   ],
+   "tuning": {
+    "initialInfected": 1,
+    "transmissionMultiplier": 4.1,
+    "caseCapFraction": 0.45,
+    "parDays": 7,
+    "dailyLimits": {
+     "vaccinate": 0,
+     "quarantine": 3,
+     "severLink": 2
+    }
+   },
+   "scenario": {
+    "networkType": "small-world",
+    "duration": 18,
+    "initialInfected": 1,
+    "baseTransmissionRate": 0.18,
+    "populationRange": [
+     11,
+     14
+    ],
+    "caseCapFraction": 0.45,
+    "realCfr": 0.24
+   },
+   "difficulty": {
+    "transmissionMultiplier": 4.1,
+    "toolLimitMultiplier": 1.5,
+    "recoveryTime": 5,
+    "fatalityRate": 0.289,
+    "dailyLimits": {
+     "vaccinate": 0,
+     "quarantine": 3,
+     "severLink": 2
+    },
+    "toolkit": [
+     "quarantine",
+     "severLink"
+    ]
+   },
+   "difficultyKeys": [
+    "R0",
+    "dailyLimits",
+    "description",
+    "fatalityRate",
+    "icon",
+    "name",
+    "recoveryTime",
+    "toolLimitMultiplier",
+    "toolkit",
+    "transmissionMultiplier"
+   ]
+  },
+  "play": {
+   "smart": {
+    "counts": {
+     "contained": 26,
+     "overwhelmed": 4
+    },
+    "stars": [
+     4,
+     2,
+     17,
+     7
+    ]
+   },
+   "beginner": {
+    "counts": {
+     "contained": 21,
+     "overwhelmed": 9
+    },
+    "stars": [
+     9,
+     2,
+     11,
+     8
+    ]
+   },
+   "random": {
+    "counts": {
+     "envoy-lost": 2,
+     "overwhelmed": 28
+    },
+    "stars": [
+     30,
+     0,
+     0,
+     0
+    ]
+   }
+  }
+ },
+ {
+  "rules": {
+   "id": "mizuho-8",
+   "scenarioId": "urban",
+   "difficultyId": "easy",
+   "lessonId": "herd-immunity",
+   "target": 642,
+   "population": [
+    11,
+    14
+   ],
+   "variant": null,
+   "toolkitId": "market",
+   "tools": [
+    "vaccinate",
+    "quarantine",
+    "severLink"
+   ],
+   "tuning": {
+    "initialInfected": 1,
+    "transmissionMultiplier": 4.9,
+    "caseCapFraction": 0.45,
+    "parDays": 6,
+    "dailyLimits": {
+     "vaccinate": 1,
+     "quarantine": 2,
+     "severLink": 2
+    }
+   },
+   "scenario": {
+    "networkType": "scale-free",
+    "duration": 14,
+    "initialInfected": 1,
+    "baseTransmissionRate": 0.15,
+    "populationRange": [
+     11,
+     14
+    ],
+    "caseCapFraction": 0.45,
+    "realCfr": 0.01
+   },
+   "difficulty": {
+    "transmissionMultiplier": 4.9,
+    "toolLimitMultiplier": 1.5,
+    "recoveryTime": 5,
+    "fatalityRate": 0.22,
+    "dailyLimits": {
+     "vaccinate": 1,
+     "quarantine": 2,
+     "severLink": 2
+    },
+    "toolkit": [
+     "vaccinate",
+     "quarantine",
+     "severLink"
+    ]
+   },
+   "difficultyKeys": [
+    "R0",
+    "dailyLimits",
+    "description",
+    "fatalityRate",
+    "icon",
+    "name",
+    "recoveryTime",
+    "toolLimitMultiplier",
+    "toolkit",
+    "transmissionMultiplier"
+   ]
+  },
+  "play": {
+   "smart": {
+    "counts": {
+     "contained": 30
+    },
+    "stars": [
+     0,
+     0,
+     17,
+     13
+    ]
+   },
+   "beginner": {
+    "counts": {
+     "contained": 27,
+     "overwhelmed": 3
+    },
+    "stars": [
+     3,
+     0,
+     24,
+     3
+    ]
+   },
+   "random": {
+    "counts": {
+     "overwhelmed": 26,
+     "contained": 4
+    },
+    "stars": [
+     26,
+     0,
+     2,
+     2
+    ]
+   }
+  }
+ },
+ {
+  "rules": {
+   "id": "mizuho-9",
+   "scenarioId": "festival",
+   "difficultyId": "easy",
+   "lessonId": "ring-vaccination",
+   "target": 641,
+   "population": [
+    13,
+    16
+   ],
+   "variant": {
+    "type": "noQuarantine"
+   },
+   "toolkitId": "festivalNoWards",
+   "tools": [
+    "vaccinate",
+    "severLink"
+   ],
+   "tuning": {
+    "initialInfected": 1,
+    "transmissionMultiplier": 4.3,
+    "caseCapFraction": 0.25,
+    "parDays": 6,
+    "dailyLimits": {
+     "vaccinate": 3,
+     "quarantine": 0,
+     "severLink": 3
+    }
+   },
+   "scenario": {
+    "networkType": "random",
+    "duration": 10,
+    "initialInfected": 1,
+    "baseTransmissionRate": 0.2,
+    "populationRange": [
+     13,
+     16
+    ],
+    "caseCapFraction": 0.25,
+    "realCfr": 0.0003
+   },
+   "difficulty": {
+    "transmissionMultiplier": 4.3,
+    "toolLimitMultiplier": 1.5,
+    "recoveryTime": 5,
+    "fatalityRate": 0.144,
+    "dailyLimits": {
+     "vaccinate": 3,
+     "quarantine": 0,
+     "severLink": 3
+    },
+    "toolkit": [
+     "vaccinate",
+     "severLink"
+    ]
+   },
+   "difficultyKeys": [
+    "R0",
+    "dailyLimits",
+    "description",
+    "fatalityRate",
+    "icon",
+    "name",
+    "recoveryTime",
+    "toolLimitMultiplier",
+    "toolkit",
+    "transmissionMultiplier"
+   ]
+  },
+  "play": {
+   "smart": {
+    "counts": {
+     "contained": 30
+    },
+    "stars": [
+     0,
+     0,
+     26,
+     4
+    ]
+   },
+   "beginner": {
+    "counts": {
+     "contained": 30
+    },
+    "stars": [
+     0,
+     0,
+     26,
+     4
+    ]
+   },
+   "random": {
+    "counts": {
+     "overwhelmed": 29,
+     "contained": 1
+    },
+    "stars": [
+     29,
+     0,
+     1,
+     0
+    ]
+   }
+  }
+ },
+ {
+  "rules": {
+   "id": "mizuho-10",
+   "scenarioId": "global",
+   "difficultyId": "easy",
+   "lessonId": "super-spreaders",
+   "target": 633,
+   "population": [
+    14,
+    16
+   ],
+   "variant": {
+    "type": "superSpreader",
+    "degreeShare": 0.56,
+    "toolDays": {
+     "quarantine": 2
+    },
+    "boss": true
+   },
+   "toolkitId": "boss",
+   "tools": [
+    "vaccinate",
+    "quarantine",
+    "severLink"
+   ],
+   "tuning": {
+    "initialInfected": 1,
+    "transmissionMultiplier": 4.5,
+    "caseCapFraction": 0.55,
+    "parDays": 6,
+    "dailyLimits": {
+     "vaccinate": 1,
+     "quarantine": 2,
+     "severLink": 2
+    }
+   },
+   "scenario": {
+    "networkType": "scale-free",
+    "duration": 21,
+    "initialInfected": 1,
+    "baseTransmissionRate": 0.14,
+    "populationRange": [
+     14,
+     16
+    ],
+    "caseCapFraction": 0.55,
+    "realCfr": 0.36
+   },
+   "difficulty": {
+    "transmissionMultiplier": 4.5,
+    "toolLimitMultiplier": 1.5,
+    "recoveryTime": 5,
+    "fatalityRate": 0.298,
+    "dailyLimits": {
+     "vaccinate": 1,
+     "quarantine": 2,
+     "severLink": 2
+    },
+    "toolkit": [
+     "vaccinate",
+     "quarantine",
+     "severLink"
+    ],
+    "toolDays": {
+     "quarantine": 2
+    }
+   },
+   "difficultyKeys": [
+    "R0",
+    "dailyLimits",
+    "description",
+    "fatalityRate",
+    "icon",
+    "name",
+    "recoveryTime",
+    "toolDays",
+    "toolLimitMultiplier",
+    "toolkit",
+    "transmissionMultiplier"
+   ]
+  },
+  "play": {
+   "smart": {
+    "counts": {
+     "contained": 24,
+     "overwhelmed": 6
+    },
+    "stars": [
+     6,
+     0,
+     17,
+     7
+    ]
+   },
+   "beginner": {
+    "counts": {
+     "contained": 16,
+     "overwhelmed": 14
+    },
+    "stars": [
+     14,
+     0,
+     7,
+     9
+    ]
+   },
+   "random": {
+    "counts": {
+     "overwhelmed": 30
+    },
+    "stars": [
+     30,
+     0,
+     0,
+     0
+    ]
+   }
+  }
+ },
+ {
+  "rules": {
+   "id": "hanabi-1",
+   "scenarioId": "care",
+   "difficultyId": "easy",
+   "lessonId": "isolation",
+   "target": 650,
+   "population": [
+    9,
+    13
+   ],
+   "variant": null,
+   "toolkitId": "full",
+   "tools": [
+    "vaccinate",
+    "quarantine",
+    "severLink"
+   ],
+   "tuning": {
+    "initialInfected": 1,
+    "transmissionMultiplier": 4.5,
+    "caseCapFraction": 0.45,
+    "parDays": 6,
+    "dailyLimits": {
+     "vaccinate": 1,
+     "quarantine": 2,
+     "severLink": 2
+    }
+   },
+   "scenario": {
+    "networkType": "small-world",
+    "duration": 18,
+    "initialInfected": 1,
+    "baseTransmissionRate": 0.18,
+    "populationRange": [
+     9,
+     13
+    ],
+    "caseCapFraction": 0.45,
+    "realCfr": 0.24
+   },
+   "difficulty": {
+    "transmissionMultiplier": 4.5,
+    "toolLimitMultiplier": 1.5,
+    "recoveryTime": 5,
+    "fatalityRate": 0.289,
+    "dailyLimits": {
+     "vaccinate": 1,
+     "quarantine": 2,
+     "severLink": 2
+    },
+    "toolkit": [
+     "vaccinate",
+     "quarantine",
+     "severLink"
+    ]
+   },
+   "difficultyKeys": [
+    "R0",
+    "dailyLimits",
+    "description",
+    "fatalityRate",
+    "icon",
+    "name",
+    "recoveryTime",
+    "toolLimitMultiplier",
+    "toolkit",
+    "transmissionMultiplier"
+   ]
+  },
+  "play": {
+   "smart": {
+    "counts": {
+     "contained": 25,
+     "overwhelmed": 5
+    },
+    "stars": [
+     5,
+     1,
+     19,
+     5
+    ]
+   },
+   "beginner": {
+    "counts": {
+     "contained": 24,
+     "overwhelmed": 6
+    },
+    "stars": [
+     6,
+     2,
+     19,
+     3
+    ]
+   },
+   "random": {
+    "counts": {
+     "overwhelmed": 28,
+     "contained": 2
+    },
+    "stars": [
+     28,
+     0,
+     1,
+     1
+    ]
+   }
+  }
+ },
+ {
+  "rules": {
+   "id": "hanabi-2",
+   "scenarioId": "school",
+   "difficultyId": "easy",
+   "lessonId": "hubs",
+   "target": 644,
+   "population": [
+    10,
+    14
+   ],
+   "variant": null,
+   "toolkitId": "school",
+   "tools": [
+    "quarantine",
+    "severLink"
+   ],
+   "tuning": {
+    "initialInfected": 1,
+    "transmissionMultiplier": 5,
+    "caseCapFraction": 0.25,
+    "parDays": 6,
+    "dailyLimits": {
+     "vaccinate": 0,
+     "quarantine": 3,
+     "severLink": 3
+    }
+   },
+   "scenario": {
+    "networkType": "small-world",
+    "duration": 21,
+    "initialInfected": 1,
+    "baseTransmissionRate": 0.12,
+    "populationRange": [
+     10,
+     14
+    ],
+    "caseCapFraction": 0.25,
+    "realCfr": 0.0002
+   },
+   "difficulty": {
+    "transmissionMultiplier": 5,
+    "toolLimitMultiplier": 1.5,
+    "recoveryTime": 5,
+    "fatalityRate": 0.135,
+    "dailyLimits": {
+     "vaccinate": 0,
+     "quarantine": 3,
+     "severLink": 3
+    },
+    "toolkit": [
+     "quarantine",
+     "severLink"
+    ]
+   },
+   "difficultyKeys": [
+    "R0",
+    "dailyLimits",
+    "description",
+    "fatalityRate",
+    "icon",
+    "name",
+    "recoveryTime",
+    "toolLimitMultiplier",
+    "toolkit",
+    "transmissionMultiplier"
+   ]
+  },
+  "play": {
+   "smart": {
+    "counts": {
+     "contained": 30
+    },
+    "stars": [
+     0,
+     0,
+     24,
+     6
+    ]
+   },
+   "beginner": {
+    "counts": {
+     "contained": 30
+    },
+    "stars": [
+     0,
+     0,
+     23,
+     7
+    ]
+   },
+   "random": {
+    "counts": {
+     "overwhelmed": 28,
+     "contained": 2
+    },
+    "stars": [
+     28,
+     0,
+     1,
+     1
+    ]
+   }
+  }
+ },
+ {
+  "rules": {
+   "id": "hanabi-3",
+   "scenarioId": "urban",
+   "difficultyId": "easy",
+   "lessonId": "super-spreaders",
+   "target": 651,
+   "population": [
+    13,
+    16
+   ],
+   "variant": {
+    "type": "superSpreader",
+    "degreeShare": 0.5,
+    "toolDays": {
+     "quarantine": 2
+    },
+    "boss": false
+   },
+   "toolkitId": "market",
+   "tools": [
+    "vaccinate",
+    "quarantine",
+    "severLink"
+   ],
+   "tuning": {
+    "initialInfected": 1,
+    "transmissionMultiplier": 3.7,
+    "caseCapFraction": 0.45,
+    "parDays": 6,
+    "dailyLimits": {
+     "vaccinate": 1,
+     "quarantine": 2,
+     "severLink": 2
+    }
+   },
+   "scenario": {
+    "networkType": "scale-free",
+    "duration": 14,
+    "initialInfected": 1,
+    "baseTransmissionRate": 0.15,
+    "populationRange": [
+     13,
+     16
+    ],
+    "caseCapFraction": 0.45,
+    "realCfr": 0.01
+   },
+   "difficulty": {
+    "transmissionMultiplier": 3.7,
+    "toolLimitMultiplier": 1.5,
+    "recoveryTime": 5,
+    "fatalityRate": 0.22,
+    "dailyLimits": {
+     "vaccinate": 1,
+     "quarantine": 2,
+     "severLink": 2
+    },
+    "toolkit": [
+     "vaccinate",
+     "quarantine",
+     "severLink"
+    ],
+    "toolDays": {
+     "quarantine": 2
+    }
+   },
+   "difficultyKeys": [
+    "R0",
+    "dailyLimits",
+    "description",
+    "fatalityRate",
+    "icon",
+    "name",
+    "recoveryTime",
+    "toolDays",
+    "toolLimitMultiplier",
+    "toolkit",
+    "transmissionMultiplier"
+   ]
+  },
+  "play": {
+   "smart": {
+    "counts": {
+     "contained": 25,
+     "overwhelmed": 5
+    },
+    "stars": [
+     5,
+     0,
+     14,
+     11
+    ]
+   },
+   "beginner": {
+    "counts": {
+     "contained": 21,
+     "overwhelmed": 9
+    },
+    "stars": [
+     9,
+     0,
+     15,
+     6
+    ]
+   },
+   "random": {
+    "counts": {
+     "overwhelmed": 28,
+     "contained": 2
+    },
+    "stars": [
+     28,
+     0,
+     0,
+     2
+    ]
+   }
+  }
+ },
+ {
+  "rules": {
+   "id": "hanabi-4",
+   "scenarioId": "festival",
+   "difficultyId": "easy",
+   "lessonId": "keep-r-below-1",
+   "target": 638,
+   "population": [
+    14,
+    18
+   ],
+   "variant": null,
+   "toolkitId": "festival",
+   "tools": [
+    "severLink"
+   ],
+   "tuning": {
+    "initialInfected": 1,
+    "transmissionMultiplier": 2.7,
+    "caseCapFraction": 0.25,
+    "parDays": 6,
+    "dailyLimits": {
+     "vaccinate": 0,
+     "quarantine": 0,
+     "severLink": 3
+    }
+   },
+   "scenario": {
+    "networkType": "random",
+    "duration": 10,
+    "initialInfected": 1,
+    "baseTransmissionRate": 0.2,
+    "populationRange": [
+     14,
+     18
+    ],
+    "caseCapFraction": 0.25,
+    "realCfr": 0.0003
+   },
+   "difficulty": {
+    "transmissionMultiplier": 2.7,
+    "toolLimitMultiplier": 1.5,
+    "recoveryTime": 5,
+    "fatalityRate": 0.144,
+    "dailyLimits": {
+     "vaccinate": 0,
+     "quarantine": 0,
+     "severLink": 3
+    },
+    "toolkit": [
+     "severLink"
+    ]
+   },
+   "difficultyKeys": [
+    "R0",
+    "dailyLimits",
+    "description",
+    "fatalityRate",
+    "icon",
+    "name",
+    "recoveryTime",
+    "toolLimitMultiplier",
+    "toolkit",
+    "transmissionMultiplier"
+   ]
+  },
+  "play": {
+   "smart": {
+    "counts": {
+     "contained": 30
+    },
+    "stars": [
+     0,
+     0,
+     23,
+     7
+    ]
+   },
+   "beginner": {
+    "counts": {
+     "contained": 30
+    },
+    "stars": [
+     0,
+     0,
+     25,
+     5
+    ]
+   },
+   "random": {
+    "counts": {
+     "overwhelmed": 28,
+     "contained": 2
+    },
+    "stars": [
+     28,
+     0,
+     0,
+     2
+    ]
+   }
+  }
+ },
+ {
+  "rules": {
+   "id": "hanabi-5",
+   "scenarioId": "school",
+   "difficultyId": "easy",
+   "lessonId": "contact-tracing",
+   "target": 741,
+   "population": [
+    10,
+    14
+   ],
+   "variant": {
+    "type": "noVaccines"
+   },
+   "toolkitId": "schoolNoVaccines",
+   "tools": [
+    "quarantine",
+    "severLink"
+   ],
+   "tuning": {
+    "initialInfected": 1,
+    "transmissionMultiplier": 4.8,
+    "caseCapFraction": 0.45,
+    "parDays": 7,
+    "dailyLimits": {
+     "vaccinate": 0,
+     "quarantine": 1,
+     "severLink": 2
+    }
+   },
+   "scenario": {
+    "networkType": "small-world",
+    "duration": 21,
+    "initialInfected": 1,
+    "baseTransmissionRate": 0.12,
+    "populationRange": [
+     10,
+     14
+    ],
+    "caseCapFraction": 0.45,
+    "realCfr": 0.0002
+   },
+   "difficulty": {
+    "transmissionMultiplier": 4.8,
+    "toolLimitMultiplier": 1.5,
+    "recoveryTime": 5,
+    "fatalityRate": 0.135,
+    "dailyLimits": {
+     "vaccinate": 0,
+     "quarantine": 1,
+     "severLink": 2
+    },
+    "toolkit": [
+     "quarantine",
+     "severLink"
+    ]
+   },
+   "difficultyKeys": [
+    "R0",
+    "dailyLimits",
+    "description",
+    "fatalityRate",
+    "icon",
+    "name",
+    "recoveryTime",
+    "toolLimitMultiplier",
+    "toolkit",
+    "transmissionMultiplier"
+   ]
+  },
+  "play": {
+   "smart": {
+    "counts": {
+     "contained": 30
+    },
+    "stars": [
+     0,
+     3,
+     23,
+     4
+    ]
+   },
+   "beginner": {
+    "counts": {
+     "contained": 20,
+     "overwhelmed": 10
+    },
+    "stars": [
+     10,
+     0,
+     16,
+     4
+    ]
+   },
+   "random": {
+    "counts": {
+     "overwhelmed": 28,
+     "contained": 2
+    },
+    "stars": [
+     28,
+     0,
+     2,
+     0
+    ]
+   }
+  }
+ },
+ {
+  "rules": {
+   "id": "hanabi-6",
+   "scenarioId": "global",
+   "difficultyId": "easy",
+   "lessonId": "herd-immunity",
+   "target": 640,
+   "population": [
+    15,
+    18
+   ],
+   "variant": null,
+   "toolkitId": "rollout",
+   "tools": [
+    "vaccinate",
+    "severLink"
+   ],
+   "tuning": {
+    "initialInfected": 2,
+    "transmissionMultiplier": 4.2,
+    "caseCapFraction": 0.45,
+    "parDays": 6,
+    "dailyLimits": {
+     "vaccinate": 1,
+     "quarantine": 0,
+     "severLink": 3
+    }
+   },
+   "scenario": {
+    "networkType": "scale-free",
+    "duration": 21,
+    "initialInfected": 2,
+    "baseTransmissionRate": 0.14,
+    "populationRange": [
+     15,
+     18
+    ],
+    "caseCapFraction": 0.45,
+    "realCfr": 0.36
+   },
+   "difficulty": {
+    "transmissionMultiplier": 4.2,
+    "toolLimitMultiplier": 1.5,
+    "recoveryTime": 5,
+    "fatalityRate": 0.298,
+    "dailyLimits": {
+     "vaccinate": 1,
+     "quarantine": 0,
+     "severLink": 3
+    },
+    "toolkit": [
+     "vaccinate",
+     "severLink"
+    ],
+    "toolDays": {
+     "vaccinate": 1
+    }
+   },
+   "difficultyKeys": [
+    "R0",
+    "dailyLimits",
+    "description",
+    "fatalityRate",
+    "icon",
+    "name",
+    "recoveryTime",
+    "toolDays",
+    "toolLimitMultiplier",
+    "toolkit",
+    "transmissionMultiplier"
+   ]
+  },
+  "play": {
+   "smart": {
+    "counts": {
+     "contained": 30
+    },
+    "stars": [
+     0,
+     0,
+     23,
+     7
+    ]
+   },
+   "beginner": {
+    "counts": {
+     "contained": 25,
+     "overwhelmed": 5
+    },
+    "stars": [
+     5,
+     0,
+     20,
+     5
+    ]
+   },
+   "random": {
+    "counts": {
+     "overwhelmed": 29,
+     "contained": 1
+    },
+    "stars": [
+     29,
+     0,
+     1,
+     0
+    ]
+   }
+  }
+ },
+ {
+  "rules": {
+   "id": "hanabi-7",
+   "scenarioId": "care",
+   "difficultyId": "easy",
+   "lessonId": "protect-vulnerable",
+   "target": 679,
+   "population": [
+    12,
+    16
+   ],
+   "variant": {
+    "type": "envoy",
+    "minDistance": 3
+   },
+   "toolkitId": "envoy",
+   "tools": [
+    "quarantine",
+    "severLink"
+   ],
+   "tuning": {
+    "initialInfected": 1,
+    "transmissionMultiplier": 5,
+    "caseCapFraction": 0.55,
+    "parDays": 7,
+    "dailyLimits": {
+     "vaccinate": 0,
+     "quarantine": 3,
+     "severLink": 2
+    }
+   },
+   "scenario": {
+    "networkType": "small-world",
+    "duration": 18,
+    "initialInfected": 1,
+    "baseTransmissionRate": 0.18,
+    "populationRange": [
+     12,
+     16
+    ],
+    "caseCapFraction": 0.55,
+    "realCfr": 0.24
+   },
+   "difficulty": {
+    "transmissionMultiplier": 5,
+    "toolLimitMultiplier": 1.5,
+    "recoveryTime": 5,
+    "fatalityRate": 0.289,
+    "dailyLimits": {
+     "vaccinate": 0,
+     "quarantine": 3,
+     "severLink": 2
+    },
+    "toolkit": [
+     "quarantine",
+     "severLink"
+    ]
+   },
+   "difficultyKeys": [
+    "R0",
+    "dailyLimits",
+    "description",
+    "fatalityRate",
+    "icon",
+    "name",
+    "recoveryTime",
+    "toolLimitMultiplier",
+    "toolkit",
+    "transmissionMultiplier"
+   ]
+  },
+  "play": {
+   "smart": {
+    "counts": {
+     "contained": 28,
+     "overwhelmed": 2
+    },
+    "stars": [
+     2,
+     3,
+     13,
+     12
+    ]
+   },
+   "beginner": {
+    "counts": {
+     "contained": 21,
+     "overwhelmed": 9
+    },
+    "stars": [
+     9,
+     2,
+     11,
+     8
+    ]
+   },
+   "random": {
+    "counts": {
+     "overwhelmed": 24,
+     "envoy-lost": 5,
+     "contained": 1
+    },
+    "stars": [
+     29,
+     0,
+     1,
+     0
+    ]
+   }
+  }
+ },
+ {
+  "rules": {
+   "id": "hanabi-8",
+   "scenarioId": "urban",
+   "difficultyId": "easy",
+   "lessonId": "cut-bridges",
+   "target": 642,
+   "population": [
+    13,
+    16
+   ],
+   "variant": null,
+   "toolkitId": "market",
+   "tools": [
+    "vaccinate",
+    "quarantine",
+    "severLink"
+   ],
+   "tuning": {
+    "initialInfected": 1,
+    "transmissionMultiplier": 4.8,
+    "caseCapFraction": 0.25,
+    "parDays": 6,
+    "dailyLimits": {
+     "vaccinate": 2,
+     "quarantine": 2,
+     "severLink": 1
+    }
+   },
+   "scenario": {
+    "networkType": "scale-free",
+    "duration": 14,
+    "initialInfected": 1,
+    "baseTransmissionRate": 0.15,
+    "populationRange": [
+     13,
+     16
+    ],
+    "caseCapFraction": 0.25,
+    "realCfr": 0.01
+   },
+   "difficulty": {
+    "transmissionMultiplier": 4.8,
+    "toolLimitMultiplier": 1.5,
+    "recoveryTime": 5,
+    "fatalityRate": 0.22,
+    "dailyLimits": {
+     "vaccinate": 2,
+     "quarantine": 2,
+     "severLink": 1
+    },
+    "toolkit": [
+     "vaccinate",
+     "quarantine",
+     "severLink"
+    ]
+   },
+   "difficultyKeys": [
+    "R0",
+    "dailyLimits",
+    "description",
+    "fatalityRate",
+    "icon",
+    "name",
+    "recoveryTime",
+    "toolLimitMultiplier",
+    "toolkit",
+    "transmissionMultiplier"
+   ]
+  },
+  "play": {
+   "smart": {
+    "counts": {
+     "overwhelmed": 5,
+     "contained": 25
+    },
+    "stars": [
+     5,
+     0,
+     16,
+     9
+    ]
+   },
+   "beginner": {
+    "counts": {
+     "overwhelmed": 9,
+     "contained": 21
+    },
+    "stars": [
+     9,
+     0,
+     18,
+     3
+    ]
+   },
+   "random": {
+    "counts": {
+     "overwhelmed": 27,
+     "contained": 3
+    },
+    "stars": [
+     27,
+     0,
+     3,
+     0
+    ]
+   }
+  }
+ },
+ {
+  "rules": {
+   "id": "hanabi-9",
+   "scenarioId": "festival",
+   "difficultyId": "easy",
+   "lessonId": "ring-vaccination",
+   "target": 645,
+   "population": [
+    14,
+    18
+   ],
+   "variant": {
+    "type": "noQuarantine"
+   },
+   "toolkitId": "festivalNoWards",
+   "tools": [
+    "vaccinate",
+    "severLink"
+   ],
+   "tuning": {
+    "initialInfected": 1,
+    "transmissionMultiplier": 4.2,
+    "caseCapFraction": 0.35,
+    "parDays": 6,
+    "dailyLimits": {
+     "vaccinate": 2,
+     "quarantine": 0,
+     "severLink": 2
+    }
+   },
+   "scenario": {
+    "networkType": "random",
+    "duration": 10,
+    "initialInfected": 1,
+    "baseTransmissionRate": 0.2,
+    "populationRange": [
+     14,
+     18
+    ],
+    "caseCapFraction": 0.35,
+    "realCfr": 0.0003
+   },
+   "difficulty": {
+    "transmissionMultiplier": 4.2,
+    "toolLimitMultiplier": 1.5,
+    "recoveryTime": 5,
+    "fatalityRate": 0.144,
+    "dailyLimits": {
+     "vaccinate": 2,
+     "quarantine": 0,
+     "severLink": 2
+    },
+    "toolkit": [
+     "vaccinate",
+     "severLink"
+    ]
+   },
+   "difficultyKeys": [
+    "R0",
+    "dailyLimits",
+    "description",
+    "fatalityRate",
+    "icon",
+    "name",
+    "recoveryTime",
+    "toolLimitMultiplier",
+    "toolkit",
+    "transmissionMultiplier"
+   ]
+  },
+  "play": {
+   "smart": {
+    "counts": {
+     "contained": 29,
+     "overwhelmed": 1
+    },
+    "stars": [
+     1,
+     0,
+     23,
+     6
+    ]
+   },
+   "beginner": {
+    "counts": {
+     "contained": 28,
+     "overwhelmed": 2
+    },
+    "stars": [
+     2,
+     0,
+     24,
+     4
+    ]
+   },
+   "random": {
+    "counts": {
+     "overwhelmed": 28,
+     "contained": 2
+    },
+    "stars": [
+     28,
+     0,
+     1,
+     1
+    ]
+   }
+  }
+ },
+ {
+  "rules": {
+   "id": "hanabi-10",
+   "scenarioId": "global",
+   "difficultyId": "easy",
+   "lessonId": "super-spreaders",
+   "target": 632,
+   "population": [
+    16,
+    18
+   ],
+   "variant": {
+    "type": "superSpreader",
+    "degreeShare": 0.56,
+    "toolDays": {
+     "quarantine": 2
+    },
+    "boss": true
+   },
+   "toolkitId": "boss",
+   "tools": [
+    "vaccinate",
+    "quarantine",
+    "severLink"
+   ],
+   "tuning": {
+    "initialInfected": 1,
+    "transmissionMultiplier": 4,
+    "caseCapFraction": 0.45,
+    "parDays": 6,
+    "dailyLimits": {
+     "vaccinate": 2,
+     "quarantine": 2,
+     "severLink": 2
+    }
+   },
+   "scenario": {
+    "networkType": "scale-free",
+    "duration": 21,
+    "initialInfected": 1,
+    "baseTransmissionRate": 0.14,
+    "populationRange": [
+     16,
+     18
+    ],
+    "caseCapFraction": 0.45,
+    "realCfr": 0.36
+   },
+   "difficulty": {
+    "transmissionMultiplier": 4,
+    "toolLimitMultiplier": 1.5,
+    "recoveryTime": 5,
+    "fatalityRate": 0.298,
+    "dailyLimits": {
+     "vaccinate": 2,
+     "quarantine": 2,
+     "severLink": 2
+    },
+    "toolkit": [
+     "vaccinate",
+     "quarantine",
+     "severLink"
+    ],
+    "toolDays": {
+     "quarantine": 2
+    }
+   },
+   "difficultyKeys": [
+    "R0",
+    "dailyLimits",
+    "description",
+    "fatalityRate",
+    "icon",
+    "name",
+    "recoveryTime",
+    "toolDays",
+    "toolLimitMultiplier",
+    "toolkit",
+    "transmissionMultiplier"
+   ]
+  },
+  "play": {
+   "smart": {
+    "counts": {
+     "contained": 21,
+     "overwhelmed": 9
+    },
+    "stars": [
+     9,
+     1,
+     12,
+     8
+    ]
+   },
+   "beginner": {
+    "counts": {
+     "contained": 15,
+     "overwhelmed": 15
+    },
+    "stars": [
+     15,
+     0,
+     9,
+     6
+    ]
+   },
+   "random": {
+    "counts": {
+     "overwhelmed": 29,
+     "contained": 1
+    },
+    "stars": [
+     29,
+     0,
+     0,
+     1
+    ]
+   }
+  }
+ }
+]

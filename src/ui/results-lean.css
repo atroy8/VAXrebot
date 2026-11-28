@@ -1,0 +1,78 @@
+/* Lean results (wide audience pass): the outcome, the stars, one sentence,
+   the reward and the buttons fit a 390 x 844 phone with no scrolling. The
+   score bar, pills, bins, outbreak numbers and the real world fact wait in
+   Details, which opens in place. Markup: index.html #results-lead and
+   #results-details; filled by results-lead.js and results-tally.js. */
+#game-over-screen .results-lead { margin: 8px 0 16px; text-align: center; }
+/* A short card sits in the middle of the screen, nearer the thumb, instead
+   of hugging the top edge. Once Details makes it taller than the screen the
+   auto margins collapse and it scrolls as before. */
+#game-over-screen .game-over-content { margin-top: auto; margin-bottom: auto; }
+#game-over-screen .results-stars .tally-stars { margin: 4px 0 10px; font-size: 3.4rem; gap: 12px; }
+#game-over-screen .results-stars:empty { display: none; }
+
+#game-over-screen .results-mentor {
+    margin: 0 0 10px;
+    font-size: 0.95rem;
+    line-height: 1.35;
+    color: var(--ai-700, #1b3a7a);
+}
+#game-over-screen .results-mentor[hidden],
+#game-over-screen .results-mentor:empty { display: none; }
+
+#game-over-screen .results-headline {
+    margin: 0 auto 12px;
+    max-width: 30ch;
+    font-size: 1.2rem;
+    font-weight: 700;
+    line-height: 1.35;
+    color: var(--ai-800, #13265a);
+    text-wrap: balance;
+}
+#game-over-screen .results-headline[hidden] { display: none; }
+
+#game-over-screen .results-reward:empty { display: none; }
+#game-over-screen .results-reward .tally-total { font-size: 1.3rem; }
+/* The prize box and confetti settle once the reward has played, the same
+   way they do inside a finished tally. */
+#game-over-screen .results-reward.done .tally-prize { animation: none; }
+#game-over-screen .results-reward.done .tally-confetti { display: none; }
+
+#game-over-screen .results-details { margin: 0 0 8px; }
+#game-over-screen .results-details-summary {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    min-height: 44px;
+    padding: 0 16px;
+    border-radius: 999px;
+    border: 2px solid var(--ai-200, #c7d6f0);
+    color: var(--ai-700, #1b3a7a);
+    font-weight: 700;
+    cursor: pointer;
+    list-style: none;
+    -webkit-tap-highlight-color: transparent;
+}
+#game-over-screen .results-details-summary::-webkit-details-marker { display: none; }
+#game-over-screen .results-details-summary::after {
+    content: '';
+    width: 8px;
+    height: 8px;
+    border-right: 3px solid currentColor;
+    border-bottom: 3px solid currentColor;
+    rotate: 45deg;
+    translate: 0 -2px;
+    transition: rotate 0.2s ease;
+}
+#game-over-screen .results-details[open] .results-details-summary::after { rotate: 225deg; translate: 0 2px; }
+#game-over-screen .results-details[open] .results-details-summary { margin-bottom: 12px; }
+/* Inside Details the outbreak numbers are simply shown: one disclosure is
+   enough, so the old inner summary line becomes a plain label. */
+#game-over-screen .results-details .final-stats-summary { pointer-events: none; list-style: none; }
+#game-over-screen .results-details .final-stats-summary::-webkit-details-marker { display: none; }
+/* In the tally, Tap to skip only makes sense while the bins are counting. */
+#game-over-screen .results-details .tally { cursor: default; }
+
+#game-over-screen .results-based-on[hidden],
+#game-over-screen .results-based-on:empty { display: none; }
