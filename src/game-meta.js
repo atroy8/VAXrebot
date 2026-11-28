@@ -15,7 +15,7 @@ import { caseCapFor } from './sim/actions.js';
 import { chooseMove, hintLine, hintOffer, hintLabel, hintPrice, NO_HINT_LINE, HINT_NODE_BUDGET, GLOW_NODE_BUDGET } from './sim/hint.js';
 import { takeSnapshot, restoreSnapshot, canRestore } from './sim/undo.js';
 import { goalsFor, checkGoals } from './sim/goals.js';
-import { utcDateString, dailyLevel, dailyStatus, recordDaily, dailyShareText } from './sim/daily.js';
+import { localDateString, dailyLevel, dailyStatus, recordDaily, dailyShareText } from './sim/daily.js';
 import { gentleOn, setGentle, markClear, saveGoals, noteResult, spendFunding } from './meta.js';
 import { showNotification } from './ui/panels.js';
 import { fillBriefing, showThreat, fillLessonCard, showVariantCallout, showToolkit } from './ui/briefing.js';
@@ -220,12 +220,12 @@ export const metaMethods = {
     },
 
     refreshDailyEntry() {
-        const today = utcDateString();
+        const today = localDateString();
         refreshDailyButton(today, dailyStatus(this.syncSave().daily, today));
     },
 
     selectDaily() {
-        const date = utcDateString();
+        const date = localDateString();
         const level = dailyLevel(date);
         this.syncSave();
         this.daily = { date, practice: dailyStatus(this.save.daily, date).done };

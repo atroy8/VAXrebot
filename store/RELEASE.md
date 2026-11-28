@@ -12,6 +12,7 @@ Done in the repo, no account needed:
 - Ad pacing (`src/monetization/ad-policy.js`): never during a level, none before two finished levels, at most one per two levels, none once Remove Ads is owned.
 - An AdMob adapter (`src/monetization/ad-provider-admob.js`) that the game picks automatically inside the app. Until the AdMob plugin is installed (step 7) it finds no SDK and the app simply shows no ads.
 - The store listing, age rating, privacy label, review notes, icon and screenshots (this folder).
+- The app's privacy manifest (`ios/App/App/PrivacyInfo.xcprivacy`), part of the App target: no tracking, no data collected by the game's own code, no required reason APIs. The AdMob and RevenueCat SDKs bring their own manifests when they are added.
 - The build and upload workflow (`.github/workflows/ios-testflight.yml`), manual trigger only.
 
 Not done, because each needs an account or a Mac:
@@ -120,6 +121,7 @@ Do not submit (step 12) until tapping Remove Ads opens Apple's purchase sheet.
 2. It tests, builds, signs and uploads in about 15 minutes. If it fails, open the failed step: the usual causes are a secret pasted with a missing line, an agreement not accepted (step 2), or the app record missing (step 4).
 3. App Store Connect, your app, TestFlight. The build appears after 5 to 30 minutes of processing. The encryption question is already answered in the app (see `export-compliance.md`).
 4. Internal Testing, the plus button, create a group, add yourself. Install the TestFlight app on your iPhone and accept the invite.
+5. Optional check on a Mac: in Xcode, Product, Archive, then in the Organizer right-click the archive and choose Generate Privacy Report. It should list Galactic Outbreak with no tracking and no collected data, plus the SDKs' own entries once ads are in. Those entries should match `app-privacy.md`.
 
 ## 10. Test on a real iPhone
 

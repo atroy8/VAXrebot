@@ -1,5 +1,8 @@
-// Daily puzzle (wide audience round): one seeded level per calendar day
-// (UTC). Everyone gets the same web, the same first cases and the same par,
+// Daily puzzle (wide audience round): one seeded level per calendar day.
+// Round 60: the day is the player's own local calendar day, the way word
+// games do it, so the button never shows tomorrow's date in the evening
+// (with UTC days a player in New York saw "Daily Nov 28" from 7 pm on
+// Nov 27). Everyone on the same date gets the same web, the same first cases and the same par,
 // and since nothing after the deal is random the same moves always give the
 // same outcome, so friends can compare. Pure: no DOM, no storage, no clock
 // unless asked.
@@ -20,7 +23,14 @@ export const DAILY_TEMPLATES = LEVELS.filter((l) => l.difficultyId === 'medium' 
 
 const pad = (n) => String(n).padStart(2, '0');
 
-// 'YYYY-MM-DD' in UTC.
+// 'YYYY-MM-DD' on the device's own calendar (round 60). This is the date the
+// game uses for the Daily.
+export function localDateString(date = new Date()) {
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+// 'YYYY-MM-DD' in UTC. Date arithmetic only (addDays); the Daily itself
+// follows localDateString.
 export function utcDateString(date = new Date()) {
     return `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}`;
 }
@@ -79,8 +89,18 @@ export function freshDaily() {
     return { lastDate: null, streak: 0, best: 0, last: null };
 }
 
-export function dailyStatus(daily, today) {
+// Saves from before round 60 dated the Daily in UTC, which runs up to a day
+// ahead of the Americas. A last play dated after today was really played
+// today, so it counts as today: the puzzle shows Done and the streak lives.
+// The same guard covers a device clock that was briefly set forward.
+export function settleDailyClock(daily, today) {
     const d = daily || freshDaily();
+    if (!d.lastDate || !today || d.lastDate <= today) return d;
+    return { ...d, lastDate: today, last: d.last ? { ...d.last, date: today } : d.last };
+}
+
+export function dailyStatus(daily, today) {
+    const d = settleDailyClock(daily, today);
     const done = d.lastDate === today;
     const alive = done || d.lastDate === addDays(today, -1);
     return { done, streak: alive ? d.streak || 0 : 0, best: d.best || 0, last: done ? d.last : null };
@@ -88,7 +108,7 @@ export function dailyStatus(daily, today) {
 
 // Returns { daily, counted }. counted is false for a practice replay.
 export function recordDaily(daily, { date, outcome, days = 0, lost = 0, stars = 0 }) {
-    const d = daily || freshDaily();
+    const d = settleDailyClock(daily, date);
     if (d.lastDate === date) return { daily: d, counted: false };
     const won = outcome === 'contained';
     const carried = d.lastDate === addDays(date, -1) ? d.streak || 0 : 0;

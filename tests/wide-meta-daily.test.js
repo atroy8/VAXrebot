@@ -29,8 +29,8 @@ const START = '2026-11-25';
 const DATES = Array.from({ length: 60 }, (_, i) => addDays(START, i));
 const shape = (run) => JSON.stringify({ nodes: run.network.nodes, links: run.network.links, s: run.scenario, d: run.difficulty });
 
-describe('one seeded level per UTC day', () => {
-    it('the date is the UTC calendar day', () => {
+describe('one seeded level per calendar day', () => {
+    it('utcDateString is the UTC calendar day (date arithmetic)', () => {
         expect(utcDateString(new Date(Date.UTC(2026, 10, 25, 23, 59)))).toBe('2026-11-25');
         expect(utcDateString(new Date(Date.UTC(2026, 10, 26, 0, 0)))).toBe('2026-11-26');
         expect(addDays('2026-12-31', 1)).toBe('2027-01-01');
